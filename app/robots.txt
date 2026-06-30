@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /productos/
+Disallow: /_next/
+Disallow: /static/
+
+Sitemap: https://pepti-age.vercel.app/sitemap.xml
