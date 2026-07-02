@@ -2,7 +2,9 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { LogOut, LayoutDashboard, Boxes, TrendingUp, BarChart3, Users, PieChart as PieChartIcon, MessageCircle, Loader2, Home, FileText, Sliders } from "lucide-react"
+import { LogOut, LayoutDashboard, Boxes, TrendingUp, BarChart3, Users, PieChart as PieChartIcon, MessageCircle, Loader2, Home, FileText, Sliders, Menu, X, ChevronLeft, Wrench } from "lucide-react"
+import { useState } from "react"
+import { cn } from "@/lib/utils"
 
 import { useDashboard } from "./hooks/useDashboard"
 import { DashboardModals } from "./components/DashboardModals"
@@ -13,201 +15,210 @@ import { TabHistorial } from "./components/TabHistorial"
 import { TabCRM } from "./components/TabCRM"
 import { TabCampanas } from "./components/TabCampanas"
 import { TabAnaliticas } from "./components/TabAnaliticas"
-import { TabGuias } from "./components/TabGuias" 
 import { TabBlogs } from "./components/TabBlogs"
-import { TabHome } from "./components/TabHome" // 🚀 IMPORTACIÓN DE LA NUEVA PESTAÑA DE DISEÑO
+import { TabHome } from "./components/TabHome"
+import { TabReparaciones } from "./components/TabReparaciones" // 🚀 IMPORTAMOS TU NUEVA PESTAÑA
 
 export default function AdminDashboard() {
   const dashboard = useDashboard()
-  const GUIAS_TAB = "guias" as unknown as typeof dashboard.activeTab
+  const TALLER_TAB = "taller" as unknown as typeof dashboard.activeTab
+
+  // ESTADO PARA CONTROLAR EL SIDEBAR
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   if (dashboard.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#081640]"><Loader2 className="size-10 animate-spin text-cyan-rx" /></div>
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <Loader2 className="size-10 animate-spin text-white" />
+      </div>
+    )
   }
 
+  // 🚀 Arrays de navegación actualizados (Agregamos "Taller")
+  const principalNav = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "ventas", label: "Punto de Venta", icon: TrendingUp },
+    { id: "taller", label: "Reparaciones", icon: Wrench }, // <-- PESTAÑA AÑADIDA
+    { id: "productos", label: "Inventario", icon: Boxes },
+    { id: "clientes", label: "Clientes", icon: Users },
+  ]
+
+  const gestionNav = [
+    { id: "historial", label: "Auditoría / Órdenes", icon: BarChart3, badge: dashboard.ordenesPendientesAccion },
+    { id: "analiticas", label: "Métricas", icon: PieChartIcon, badge: dashboard.solicitudesPendientes },
+    { id: "campanas", label: "Campañas CRM", icon: MessageCircle },
+  ]
+
+  const cmsNav = [
+    { id: "home", label: "Diseño Web", icon: Sliders },
+    { id: "blogs", label: "Blog & FAQs", icon: FileText },
+  ]
+
   return (
-    <div className="min-h-screen bg-[#f8faff] pb-20">
+    <div className="flex min-h-screen bg-[#0E1117] text-zinc-300 font-sans selection:bg-primary/30">
       
+      {/* Carga los modales generales (incluyendo el nuevo de Reparaciones que pegaste) */}
       <DashboardModals {...dashboard} />
 
-      {/* HEADER SUPERIOR */}
-      <nav className="sticky top-0 z-30 border-b border-silver/10 bg-[#081640] px-4 sm:px-6 py-4 text-white shadow-md print:hidden">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" className="p-1.5 sm:p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-cyan-rx" title="Volver a la Web Pública">
-              <Home className="size-4 sm:size-5" />
-            </Link>
-            <div className="relative h-8 w-28 sm:w-40"><Image src="/images/logo-horizontal.png" alt="Logo" fill className="object-contain" /></div>
-            <span className="hidden h-6 w-px bg-white/20 sm:block"></span>
-            <h1 className="hidden text-sm font-medium tracking-widest uppercase text-silver/60 sm:block">Consola de Logística B2B</h1>
-          </div>
-          <button onClick={dashboard.handleLogout} className="flex items-center gap-1.5 sm:gap-2 rounded-lg bg-white/5 px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold uppercase transition-colors hover:bg-destructive/20 hover:text-destructive"><LogOut className="size-3 sm:size-4" /> Salir</button>
-        </div>
-      </nav>
-
-      {/* 🚀 BARRA DE PESTAÑAS ULTRA-COMPACTA FLUIDA (ESTILO PREMIUM SAAS) */}
-      <div className="border-b border-gray-200 bg-white shadow-sm print:hidden text-left">
-        <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-4 sm:px-6 lg:px-8 py-3 flex-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          
-          {/* 🏷️ MICRO-ETIQUETA LOGÍSTICA */}
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-[#081640]/30 bg-gray-100 px-2 py-1 rounded-md mr-1 select-none">
-            Manejo B2B
-          </span>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("dashboard")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "dashboard" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <LayoutDashboard className="size-3.5" /> Panel
-          </button>
-          
-          <button 
-            onClick={() => dashboard.setActiveTab("productos")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "productos" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <Boxes className="size-3.5" /> Stock
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("ventas")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "ventas" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <TrendingUp className="size-3.5" /> Nueva Venta
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("historial")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all relative flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "historial" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <BarChart3 className="size-3.5" /> Auditoría
-            {dashboard.ordenesPendientesAccion > 0 && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white shadow-sm shrink-0">
-                {dashboard.ordenesPendientesAccion}
-              </span>
-            )}
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("clientes")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "clientes" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <Users className="size-3.5" /> CRM Médicos
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("analiticas")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all relative flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "analiticas" 
-                ? "bg-[#081640] text-white border-[#081640] shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <PieChartIcon className="size-3.5" /> Métricas
-            {dashboard.solicitudesPendientes > 0 && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white shadow-sm shrink-0 animate-bounce">
-                {dashboard.solicitudesPendientes}
-              </span>
-            )}
-          </button>
-
-          {/* 🌟 SEPARADOR ULTRA-FINO ELEGANTE (SE QUEDA FIJO EN EL SCROLL) */}
-          <div className="h-5 w-px bg-gray-300/60 mx-2 shrink-0" />
-
-          {/* 🏷️ MICRO-ETIQUETA CMS */}
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-cyan-rx bg-cyan-rx/5 border border-cyan-rx/10 px-2 py-1 rounded-md mr-1 select-none">
-            CMS Público
-          </span>
-
-          {/* 🎨 BOTÓN INYECTADO: Control de Configuración de la Home de Pepti-Age */}
-          <button 
-            onClick={() => dashboard.setActiveTab("home")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "home" 
-                ? "bg-cyan-rx/10 text-cyan-rx border-cyan-rx/30 font-black shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <Sliders className="size-3.5" /> Configurar Home
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab(GUIAS_TAB)} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === GUIAS_TAB 
-                ? "bg-cyan-rx/10 text-cyan-rx border-cyan-rx/30 font-black shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <FileText className="size-3.5" /> Guías Médicas
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("blogs")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "blogs" 
-                ? "bg-cyan-rx/10 text-cyan-rx border-cyan-rx/30 font-black shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <FileText className="size-3.5" /> Blogs / FAQs
-          </button>
-
-          <button 
-            onClick={() => dashboard.setActiveTab("campanas")} 
-            className={`shrink-0 px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              dashboard.activeTab === "campanas" 
-                ? "bg-cyan-rx/10 text-cyan-rx border-cyan-rx/30 font-black shadow-sm" 
-                : "bg-transparent text-[#081640]/70 border-transparent hover:bg-gray-100"
-            }`}
-          >
-            <MessageCircle className="size-3.5" /> Campañas
-          </button>
-
-        </div>
-      </div>
-
-      {/* ÁREA DE CONTENIDO PRINCIPAL */}
-      <main className="mx-auto mt-6 sm:mt-10 max-w-7xl px-4 sm:px-6 lg:px-8 print:hidden">
-        {dashboard.activeTab === "dashboard" && <TabDashboard {...dashboard} />}
-        
-        {dashboard.activeTab === "productos" && (
-          <TabInventario 
-            {...dashboard} 
-          />
+      {/* SIDEBAR (Barra Lateral) */}
+      <aside 
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-zinc-800 bg-[#161B22] transition-all duration-300 ease-in-out lg:relative",
+          isSidebarOpen ? "w-64" : "w-20",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
-        
-        {dashboard.activeTab === GUIAS_TAB && <TabGuias {...dashboard} />}
-        {dashboard.activeTab === "ventas" && <TabVentas {...dashboard} />}
-        {dashboard.activeTab === "historial" && <TabHistorial {...dashboard} />}
-        {dashboard.activeTab === "clientes" && <TabCRM {...(dashboard as any)} />}
-        {dashboard.activeTab === "analiticas" && <TabAnaliticas {...dashboard} />}
-        {dashboard.activeTab === "campanas" && <TabCampanas {...dashboard} />}
-        {dashboard.activeTab === "blogs" && <TabBlogs {...(dashboard as any)} />}
-        
-        {/* 🎨 COMPUERTA INYECTADA: Dibuja el panel de control de Home al hacer clic */}
-        {dashboard.activeTab === "home" && <TabHome {...dashboard} />}
-      </main>
+      >
+        <div className="flex h-16 items-center justify-between border-b border-zinc-800 px-4">
+          <div className={cn("flex items-center overflow-hidden transition-all", !isSidebarOpen && "hidden lg:flex lg:opacity-0 lg:w-0")}>
+            <span className="text-xl font-black tracking-tighter text-white uppercase select-none">
+              electro·nic
+            </span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden lg:flex p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors ml-auto">
+            {isSidebarOpen ? <ChevronLeft className="size-5" /> : <Menu className="size-5" />}
+          </button>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-800"><X className="size-5" /></button>
+        </div>
 
+        <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+          
+          <div className="px-3 mb-6">
+            <span className={cn("text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 block px-2 transition-all", !isSidebarOpen && "text-center")}>
+              {isSidebarOpen ? "Principal" : "•••"}
+            </span>
+            <nav className="space-y-1">
+              {principalNav.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { dashboard.setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all group",
+                    dashboard.activeTab === item.id 
+                      ? "bg-primary/10 text-primary" 
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                    !isSidebarOpen && "justify-center px-0"
+                  )}
+                  title={!isSidebarOpen ? item.label : undefined}
+                >
+                  <item.icon className={cn("size-4 shrink-0 transition-transform group-hover:scale-110", dashboard.activeTab === item.id && "fill-primary/20")} />
+                  {isSidebarOpen && <span className="truncate">{item.label}</span>}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="px-3 mb-6">
+            <span className={cn("text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 block px-2 transition-all", !isSidebarOpen && "text-center")}>
+              {isSidebarOpen ? "Gestión" : "•••"}
+            </span>
+            <nav className="space-y-1">
+              {gestionNav.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { dashboard.setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold transition-all group relative",
+                    dashboard.activeTab === item.id ? "bg-primary/10 text-primary" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                    !isSidebarOpen && "justify-center px-0"
+                  )}
+                  title={!isSidebarOpen ? item.label : undefined}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className={cn("size-4 shrink-0 transition-transform group-hover:scale-110", dashboard.activeTab === item.id && "fill-primary/20")} />
+                    {isSidebarOpen && <span className="truncate">{item.label}</span>}
+                  </div>
+                  {item.badge && item.badge > 0 && (
+                    <span className={cn("flex items-center justify-center rounded-full bg-red-500/20 text-red-500 text-[10px] font-black", isSidebarOpen ? "h-5 min-w-[20px] px-1.5" : "absolute top-1 right-1 h-3 w-3")}>
+                      {isSidebarOpen ? item.badge : ""}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="px-3">
+            <span className={cn("text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2 block px-2 transition-all", !isSidebarOpen && "text-center")}>
+              {isSidebarOpen ? "Sitio Web (CMS)" : "Web"}
+            </span>
+            <nav className="space-y-1">
+              {cmsNav.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { dashboard.setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all group",
+                    dashboard.activeTab === item.id ? "bg-emerald-500/10 text-emerald-500" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                    !isSidebarOpen && "justify-center px-0"
+                  )}
+                  title={!isSidebarOpen ? item.label : undefined}
+                >
+                  <item.icon className={cn("size-4 shrink-0 transition-transform group-hover:scale-110")} />
+                  {isSidebarOpen && <span className="truncate">{item.label}</span>}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+        </div>
+
+        <div className="border-t border-zinc-800 p-4">
+          <button onClick={dashboard.handleLogout} className={cn("flex w-full items-center gap-3 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm font-bold text-red-500 transition-colors hover:bg-red-500/20", !isSidebarOpen && "justify-center px-0")} title={!isSidebarOpen ? "Cerrar Sesión" : undefined}>
+            <LogOut className="size-4 shrink-0" />
+            {isSidebarOpen && <span>Cerrar Sesión</span>}
+          </button>
+        </div>
+      </aside>
+
+      {isMobileMenuOpen && <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+
+      {/* CONTENIDO PRINCIPAL (Lado Derecho) */}
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+        
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-800 bg-[#0E1117]/80 px-4 sm:px-6 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white"><Menu className="size-5" /></button>
+            <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500">
+              <Link href="/" className="hover:text-white flex items-center gap-1"><Home className="size-3.5"/> Web</Link>
+              <span>/</span>
+              <span className="text-zinc-200 capitalize">
+                {principalNav.find(n => n.id === dashboard.activeTab)?.label || gestionNav.find(n => n.id === dashboard.activeTab)?.label || cmsNav.find(n => n.id === dashboard.activeTab)?.label || dashboard.activeTab}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link href="/portal/login" className="hidden sm:flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all">
+              <Wrench className="size-3.5 text-zinc-400" /> Taller
+            </Link>
+            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg">
+              <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-emerald-500 tracking-widest uppercase">En Línea</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0E1117]">
+          <div className="mx-auto max-w-7xl">
+            {/* 🚀 COMPUERTAS CONDICIONALES DE CADA PESTAÑA */}
+            {dashboard.activeTab === "dashboard" && <TabDashboard {...dashboard} />}
+            {dashboard.activeTab === "productos" && <TabInventario {...dashboard} />}
+            {dashboard.activeTab === "ventas" && <TabVentas {...dashboard} />}
+            {dashboard.activeTab === "clientes" && <TabCRM {...(dashboard as any)} />}
+            
+            {/* 🚀 PESTAÑA DEL TALLER CONECTADA */}
+            {dashboard.activeTab === TALLER_TAB && <TabReparaciones />}
+
+            {dashboard.activeTab === "historial" && <TabHistorial {...dashboard} />}
+            {dashboard.activeTab === "analiticas" && <TabAnaliticas {...dashboard} />}
+            {dashboard.activeTab === "campanas" && <TabCampanas {...dashboard} />}
+            {dashboard.activeTab === "blogs" && <TabBlogs {...(dashboard as any)} />}
+            {dashboard.activeTab === "home" && <TabHome {...dashboard} />}
+          </div>
+        </main>
+
+      </div>
     </div>
   )
 }

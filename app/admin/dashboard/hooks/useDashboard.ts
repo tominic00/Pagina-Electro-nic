@@ -12,7 +12,8 @@ export interface EgresoCaja { id: string; created_at: string; monto: number; mot
 export interface Cupon { id: string; created_at: string; codigo: string; tipo: 'porcentaje' | 'monto'; valor: number; activo: boolean; fecha_vencimiento?: string; un_solo_uso: boolean }
 export interface MovimientoStock { id: string; created_at: string; producto_id: string; 'font-weight': string; nombre_producto: string; cantidad: number; motivo: string }
 
-export type ActiveTab = "dashboard" | "productos" | "ventas" | "historial" | "clientes" | "analiticas" | "campanas" | "guias" | "blogs" | "home"
+// 🚀 Agregué "taller" a los tipos aceptados
+export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "guias" | "blogs" | "home"
 
 export function useDashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard")
@@ -54,10 +55,13 @@ export function useDashboard() {
   })
   
   const [showMassUpdateModal, setShowMassUpdateModal] = useState(false)
-  const [massUpdateData, setMassUpdateData] = useState({ porcentaje: "", tipo: "aumento" })
   const [showStockAdjustModal, setShowStockAdjustModal] = useState(false)
   const [showStockHistoryModal, setShowStockHistoryModal] = useState(false)
+  // 🚀 ESTADO PARA CONTROLAR EL MODAL DEL TALLER
+  const [showNuevaReparacion, setShowNuevaReparacion] = useState(false)
+
   const [stockAdjustData, setStockAdjustData] = useState<{producto: Producto | null, tipo: 'ingreso' | 'egreso', cantidad: string, motivo: string, motivoLibre: string}>({ producto: null, tipo: 'ingreso', cantidad: "", motivo: "Compra a Proveedor", motivoLibre: "" })
+  const [massUpdateData, setMassUpdateData] = useState({ porcentaje: "", tipo: "aumento" })
 
   const [carritoAdmin, setCarritoAdmin] = useState<AdminCartItem[]>([])
   const [productoSeleccionadoId, setProductoSeleccionadoId] = useState("")
@@ -106,7 +110,6 @@ export function useDashboard() {
   }
 
   async function fetchData() {
-    // 🚀 LECTURA DEL INVENTARIO (Trae todas las columnas)
     const { data: prodData } = await supabase.from("productos").select("*").order("created_at", { ascending: false })
     const { data: vntData } = await supabase.from("ventas_b2b").select("*").order("created_at", { ascending: false })
     const { data: clntData } = await supabase.from("clientes_b2b").select("*").order("nombre", { ascending: true })
@@ -118,11 +121,7 @@ export function useDashboard() {
     const { data: guiasData } = await supabase.from("guias").select("*").order("id", { ascending: true })
     const { data: blogsData } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
 
-    const { data: homeData, error: homeError } = await supabase
-      .from("home_settings")
-      .select("*")
-      .eq("id", "main")
-      .single()
+    const { data: homeData, error: homeError } = await supabase.from("home_settings").select("*").eq("id", "main").single()
 
     if (homeError) console.error("Error al leer la tabla home_settings:", homeError.message)
     if (homeData) setHomeSettings(homeData)
@@ -169,16 +168,14 @@ export function useDashboard() {
     } finally { setIsUploadingCoa(false) }
   }
 
-  // 🚀 ACA ESTABA EL PROBLEMA 1: El cerebro ahora sabe guardar los precios B2B y Minorista
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSaving(true);
     const processedApplications = formData.applicationsRaw ? formData.applicationsRaw.split("\n").map(item => item.trim()).filter(Boolean) : []
     const stockNumerico = parseInt(formData.stock.toString(), 10) || 0
     
-    // Armamos el payload final con todas las columnas de precios
     const payload = { 
       nombre: formData.nombre, 
-      precio: formData.precio, // Lo mantenemos por compatibilidad con la base
+      precio: formData.precio, 
       costo: formData.costo, 
       descripcion: formData.descripcion, 
       informacion_tecnica: formData.informacion_tecnica, 
@@ -188,7 +185,6 @@ export function useDashboard() {
       researchOverview: formData.researchOverview, 
       applications: processedApplications, 
       coa_url: formData.coa_url || "", 
-      // 🚀 INYECCIÓN DE LA ESTRATEGIA DE PRECIOS 🚀
       precio_minorista: formData.precio_minorista ?? formData.precio,
       precio_mayorista: formData.precio_mayorista ?? formData.precio,
       precio_volumen: formData.precio_volumen ?? formData.precio,
@@ -219,14 +215,12 @@ export function useDashboard() {
     fetchData(); setIsSaving(false);
   }
 
-  // Edición rápida directo desde la tabla
   const handleUpdateInline = async (id: string, campo: string, valor: number) => {
     setProductos(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p))
     const { error = null } = await supabase.from("productos").update({ [campo]: valor }).eq("id", id)
     if (error) { alert(`Error: ${error.message}`); fetchData(); }
   }
 
-  // 🚀 ACA ESTABA EL PROBLEMA 2: El aumento masivo no afectaba los precios nuevos
   const handleMassUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     const porc = Number(massUpdateData.porcentaje)
@@ -236,7 +230,6 @@ export function useDashboard() {
     
     const factor = massUpdateData.tipo === "aumento" ? (1 + (porc / 100)) : (1 - (porc / 100))
     
-    // Le decimos a Supabase que recalcule y pise los 4 precios por el nuevo factor
     const promesas = productos.map((p: any) => supabase.from("productos").update({ 
       precio: Math.round(p.precio * factor * 100) / 100,
       precio_minorista: Math.round((p.precio_minorista ?? p.precio) * factor * 100) / 100,
@@ -262,8 +255,6 @@ export function useDashboard() {
     if (!error) { alert("Movimiento de stock registrado."); setShowStockAdjustModal(false); setStockAdjustData({ producto: null, tipo: 'ingreso', cantidad: "", motivo: "Compra a Proveedor", motivoLibre: "" }); fetchData(); }
     setIsSaving(false);
   }
-
-  // --- RESTO DE FUNCIONES INTACTAS ---
 
   const handleRegistrarCliente = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSaving(true);
@@ -648,6 +639,8 @@ export function useDashboard() {
     ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length,
     guias, isSavingGuia, editingGuiaId, setEditingGuiaId, formDataGuia, setFormDataGuia, handleSaveGuia, deleteGuia,
     blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog,
-    homeSettings, setHomeSettings, isSavingHome, handleSaveHome
+    homeSettings, setHomeSettings, isSavingHome, handleSaveHome,
+    // 🚀 AGREGAMOS LOS ESTADOS DEL MODAL TALLER
+    showNuevaReparacion, setShowNuevaReparacion
   }
 }

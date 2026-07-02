@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Filter, ArrowDownCircle, TrendingUp, Truck, CreditCard, Bitcoin, Loader2, CheckCircle2, Check, FileText, X, Download, Clock, History, PackageCheck } from "lucide-react"
+import { Filter, ArrowDownCircle, TrendingUp, Truck, CreditCard, Bitcoin, Loader2, CheckCircle2, Check, FileText, X, Download, Clock, History, PackageCheck, AlertCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface TabHistorialProps {
   fechaInicio: string
@@ -45,200 +46,209 @@ export function TabHistorial({
     const encodedUri = encodeURI(csvContent); const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `Reporte_Ordenes_${fechaInicio || "inicio"}_a_${fechaFin || "fin"}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   }
 
-  // 🚀 CLASIFICADOR DE ÓRDENES (Las divide en 3 "Bandejas")
+  // 🚀 CLASIFICADOR DE ÓRDENES
   const ordenesPendientes = ventasFiltradas.filter(v => v.estado === "Pendiente USDT" || v.estado === "Pendiente" || v.estado === "Por Cobrar")
-  const ordenesLogistica = ventasFiltradas.filter(v => !v.estado.includes("Pendiente") && v.estado !== "Por Cobrar" && v.estado !== "Abono" && (!v.estado_envio || v.estado_envio !== "Entregado") && !v.nombre_producto.toLowerCase().includes("devoluci"))
-  const ordenesCompletadas = ventasFiltradas.filter(v => v.estado === "Abono" || v.estado_envio === "Entregado" || v.nombre_producto.toLowerCase().includes("devoluci") || v.estado === "Anulada")
+  const ordenesLogistica = ventasFiltradas.filter(v => !v.estado.includes("Pendiente") && v.estado !== "Por Cobrar" && v.estado !== "Abono" && (!v.estado_envio || v.estado_envio !== "Entregado") && !v.nombre_producto.toLowerCase().includes("devoluci") && !v.nombre_producto.toLowerCase().includes("repara"))
+  const ordenesCompletadas = ventasFiltradas.filter(v => v.estado === "Abono" || v.estado_envio === "Entregado" || v.nombre_producto.toLowerCase().includes("devoluci") || v.estado === "Anulada" || v.estado === "Completada")
 
-  // Determinar qué lista mostrar según el botón clickeado
   const ordenesVisibles = vistaOrdenes === "pendientes" ? ordenesPendientes : (vistaOrdenes === "logistica" ? ordenesLogistica : ordenesCompletadas)
 
   return (
-    <div className="space-y-4 sm:space-y-6 text-left animate-in fade-in duration-500">
+    <div className="space-y-6 text-left animate-in fade-in duration-500 w-full">
       
-      {/* BARRA DE FILTROS SUPERIOR */}
-      <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-silver/20 shadow-sm flex flex-col md:flex-row items-center gap-3 sm:gap-4 justify-between">
-        <div className="flex items-center gap-2 sm:gap-4 w-full md:w-auto">
-          <Filter className="size-4 sm:size-5 text-primary/40 shrink-0" />
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full overflow-hidden">
-            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="bg-primary/5 border border-silver/20 rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-primary/70 outline-none focus:border-cyan-rx w-full" />
-            <span className="text-primary/40 text-[10px] sm:text-xs font-bold">A</span>
-            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="bg-primary/5 border border-silver/20 rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-primary/70 outline-none focus:border-cyan-rx w-full" />
+      {/* 🚀 FILA 1: BARRA DE FILTROS SUPERIOR */}
+      <div className="bg-[#161B22] p-4 rounded-xl border border-zinc-800 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800 hidden sm:block">
+            <Filter className="size-4 text-zinc-500" />
+          </div>
+          <div className="flex items-center gap-2 w-full overflow-hidden">
+            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-bold text-white outline-none focus:border-purple-500 w-full transition-all" />
+            <span className="text-zinc-600 text-[10px] font-black uppercase">Hasta</span>
+            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-bold text-white outline-none focus:border-purple-500 w-full transition-all" />
           </div>
           {(fechaInicio || fechaFin) && (
-            <button onClick={() => { setFechaInicio(""); setFechaFin(""); }} className="text-[10px] sm:text-xs text-red-500 font-bold uppercase hover:underline shrink-0">Limpiar</button>
+            <button onClick={() => { setFechaInicio(""); setFechaFin(""); }} className="text-[10px] text-zinc-500 font-bold uppercase hover:text-white shrink-0 bg-zinc-800 px-2 py-1 rounded-md transition-colors">Limpiar</button>
           )}
         </div>
-        <button onClick={() => setShowEgresoModal(true)} className="w-full md:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-red-50/50 border border-red-200 text-red-600 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"><ArrowDownCircle className="size-3.5 sm:size-4" /> Retirar de Caja</button>
+        <button onClick={() => setShowEgresoModal(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 text-red-500 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-md active:scale-95">
+          <ArrowDownCircle className="size-4" /> Retirar de Caja
+        </button>
       </div>
 
-      {/* TARJETAS FINANCIERAS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6">
-        <div className="rounded-xl sm:rounded-2xl border border-silver/20 bg-white p-4 sm:p-6 shadow-sm"><span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-primary/40 block leading-tight">Facturado Bruto</span><p className="text-xl sm:text-3xl font-black text-[#081640] mt-1 truncate">USD {totalFacturado.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p></div>
-        <div className="rounded-xl sm:rounded-2xl border border-cyan-rx/20 bg-[#081640] p-4 sm:p-6 shadow-sm text-white"><span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-cyan-rx block leading-tight">Ganancia Neta</span><p className="text-xl sm:text-3xl font-black text-cyan-rx mt-1 truncate">USD {gananciaNetaReal.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p></div>
-        <div className="col-span-2 sm:col-span-1 rounded-xl sm:rounded-2xl border border-emerald-500/20 bg-emerald-50 p-4 sm:p-6 shadow-sm">
-          <div className="flex justify-between items-start mb-1">
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-700 leading-tight">Caja Real Físico</span>
-            <span className="text-[8px] sm:text-[10px] font-bold bg-white text-red-500 px-1.5 sm:px-2 py-0.5 rounded border border-red-200 shadow-sm whitespace-nowrap">- {salidasCaja} Egresos</span>
-          </div>
-          <p className="text-2xl sm:text-3xl font-black text-emerald-600 truncate">USD {totalCajaReal.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
-        </div>
-      </div>
-
-      {/* REPORTE DE PÉRDIDAS Y GANANCIAS (P&L) */}
-      <div className="bg-[#081640] text-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl relative overflow-hidden mt-4 sm:mt-6">
-        <div className="absolute right-0 bottom-0 size-40 sm:size-80 bg-cyan-rx/5 rounded-full blur-3xl"></div>
-        <div className="border-b border-white/10 pb-3 sm:pb-4 mb-4 sm:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <div>
-            <h3 className="font-heading text-sm sm:text-lg font-bold tracking-tight flex items-center gap-1.5 sm:gap-2 text-cyan-rx">📈 Estado de Resultados (P&L)</h3>
-            <p className="text-[9px] sm:text-xs text-silver/50 leading-tight mt-0.5">Basado en costos de reposición históricos.</p>
-          </div>
-          <div className="bg-white/5 border border-white/10 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-mono uppercase tracking-wider text-cyan-rx">
-            ROI: {totalCostosLotes > 0 ? `${((gananciaNetaReal / totalCostosLotes) * 100).toFixed(1)}%` : '0%'}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-          <div className="bg-white/5 border border-white/5 p-3 sm:p-5 rounded-xl sm:rounded-2xl">
-            <span className="text-[8px] sm:text-[10px] font-bold text-silver/40 uppercase tracking-wider block mb-0.5 sm:mb-1">Costo (CMV)</span>
-            <p className="text-lg sm:text-2xl font-black text-red-400 truncate">USD {totalCostosLotes.toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
-          </div>
-          <div className="bg-white/5 border border-white/5 p-3 sm:p-5 rounded-xl sm:rounded-2xl">
-            <span className="text-[8px] sm:text-[10px] font-bold text-silver/40 uppercase tracking-wider block mb-0.5 sm:mb-1">Margen Bruto</span>
-            <p className="text-lg sm:text-2xl font-black text-emerald-400 truncate">{totalFacturado > 0 ? `${((gananciaNetaReal / totalFacturado) * 100).toFixed(1)}%` : '0%'}</p>
-          </div>
-          <div className="bg-white/5 border border-white/5 p-3 sm:p-5 rounded-xl sm:rounded-2xl">
-            <span className="text-[8px] sm:text-[10px] font-bold text-silver/40 uppercase tracking-wider block mb-0.5 sm:mb-1">Egresos</span>
-            <p className="text-lg sm:text-2xl font-black text-amber-400 truncate">USD {salidasCaja.toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
-          </div>
-          <div className="bg-white/5 border border-white/5 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-rx/10 to-transparent border-cyan-rx/20">
-            <span className="text-[8px] sm:text-[10px] font-bold text-cyan-rx uppercase tracking-wider block mb-0.5 sm:mb-1">Utilidad Pura</span>
-            <p className="text-lg sm:text-2xl font-black text-white truncate">USD {(gananciaNetaReal - salidasCaja).toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-4 gap-4 sm:gap-6 mt-4 sm:mt-6">
+      {/* 🚀 FILA 2: TARJETAS FINANCIERAS (P&L RÁPIDO) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         
-        {/* REGISTRO DE ÓRDENES (KABAN) */}
-        <div className="lg:col-span-3 rounded-2xl sm:rounded-3xl border border-silver/20 bg-white p-4 sm:p-6 shadow-sm overflow-hidden flex flex-col">
+        <div className="bg-[#161B22] border border-zinc-800 rounded-2xl p-5 flex flex-col justify-center">
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Costo Fijo (CMV)</span>
+          <p className="text-2xl font-black text-red-400">USD {totalCostosLotes.toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
+        </div>
+
+        <div className="bg-[#161B22] border border-zinc-800 rounded-2xl p-5 flex flex-col justify-center">
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Facturado (Bruto)</span>
+          <p className="text-2xl font-black text-white">USD {totalFacturado.toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
+        </div>
+
+        <div className="bg-[#161B22] border border-emerald-500/20 rounded-2xl p-5 flex flex-col justify-center relative overflow-hidden bg-gradient-to-br from-emerald-500/5 to-transparent">
+          <div className="flex justify-between items-start mb-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Caja Real Físico</span>
+            {salidasCaja > 0 && <span className="text-[9px] font-black bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">- USD {salidasCaja} Egresos</span>}
+          </div>
+          <p className="text-2xl font-black text-emerald-400">USD {totalCajaReal.toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
+        </div>
+
+        <div className="bg-purple-600 rounded-2xl p-5 flex flex-col justify-center relative overflow-hidden shadow-lg shadow-purple-600/20">
+          <div className="absolute right-[-20%] top-[-20%] size-24 bg-white/10 rounded-full blur-2xl" />
+          <div className="flex justify-between items-center mb-1 relative z-10">
+            <span className="text-[10px] font-black uppercase tracking-widest text-purple-200">Utilidad / Ganancia</span>
+            <span className="text-[9px] font-black bg-black/20 text-white px-2 py-0.5 rounded-md border border-white/10">ROI: {totalCostosLotes > 0 ? `${((gananciaNetaReal / totalCostosLotes) * 100).toFixed(0)}%` : '0%'}</span>
+          </div>
+          <p className="text-2xl font-black text-white tracking-tight relative z-10">USD {(gananciaNetaReal - salidasCaja).toLocaleString("en-US", {minimumFractionDigits: 0})}</p>
+        </div>
+
+      </div>
+
+      <div className="grid lg:grid-cols-4 gap-6">
+        
+        {/* 🚀 TABLA PRINCIPAL DE ÓRDENES */}
+        <div className="lg:col-span-3 bg-[#161B22] rounded-2xl border border-zinc-800 shadow-sm overflow-hidden flex flex-col">
           
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-            <h3 className="font-heading text-base sm:text-lg font-bold text-[#081640] flex items-center gap-1.5 sm:gap-2"><TrendingUp className="size-4 sm:size-5 text-cyan-rx"/> Registro de Órdenes</h3>
-            <button onClick={exportarAExcel} className="flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg border border-gray-200 text-[10px] sm:text-xs font-bold text-gray-500 hover:bg-[#081640] hover:text-white transition-all shadow-sm active:scale-95 w-full sm:w-auto">
-              <Download className="size-3.5" /> Exportar a Excel
+          <div className="p-5 border-b border-zinc-800 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-zinc-950/50">
+            <h3 className="text-lg font-black text-white flex items-center gap-2"><TrendingUp className="size-5 text-purple-500"/> Auditoría de Ventas</h3>
+            <button onClick={exportarAExcel} className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-xs font-bold text-zinc-300 hover:bg-white hover:text-black transition-all shadow-sm active:scale-95">
+              <Download className="size-4" /> Exportar a Excel
             </button>
           </div>
 
-          {/* 🚀 BOTONERA DE BANDEJAS */}
-          <div className="flex gap-2 border-b border-gray-200 mb-4 pb-0 overflow-x-auto hide-scrollbar">
+          {/* BANDEJAS DE FILTRADO */}
+          <div className="flex gap-2 p-3 bg-zinc-950/30 border-b border-zinc-800 overflow-x-auto hide-scrollbar">
             <button 
               onClick={() => setVistaOrdenes("pendientes")} 
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${vistaOrdenes === "pendientes" ? "border-amber-500 text-amber-600 bg-amber-50/50" : "border-transparent text-gray-400 hover:text-gray-700"}`}
+              className={cn("flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap", vistaOrdenes === "pendientes" ? "bg-amber-500/20 text-amber-500 border border-amber-500/30" : "bg-transparent text-zinc-500 hover:bg-zinc-900")}
             >
-              <Clock className="size-3.5" /> Acreditaciones {ordenesPendientes.length > 0 && <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">{ordenesPendientes.length}</span>}
+              <AlertCircle className="size-3.5" /> Por Cobrar {ordenesPendientes.length > 0 && <span className="bg-amber-500 text-black px-1.5 py-0.5 rounded text-[9px]">{ordenesPendientes.length}</span>}
             </button>
             <button 
               onClick={() => setVistaOrdenes("logistica")} 
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${vistaOrdenes === "logistica" ? "border-cyan-rx text-cyan-700 bg-cyan-50/50" : "border-transparent text-gray-400 hover:text-gray-700"}`}
+              className={cn("flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap", vistaOrdenes === "logistica" ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-transparent text-zinc-500 hover:bg-zinc-900")}
             >
-              <Truck className="size-3.5" /> En Logística {ordenesLogistica.length > 0 && <span className="bg-cyan-rx text-white px-1.5 py-0.5 rounded-full text-[9px]">{ordenesLogistica.length}</span>}
+              <Truck className="size-3.5" /> Envíos {ordenesLogistica.length > 0 && <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded text-[9px]">{ordenesLogistica.length}</span>}
             </button>
             <button 
               onClick={() => setVistaOrdenes("completadas")} 
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${vistaOrdenes === "completadas" ? "border-emerald-500 text-emerald-600 bg-emerald-50/50" : "border-transparent text-gray-400 hover:text-gray-700"}`}
+              className={cn("flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap", vistaOrdenes === "completadas" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-transparent text-zinc-500 hover:bg-zinc-900")}
             >
-              <PackageCheck className="size-3.5" /> Completadas / Historial
+              <PackageCheck className="size-3.5" /> Completadas
             </button>
           </div>
 
-          <div className="overflow-x-auto hide-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0 flex-1 max-h-[600px] overflow-y-auto">
-            <table className="w-full text-left text-sm text-primary whitespace-nowrap">
-              <thead className="bg-gray-50 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-primary/40 sticky top-0 z-10">
+          <div className="overflow-x-auto flex-1 max-h-[600px] scrollbar-thin scrollbar-thumb-zinc-700">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 sticky top-0 z-10 border-b border-zinc-800">
                 <tr>
-                  <th className="p-2.5 sm:p-3 rounded-l-lg">Fecha / Cliente</th>
-                  <th className="p-2.5 sm:p-3">Pedido</th>
-                  <th className="p-2.5 sm:p-3">Valor / Cobrado</th>
-                  <th className="p-2.5 sm:p-3">Canal y Estado</th>
-                  <th className="p-2.5 sm:p-3 rounded-r-lg text-right">Auditoría</th>
+                  <th className="p-4 pl-6">Fecha / Cliente</th>
+                  <th className="p-4">Comprobante / Detalle</th>
+                  <th className="p-4">Cobro</th>
+                  <th className="p-4">Canal / Estado</th>
+                  <th className="p-4 text-center pr-6">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-silver/10">
+              <tbody className="divide-y divide-zinc-800/50">
                 {ordenesVisibles.map((v) => {
-                  const esPendienteUSDT = v.estado === "Pendiente USDT"
+                  const esPendienteUSDT = v.estado === "Pendiente USDT" || v.estado === "Por Cobrar"
                   return (
-                    <tr key={v.id} className={`transition-colors ${v.estado === 'Abono' ? 'bg-emerald-50/50 hover:bg-emerald-50' : 'hover:bg-gray-50/50'}`}>
-                      <td className="p-2.5 sm:p-3">
-                        <span className="text-[9px] sm:text-[10px] font-bold text-primary/40 block mb-0.5">{new Date(v.created_at).toLocaleDateString()}</span>
-                        <span className="font-medium text-xs sm:text-sm text-primary/80 block max-w-[120px] sm:max-w-none truncate" title={v.cliente_referencia}>{v.cliente_referencia}</span>
+                    <tr key={v.id} className={cn("transition-colors group hover:bg-zinc-800/30", v.estado === 'Abono' && 'bg-emerald-500/5')}>
+                      
+                      <td className="p-4 pl-6">
+                        <span className="text-[10px] font-bold text-zinc-500 block mb-0.5">{new Date(v.created_at).toLocaleDateString()}</span>
+                        <span className="font-bold text-sm text-zinc-200 block truncate" title={v.cliente_referencia}>{v.cliente_referencia}</span>
                       </td>
-                      <td className="p-2.5 sm:p-3">
-                        <span className={`font-bold text-xs sm:text-sm block truncate max-w-[150px] sm:max-w-[200px] ${v.estado === 'Abono' ? 'text-emerald-600' : 'text-[#081640]'}`} title={v.nombre_producto}>{v.nombre_producto}</span>
+                      
+                      <td className="p-4">
+                        <span className={cn("font-bold text-sm block truncate max-w-[200px]", v.estado === 'Abono' ? 'text-emerald-400' : 'text-white')} title={v.nombre_producto}>{v.nombre_producto}</span>
                         {v.estado !== 'Abono' && (
-                          <button onClick={() => { setTrackingData({ id: v.id, estado_envio: v.estado_envio || "Preparando", codigo_seguimiento: v.codigo_seguimiento || "" }); setShowTrackingModal(true); }} className="justify-center inline-flex items-center gap-1 bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all border border-blue-200 mt-1 mb-1 w-full"><Truck className="size-3 sm:size-3.5" /> Estado Envío</button>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[9px] font-black text-zinc-500 bg-zinc-900 px-1.5 py-0.5 rounded uppercase block border border-zinc-800">Cant: {v.cantidad}</span>
+                            <button onClick={() => { setTrackingData({ id: v.id, estado_envio: v.estado_envio || "Preparando", codigo_seguimiento: v.codigo_seguimiento || "" }); setShowTrackingModal(true); }} className="text-[9px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"><Truck className="size-3" /> Info Envío</button>
+                          </div>
                         )}
-                        {v.estado !== 'Abono' && <span className="text-[9px] sm:text-[10px] font-bold text-primary/40 uppercase block">x{v.cantidad} u.</span>}
                       </td>
-                      <td className="p-2.5 sm:p-3">
-                        {v.estado !== 'Abono' && <span className="font-bold text-xs sm:text-sm text-[#081640] block">USD {Number(v.total_trato).toFixed(0)}</span>}
+
+                      <td className="p-4">
+                        {v.estado !== 'Abono' && <span className="font-black text-sm text-white block">USD {Number(v.total_trato).toFixed(0)}</span>}
                         {v.monto_pagado > 0 ? (
-                          <span className={`text-[9px] sm:text-[10px] font-black uppercase block mt-0.5 ${v.estado === 'Abono' ? 'text-emerald-600 text-xs sm:text-sm' : 'text-emerald-600'}`}>Cobrado: USD {v.monto_pagado}</span>
+                          <span className={cn("text-[9px] font-black uppercase tracking-widest block mt-0.5", v.estado === 'Abono' ? 'text-emerald-400' : 'text-emerald-500')}>Recibido: USD {v.monto_pagado}</span>
                         ) : (
-                          <span className="text-[9px] sm:text-[10px] font-black text-amber-500 uppercase block mt-0.5 animate-pulse">Por Cobrar</span>
+                          <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mt-0.5 animate-pulse bg-amber-500/10 px-1.5 py-0.5 rounded w-fit border border-amber-500/20">Por Cobrar</span>
                         )}
                       </td>
-                      <td className="p-2.5 sm:p-3">
-                        <div className="flex items-center gap-1 mb-1 flex-wrap">
-                          {v.metodo_pago === "Mercado Pago" && <span className="flex items-center gap-1 bg-white-[#009EE3]/10 text-[#009EE3] text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-[#009EE3]/20"><CreditCard className="size-2.5 sm:size-3"/> MP</span>}
-                          {v.metodo_pago === "USDT" && <span className="flex items-center gap-1 bg-emerald-500/10 text-emerald-600 text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-emerald-500/20"><Bitcoin className="size-2.5 sm:size-3"/> USDT</span>}
-                          {(!v.metodo_pago || v.metodo_pago === "Manual") && <span className="flex items-center gap-1 bg-gray-100 text-gray-500 text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-gray-200">Manual / WA</span>}
+
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                          {v.metodo_pago === "Mercado Pago" && <span className="flex items-center gap-1 bg-sky-500/10 text-sky-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-sky-500/20"><CreditCard className="size-3"/> MP</span>}
+                          {v.metodo_pago === "USDT" && <span className="flex items-center gap-1 bg-emerald-500/10 text-emerald-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-emerald-500/20"><Bitcoin className="size-3"/> Crypto</span>}
+                          {(!v.metodo_pago || v.metodo_pago === "Manual") && <span className="flex items-center gap-1 bg-zinc-800 text-zinc-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-zinc-700">Mostrador / WA</span>}
                         </div>
-                        <span className={`text-[9px] sm:text-[10px] font-bold flex items-center gap-1 ${esPendienteUSDT ? 'text-amber-500' : 'text-emerald-500'}`}>
-                          {esPendienteUSDT ? <Loader2 className="size-2.5 sm:size-3 animate-spin"/> : <CheckCircle2 className="size-2.5 sm:size-3"/>} {v.estado || "Completada"}
+                        <span className={cn("text-[9px] font-black uppercase tracking-widest flex items-center gap-1", esPendienteUSDT ? 'text-amber-500' : 'text-zinc-400')}>
+                          {esPendienteUSDT ? <Loader2 className="size-3 animate-spin"/> : <CheckCircle2 className="size-3 text-emerald-500"/>} {v.estado || "Completada"}
                         </span>
                       </td>
-                      <td className="p-2.5 sm:p-3 text-right">
-                        <div className="flex flex-col items-end gap-1.5 sm:gap-2">
+
+                      <td className="p-4 pr-6 text-center">
+                        <div className="flex flex-col items-end gap-1.5">
                           {esPendienteUSDT && (
-                            <button onClick={() => handleAprobarUSDT(v)} disabled={isSaving} className="w-full justify-center inline-flex items-center gap-1 bg-emerald-500 text-white hover:bg-emerald-600 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all shadow-sm"><Check className="size-3 sm:size-3.5" /> Validar</button>
+                            <button onClick={() => handleAprobarUSDT(v)} disabled={isSaving} className="w-full justify-center inline-flex items-center gap-1 bg-emerald-500 text-black hover:bg-emerald-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95">
+                              <Check className="size-3" /> Cobrar
+                            </button>
                           )}
                           {v.estado !== 'Abono' && (
-                            <button onClick={() => verComprobanteHistorico(v)} className="w-full justify-center inline-flex items-center gap-1 bg-[#081640]/5 text-[#081640] hover:bg-[#081640] hover:text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all border border-[#081640]/10"><FileText className="size-3 sm:size-3.5" /> Recibo</button>
+                            <button onClick={() => verComprobanteHistorico(v)} className="w-full justify-center inline-flex items-center gap-1 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all">
+                              <FileText className="size-3" /> Ticket
+                            </button>
                           )}
-                          <button onClick={() => handleAnularVenta(v)} disabled={isSaving} className="w-full justify-center inline-flex items-center gap-1 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all border border-red-100"><X className="size-3 sm:size-3.5" /> Anular</button>
+                          <button onClick={() => handleAnularVenta(v)} disabled={isSaving} className="w-full justify-center inline-flex items-center gap-1 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border border-transparent hover:border-red-600">
+                            <X className="size-3" /> Anular
+                          </button>
                         </div>
                       </td>
+
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+            
             {ordenesVisibles.length === 0 && (
-              <div className="text-center py-16 flex flex-col items-center">
-                <History className="size-10 text-gray-200 mb-3" />
-                <p className="text-xs sm:text-sm text-primary/30 font-medium">No hay órdenes en la bandeja de "{vistaOrdenes}".</p>
+              <div className="text-center py-20 flex flex-col items-center">
+                <History className="size-10 text-zinc-700 mb-3" />
+                <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest">No hay órdenes en "{vistaOrdenes}".</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* SALIDAS DE CAJA (EGRESOS) */}
-        <div className="lg:col-span-1 rounded-2xl sm:rounded-3xl border border-red-200 bg-white shadow-sm flex flex-col h-[400px] sm:h-auto">
-          <div className="p-4 sm:p-6 border-b border-red-100 bg-red-50/50 rounded-t-2xl sm:rounded-t-3xl">
-            <h3 className="font-heading text-base sm:text-lg font-bold text-red-600 flex items-center gap-1.5 sm:gap-2"><ArrowDownCircle className="size-4 sm:size-5"/> Salidas de Caja</h3>
+        {/* 🚀 LISTA DE SALIDAS DE CAJA (EGRESOS) */}
+        <div className="lg:col-span-1 bg-[#161B22] border border-red-500/20 rounded-2xl shadow-sm flex flex-col h-[500px] lg:h-auto overflow-hidden">
+          <div className="p-5 border-b border-red-500/20 bg-red-500/5">
+            <h3 className="text-base font-black text-red-500 flex items-center gap-2"><ArrowDownCircle className="size-5"/> Egresos de Caja</h3>
           </div>
-          <div className="p-4 sm:p-6 flex-1 overflow-y-auto max-h-[300px] sm:max-h-[600px] space-y-3 sm:space-y-4">
+          <div className="p-4 flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-zinc-800">
             {egresosFiltrados.map((egreso) => (
-              <div key={egreso.id} className="bg-white border border-gray-100 p-3 sm:p-4 rounded-xl shadow-sm relative group">
-                <button onClick={() => handleBorrarEgreso(egreso.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 p-1"><X className="size-3.5 sm:size-4"/></button>
-                <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 block mb-0.5 sm:mb-1">{new Date(egreso.created_at).toLocaleDateString()}</span>
-                <p className="font-bold text-[#081640] text-xs sm:text-sm mb-0.5 sm:mb-1 pr-6">{egreso.motivo}</p>
-                <span className="font-black text-red-500 text-sm sm:text-base">- USD {egreso.monto}</span>
+              <div key={egreso.id} className="bg-zinc-950 border border-zinc-800 p-4 rounded-xl relative group hover:border-red-500/30 transition-colors">
+                <button onClick={() => handleBorrarEgreso(egreso.id)} className="absolute top-2 right-2 text-zinc-600 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"><X className="size-4"/></button>
+                <span className="text-[9px] font-bold text-zinc-500 block mb-1 tracking-widest">{new Date(egreso.created_at).toLocaleDateString()}</span>
+                <p className="font-bold text-zinc-300 text-sm mb-1.5 pr-6 leading-tight">{egreso.motivo}</p>
+                <span className="font-black text-red-400 text-base block">- USD {egreso.monto}</span>
               </div>
             ))}
-            {egresosFiltrados.length === 0 && <p className="text-center text-[10px] sm:text-xs text-primary/30 py-8 sm:py-10 italic">Caja invicta en este período.</p>}
+            {egresosFiltrados.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center">
+                <p className="text-center text-[10px] text-emerald-500/50 font-black uppercase tracking-widest border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 rounded-lg">Caja invicta (Sin gastos)</p>
+              </div>
+            )}
           </div>
         </div>
+
       </div>
     </div>
   )
