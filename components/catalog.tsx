@@ -92,7 +92,7 @@ export function Catalog() {
               Vidriera Electronic
             </p>
             <h2 className="text-4xl font-bold leading-tight tracking-tighter text-foreground text-balance sm:text-5xl">
-              Equipos Destacados
+              Productos Destacados
             </h2>
           </div>
 

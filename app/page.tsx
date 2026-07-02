@@ -94,6 +94,8 @@ export default function Page() {
           {/* 3. Carrusel promocional y secciones informativas */}
           <PromoCarousel />
           <About />
+          {/* 🚀 5. CATÁLOGO MOVIDO: Ahora se ubica justo arriba del formulario de soporte técnico */}
+          <Catalog />
           <Standards />
           <InvestigatorRegister />
 
@@ -101,8 +103,6 @@ export default function Page() {
           {settings?.before_after_visible !== false && <Experience />}
           <Faq />
           
-          {/* 🚀 5. CATÁLOGO MOVIDO: Ahora se ubica justo arriba del formulario de soporte técnico */}
-          <Catalog />
 
           {/* 6. Bloque de Soporte / Contacto y Pie de página */}
           <CtaFooter />
