@@ -195,7 +195,7 @@ export default function IphonePage() {
                           </span>
                         </div>
 
-                        {/* ACCIÓN DIRECTA POR WHATSAPP */}
+                        {/* ACCIÓN DIRECTA POR WHATSAPP  xd*/}
                         <a
                           href={linkWhatsAppItem}
                           target="_blank"
