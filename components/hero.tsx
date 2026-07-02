@@ -1,7 +1,8 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useState } from "react"
-import { ArrowRight, ShieldCheck, Smartphone, Zap } from "lucide-react" // 🚀 Iconos tecnológicos
+import { ArrowRight, ShieldCheck, Smartphone, Zap, Wrench } from "lucide-react" // 🚀 Iconos tecnológicos
 import supabase from "@/lib/supabase"
 
 export function Hero() {
