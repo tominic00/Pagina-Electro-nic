@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Package, Tag, Trash2, DollarSign, Calculator, CheckCircle2, Loader2, Users, Search, FileText, Receipt, Plus, UserPlus } from "lucide-react"
+import { Package, Tag, Trash2, DollarSign, Calculator, CheckCircle2, Loader2, Users, Search, FileText, Receipt, Plus, UserPlus, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabVentasProps {
@@ -34,6 +34,8 @@ interface TabVentasProps {
   handleGenerarPresupuesto: () => void
   handleRegistrarVentaManual: () => void
   setShowCuponModal: (show: boolean) => void
+  // 🚀 Agregamos la función para poder cambiar de pestaña
+  setActiveTab: (tab: string) => void 
 }
 
 export function TabVentas({
@@ -65,16 +67,15 @@ export function TabVentas({
   saldoFinalCalculado,
   handleGenerarPresupuesto,
   handleRegistrarVentaManual,
-  setShowCuponModal
+  setShowCuponModal,
+  setActiveTab
 }: TabVentasProps) {
   
-  // Estados locales para la interfaz de mostrador (POS)
   const [searchTerm, setSearchTerm] = useState("")
   const [tipoFacturacion, setTipoFacturacion] = useState<"interno" | "afip">("interno")
 
   const clienteSeleccionado = ventaData.clienteId ? clientes?.find(c => c.id === ventaData.clienteId) : null
 
-  // Filtrado de productos para el buscador
   const productosFiltrados = productos.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.categoria?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -127,7 +128,7 @@ export function TabVentas({
           </div>
         </div>
 
-        {/* Lista de Ítems en el Carrito */}
+        {/* 🚀 LISTA DE ÍTEMS DETALLADA */}
         {carritoAdmin.length > 0 && (
           <div className="border-t border-zinc-800 pt-5">
             <div className="flex justify-between items-end mb-3">
@@ -137,14 +138,18 @@ export function TabVentas({
             
             <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 pr-2">
               {carritoAdmin.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors group">
-                  <div className="flex-1 min-w-0 pr-3">
-                    <p className="font-bold text-sm text-zinc-200 truncate group-hover:text-purple-400 transition-colors">{item.producto.nombre}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">{item.cantidad} uni. x USD {item.producto.precio}</p>
+                <div key={idx} className="flex flex-col bg-zinc-900/50 p-3.5 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors group">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="font-bold text-sm text-zinc-200 group-hover:text-purple-400 transition-colors pr-4 leading-tight">{item.producto.nombre}</p>
+                    <button onClick={() => removerDelCarritoAdmin(item.producto.id)} className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors shrink-0 -mt-1 -mr-1"><Trash2 className="size-4"/></button>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex justify-between items-center border-t border-zinc-800/50 pt-2">
+                    <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                      <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300">{item.cantidad} uni.</span>
+                      <span>x</span>
+                      <span>USD {item.producto.precio} c/u</span>
+                    </div>
                     <span className="font-black text-sm text-white">USD {item.cantidad * item.producto.precio}</span>
-                    <button onClick={() => removerDelCarritoAdmin(item.producto.id)} className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors"><Trash2 className="size-4"/></button>
                   </div>
                 </div>
               ))}
@@ -217,7 +222,10 @@ export function TabVentas({
           <div>
             <div className="flex justify-between items-end mb-1">
               <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Asignar Cliente</label>
-              <button className="flex items-center gap-1 text-[9px] font-bold text-purple-400 uppercase hover:text-purple-300"><UserPlus className="size-3"/> Crear Nuevo</button>
+              {/* 🚀 BOTÓN ARREGLADO: TE LLEVA AL CRM PARA CREAR EL CLIENTE */}
+              <button onClick={() => setActiveTab("clientes")} className="flex items-center gap-1 text-[9px] font-bold text-purple-400 uppercase hover:text-purple-300 transition-colors">
+                <UserPlus className="size-3"/> Crear Nuevo
+              </button>
             </div>
             <select value={ventaData.clienteId} onChange={e => { const idSel = e.target.value; setVentaData({...ventaData, clienteId: idSel, clienteB2b: idSel ? "" : ventaData.clienteB2b}); }} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all">
               <option value="">-- Consumidor Final (Mostrador) --</option>
@@ -230,30 +238,44 @@ export function TabVentas({
             <input type="text" disabled={!!ventaData.clienteId} value={ventaData.clienteB2b} onChange={e => setVentaData({...ventaData, clienteB2b: e.target.value})} className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white disabled:opacity-30 outline-none focus:border-purple-500 transition-all" placeholder="Nota interna opcional..." />
           </div>
 
-          {/* 🚀 TIPO DE COMPROBANTE (AFIP vs NO AFIP) */}
+          {/* 🚀 TIPO DE COMPROBANTE */}
           <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 block mb-2.5">Tipo de Comprobante</label>
             <div className="flex gap-2">
-              <button 
-                onClick={() => setTipoFacturacion("interno")}
-                className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all", tipoFacturacion === "interno" ? "bg-zinc-800 text-white border-zinc-700 shadow-sm" : "bg-transparent text-zinc-600 border-transparent hover:bg-zinc-900")}
-              >
+              <button onClick={() => setTipoFacturacion("interno")} className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all", tipoFacturacion === "interno" ? "bg-zinc-800 text-white border-zinc-700 shadow-sm" : "bg-transparent text-zinc-600 border-transparent hover:bg-zinc-900")}>
                 Uso Interno (Negro)
               </button>
-              <button 
-                onClick={() => setTipoFacturacion("afip")}
-                className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all", tipoFacturacion === "afip" ? "bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-sm" : "bg-transparent text-zinc-600 border-transparent hover:bg-zinc-900")}
-              >
+              <button onClick={() => setTipoFacturacion("afip")} className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all", tipoFacturacion === "afip" ? "bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-sm" : "bg-transparent text-zinc-600 border-transparent hover:bg-zinc-900")}>
                 Factura AFIP
               </button>
             </div>
           </div>
 
-          {/* Pago Recibido */}
+          {/* 🚀 MÉTODO DE PAGO */}
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-1.5">
+              <CreditCard className="size-3.5" /> Método de Cobro
+            </label>
+            <select 
+              value={ventaData.metodoPago || "Efectivo"} 
+              onChange={e => setVentaData({...ventaData, metodoPago: e.target.value})} 
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all font-bold"
+            >
+              <option value="Efectivo">💵 Efectivo</option>
+              <option value="Transferencia">🏦 Transferencia Bancaria</option>
+              <option value="Getnet">💳 Getnet / Posnet</option>
+              <option value="Mercado Pago">📱 Mercado Pago</option>
+              <option value="Nave">🚀 Nave</option>
+              <option value="USD">💵 Dólares Físicos (USD)</option>
+              <option value="USDT">🪙 Crypto (USDT)</option>
+            </select>
+          </div>
+
+          {/* Monto Recibido */}
           <div>
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center justify-between">
-              Efectivo Pagado / Transferido 
-              <span className="text-[8px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">En USD</span>
+              Monto Recibido 
+              <span className="text-[8px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">Expresado en USD</span>
             </label>
             <div className="relative mt-1">
               <DollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-emerald-500" />
@@ -277,27 +299,15 @@ export function TabVentas({
         {/* 🚀 BOTONES DE ACCIÓN FINAL */}
         <div className="space-y-3 pt-4 border-t border-zinc-800">
           <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={handleGenerarPresupuesto} 
-              disabled={carritoAdmin.length === 0} 
-              className="flex justify-center items-center gap-2 rounded-xl bg-zinc-800 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 border border-zinc-700"
-            >
+            <button onClick={handleGenerarPresupuesto} disabled={carritoAdmin.length === 0} className="flex justify-center items-center gap-2 rounded-xl bg-zinc-800 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 border border-zinc-700">
               <Calculator className="size-3.5" /> Presupuesto
             </button>
-            <button 
-              onClick={handleGenerarPresupuesto} // Reemplazar con lógica de Remito si es necesario
-              disabled={carritoAdmin.length === 0} 
-              className="flex justify-center items-center gap-2 rounded-xl bg-zinc-800 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 border border-zinc-700"
-            >
+            <button onClick={handleGenerarPresupuesto} disabled={carritoAdmin.length === 0} className="flex justify-center items-center gap-2 rounded-xl bg-zinc-800 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all disabled:opacity-30 border border-zinc-700">
               <FileText className="size-3.5" /> Remito
             </button>
           </div>
 
-          <button 
-            onClick={handleRegistrarVentaManual} 
-            disabled={isSaving || carritoAdmin.length === 0} 
-            className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none"
-          >
+          <button onClick={handleRegistrarVentaManual} disabled={isSaving || carritoAdmin.length === 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none">
             {isSaving ? <Loader2 className="size-5 animate-spin" /> : (
               <>
                 <Receipt className="size-5" /> 

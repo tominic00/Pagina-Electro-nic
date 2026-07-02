@@ -12,7 +12,6 @@ export interface EgresoCaja { id: string; created_at: string; monto: number; mot
 export interface Cupon { id: string; created_at: string; codigo: string; tipo: 'porcentaje' | 'monto'; valor: number; activo: boolean; fecha_vencimiento?: string; un_solo_uso: boolean }
 export interface MovimientoStock { id: string; created_at: string; producto_id: string; 'font-weight': string; nombre_producto: string; cantidad: number; motivo: string }
 
-// Eliminado "guias" de los tipos
 export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "blogs" | "home"
 
 export function useDashboard() {
@@ -60,7 +59,8 @@ export function useDashboard() {
   const [carritoAdmin, setCarritoAdmin] = useState<AdminCartItem[]>([])
   const [productoSeleccionadoId, setProductoSeleccionadoId] = useState("")
   const [cantidadSeleccionada, setCantidadSeleccionada] = useState(1)
-  const [ventaData, setVentaData] = useState({ montoPagado: 0, clienteId: "", clienteB2b: "" })
+  // 🚀 ACTUALIZADO: Estado por defecto del método de pago
+  const [ventaData, setVentaData] = useState({ montoPagado: 0, clienteId: "", clienteB2b: "", metodoPago: "Efectivo" })
   const [descuentoData, setDescuentoData] = useState<{tipo: "ninguno" | "porcentaje" | "monto", valor: number, codigoAplicado: string}>({ tipo: "ninguno", valor: 0, codigoAplicado: "" })
   const [inputCupon, setInputCupon] = useState("")
   const [manualDescTipo, setManualDescTipo] = useState<"porcentaje" | "monto">("porcentaje")
@@ -114,7 +114,6 @@ export function useDashboard() {
     const { data: reqData } = await supabase.from("solicitudes_registro").select("*").order("created_at", { ascending: false })
     const { data: blogsData } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
 
-    // 🚀 SALVAVIDAS ANTI-LOOP PARA EL DISEÑO WEB
     const { data: homeData } = await supabase.from("home_settings").select("*").eq("id", "main").single()
 
     if (homeData) {
@@ -385,18 +384,25 @@ export function useDashboard() {
       if (!stockError) {
         const montoPagadoFila = !asignoPago ? entregaEfectivo : 0; asignoPago = true;
         await supabase.from("ventas_b2b").insert([{
-          producto_id: item.producto.id, nombre_producto: `${item.producto.nombre}${descuentoData.tipo !== "ninguno" ? " (Desc)" : ""}`, 
-          cantidad: item.cantidad, precio_unitario: item.producto.precio * factor, costo_unitario_historico: item.producto.costo || 0, 
-          total_trato: item.producto.precio * item.cantidad * factor, monto_pagado: montoPagadoFila, cliente_referencia: clienteTextoFinal, 
-          cliente_id: ventaData.clienteId || null, estado: (ventaData.clienteId && saldoDiferencia < 0) ? "A Cuenta Corriente" : "Completada", 
-          metodo_pago: "Manual", cupon_aplicado: descuentoData.codigoAplicado || null
+          producto_id: item.producto.id, 
+          nombre_producto: `${item.producto.nombre}${descuentoData.tipo !== "ninguno" ? " (Desc)" : ""}`, 
+          cantidad: item.cantidad, 
+          precio_unitario: item.producto.precio * factor, 
+          costo_unitario_historico: item.producto.costo || 0, 
+          total_trato: item.producto.precio * item.cantidad * factor, 
+          monto_pagado: montoPagadoFila, 
+          cliente_referencia: clienteTextoFinal, 
+          cliente_id: ventaData.clienteId || null, 
+          estado: (ventaData.clienteId && saldoDiferencia < 0) ? "A Cuenta Corriente" : "Completada", 
+          metodo_pago: ventaData.metodoPago || "Efectivo", // 🚀 INYECTADO: Guarda el Método de Pago seleccionado
+          cupon_aplicado: descuentoData.codigoAplicado || null
         }])
-        await supabase.from("movimientos_stock").insert([{ producto_id: item.producto.id, nombre_producto: item.producto.nombre, cantidad: -item.cantidad, motivo: `Venta B2B (Ref: ${clienteTextoFinal})` }])
+        await supabase.from("movimientos_stock").insert([{ producto_id: item.producto.id, nombre_producto: item.producto.nombre, cantidad: -item.cantidad, motivo: `Venta (Ref: ${clienteTextoFinal})` }])
       } else exitoTotal = false
     }
 
     if (exitoTotal) {
-      handleGenerarPresupuesto(); setInvoiceType("VENTA"); setCarritoAdmin([]); setVentaData({ montoPagado: 0, clienteId: "", clienteB2b: "" }); removerDescuento(); fetchData();
+      handleGenerarPresupuesto(); setInvoiceType("VENTA"); setCarritoAdmin([]); setVentaData({ montoPagado: 0, clienteId: "", clienteB2b: "", metodoPago: "Efectivo" }); removerDescuento(); fetchData();
     } else alert("Error en stock."); setIsSaving(false);
   }
 
@@ -458,11 +464,11 @@ export function useDashboard() {
 
     if (devolucionData.reingresarStock) {
       await supabase.from("productos").update({ stock: producto.stock + cantNum }).eq("id", producto.id)
-      await supabase.from("movimientos_stock").insert([{ producto_id: producto.id, nombre_producto: producto.nombre, cantidad: cantNum, motivo: `Devolución B2B (Ref: ${cliente.nombre}) - ${devolucionData.motivo}` }])
+      await supabase.from("movimientos_stock").insert([{ producto_id: producto.id, nombre_producto: producto.nombre, cantidad: cantNum, motivo: `Devolución (Ref: ${cliente.nombre}) - ${devolucionData.motivo}` }])
     }
 
     await supabase.from("ventas_b2b").insert([{ producto_id: producto.id, nombre_producto: `🔄 Devolución: ${producto.nombre} (${devolucionData.motivo})`, cantidad: -cantNum, precio_unitario: -(valorNum / cantNum), costo_unitario_historico: devolucionData.reingresarStock ? producto.costo : 0, total_trato: -valorNum, monto_pagado: 0, cliente_referencia: cliente.nombre, cliente_id: cliente.id, estado: "Devolución", metodo_pago: "A Cuenta Corriente" }])
-    alert("¡Devolución registrada correctamente! Se reintegró el saldo a favor al médico.")
+    alert("¡Devolución registrada correctamente! Se reintegró el saldo a favor.")
     setDevolucionData({ clienteId: "", productoId: "", cantidad: 1, valorReintegro: "", motivo: "", reingresarStock: true })
     setShowDevolucionModal(false); fetchData(); setIsSaving(false);
   }
@@ -547,7 +553,6 @@ export function useDashboard() {
     }
   }
 
-  // 🚀 FUNCIÓN UPSERT PARA LA PÁGINA WEB - EVITA LOOP DE CARGA
   const handleSaveHome = async (e: React.FormEvent) => {
     if (e) e.preventDefault()
     setIsSavingHome(true)
