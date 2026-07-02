@@ -12,8 +12,8 @@ export interface EgresoCaja { id: string; created_at: string; monto: number; mot
 export interface Cupon { id: string; created_at: string; codigo: string; tipo: 'porcentaje' | 'monto'; valor: number; activo: boolean; fecha_vencimiento?: string; un_solo_uso: boolean }
 export interface MovimientoStock { id: string; created_at: string; producto_id: string; 'font-weight': string; nombre_producto: string; cantidad: number; motivo: string }
 
-// 🚀 Agregué "taller" a los tipos aceptados
-export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "guias" | "blogs" | "home"
+// Eliminado "guias" de los tipos
+export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "blogs" | "home"
 
 export function useDashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard")
@@ -31,15 +31,10 @@ export function useDashboard() {
   const [isUploadingCoa, setIsUploadingCoa] = useState(false) 
   const router = useRouter()
   
-  const [guias, setGuias] = useState<any[]>([])
-  const [isSavingGuia, setIsSavingGuia] = useState(false)
-  const [editingGuiaId, setEditingGuiaId] = useState<string | null>(null)
-  const [formDataGuia, setFormDataGuia] = useState({ id: "", titulo: "", contenido: "" })
-
   const [blogs, setBlogs] = useState<any[]>([])
   const [isSavingBlog, setIsSavingBlog] = useState(false)
   const [editingBlogId, setEditingBlogId] = useState<string | null>(null)
-  const [formDataBlog, setFormDataBlog] = useState({ id: "", titulo: "", categoria: "Novedades & Actualizaciones", contenido: "" })
+  const [formDataBlog, setFormDataBlog] = useState({ id: "", titulo: "", categoria: "Tutoriales & Tips", contenido: "" })
 
   const [homeSettings, setHomeSettings] = useState<any>(null)
   const [isSavingHome, setIsSavingHome] = useState(false)
@@ -47,7 +42,7 @@ export function useDashboard() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ 
     nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, 
-    categoria: "Metabolismo", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", 
+    categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", 
     precio_minorista: undefined as number | undefined, 
     precio_mayorista: undefined as number | undefined, 
     precio_volumen: undefined as number | undefined, 
@@ -57,7 +52,6 @@ export function useDashboard() {
   const [showMassUpdateModal, setShowMassUpdateModal] = useState(false)
   const [showStockAdjustModal, setShowStockAdjustModal] = useState(false)
   const [showStockHistoryModal, setShowStockHistoryModal] = useState(false)
-  // 🚀 ESTADO PARA CONTROLAR EL MODAL DEL TALLER
   const [showNuevaReparacion, setShowNuevaReparacion] = useState(false)
 
   const [stockAdjustData, setStockAdjustData] = useState<{producto: Producto | null, tipo: 'ingreso' | 'egreso', cantidad: string, motivo: string, motivoLibre: string}>({ producto: null, tipo: 'ingreso', cantidad: "", motivo: "Compra a Proveedor", motivoLibre: "" })
@@ -118,16 +112,30 @@ export function useDashboard() {
     const { data: movData } = await supabase.from("movimientos_stock").select("*").order("created_at", { ascending: false }) 
     const { data: teleData } = await supabase.from("telemetria_eventos").select("*").order("created_at", { ascending: false }) 
     const { data: reqData } = await supabase.from("solicitudes_registro").select("*").order("created_at", { ascending: false })
-    const { data: guiasData } = await supabase.from("guias").select("*").order("id", { ascending: true })
     const { data: blogsData } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
 
-    const { data: homeData, error: homeError } = await supabase.from("home_settings").select("*").eq("id", "main").single()
+    // 🚀 SALVAVIDAS ANTI-LOOP PARA EL DISEÑO WEB
+    const { data: homeData } = await supabase.from("home_settings").select("*").eq("id", "main").single()
 
-    if (homeError) console.error("Error al leer la tabla home_settings:", homeError.message)
-    if (homeData) setHomeSettings(homeData)
+    if (homeData) {
+      setHomeSettings(homeData)
+    } else {
+      setHomeSettings({
+        id: "main",
+        ticker_visible: true,
+        ticker_text: "🔥 Servicio técnico especializado Apple",
+        hero_visible: true,
+        hero_title: "Tecnología de punta a tu alcance",
+        hero_subtitle: "Reparación y venta de equipos garantizados.",
+        trust_badges: [],
+        standards_items: [],
+        banners: [],
+        before_after: [],
+        faqs: []
+      })
+    }
     
     if (blogsData) setBlogs(blogsData)
-    if (guiasData) setGuias(guiasData)
     if (reqData) setSolicitudes(reqData)
     if (prodData) setProductos((prodData as Producto[]) || [])
     if (vntData) setVentas((vntData as VentaHistorica[]) || [])
@@ -211,7 +219,7 @@ export function useDashboard() {
         alert("Error al crear compuesto: " + error.message)
       }
     }
-    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Metabolismo", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined })
+    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined })
     fetchData(); setIsSaving(false);
   }
 
@@ -263,7 +271,7 @@ export function useDashboard() {
       if (!error) { alert(`Datos actualizados.`); setEditingClienteId(null); } else alert(`Error: ${error.message}`)
     } else {
       const { error } = await supabase.from("clientes_b2b").insert([clienteForm])
-      if (!error) alert(`Investigador guardado.`)
+      if (!error) alert(`Cliente guardado.`)
     }
     setClienteForm({ nombre: "", institucion_o_laboratorio: "", whatsapp: "", email: "", password_portal: "", saldo_usd: 0, notas: "" }); fetchData(); setIsSaving(false);
   }
@@ -285,7 +293,7 @@ export function useDashboard() {
       await supabase.from("solicitudes_registro").update({ estado: "Aprobado" }).eq("id", sol.id)
       await supabase.from("cupones").insert([{ codigo: cuponBienvenida, tipo: "porcentaje", valor: 10, un_solo_uso: true, activo: true }])
       const cleanWA = sol.whatsapp.replace(/\D/g, '')
-      let text = `¡Hola Doc ${sol.nombre}! 🔬\nTu acceso B2B a *Pepti-Age* fue validado.\n🔐 *Credenciales:*\n• Email: ${sol.email}\n• Contraseña: ${claveAutomatica}\n🎁 Cupón 10% OFF: *${cuponBienvenida}*\nhttps://pepti-age.vercel.app/portal/login`
+      let text = `¡Hola ${sol.nombre}! 📱\nTu acceso a *electro·nic* fue validado.\n🔐 *Credenciales:*\n• Email: ${sol.email}\n• Contraseña: ${claveAutomatica}\n🎁 Cupón 10% OFF: *${cuponBienvenida}*`
       window.open(`https://wa.me/${cleanWA}?text=${encodeURIComponent(text)}`, '_blank')
       fetchData()
     }
@@ -334,7 +342,7 @@ export function useDashboard() {
     if (!cuponMatch) return alert("Cupón inválido.")
     if (cuponMatch.fecha_vencimiento && new Date() > new Date(cuponMatch.fecha_vencimiento)) return alert(`❌ Cupón expirado.`)
     if (cuponMatch.un_solo_uso) {
-      if (!ventaData.clienteId) return alert("⚠️ Seleccioná un Cliente B2B primero.")
+      if (!ventaData.clienteId) return alert("⚠️ Seleccioná un Cliente primero.")
       setIsSaving(true)
       const { data: usos } = await supabase.from("ventas_b2b").select("id").eq("cliente_id", ventaData.clienteId).eq("cupon_aplicado", cuponMatch.codigo).limit(1)
       setIsSaving(false)
@@ -513,36 +521,6 @@ export function useDashboard() {
   const pctCarritos = Math.min(100, Math.round((eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length / maxFunnel) * 100));
   const pctCompras = Math.min(100, Math.round((ventasFiltradas.filter(v => v.estado !== 'Abono').length / maxFunnel) * 100));
 
-  const handleSaveGuia = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSavingGuia(true);
-    const payload = { id: formDataGuia.id, titulo: formDataGuia.titulo, contenido: formDataGuia.contenido }
-    try {
-      if (editingGuiaId) {
-        const { error: updateError } = await supabase.from("guias").update(payload).eq("id", editingGuiaId)
-        if (updateError) throw updateError
-        setEditingGuiaId(null)
-      } else {
-        const { error: insertError } = await supabase.from("guias").insert([payload])
-        if (insertError) throw insertError
-      }
-      setFormDataGuia({ id: "", titulo: "", contenido: "" })
-      const { data: updated, error: fetchError } = await supabase.from("guias").select("*").order("id", { ascending: true })
-      if (fetchError) throw fetchError
-      if (updated) setGuias(updated)
-      alert("¡Guía publicada con éxito en la biblioteca!")
-    } catch (error: any) {
-      console.error("Error en tabla guias:", error)
-      alert("Error de Supabase: " + (error.message || JSON.stringify(error)))
-    } finally { setIsSavingGuia(false); }
-  }
-
-  const deleteGuia = async (id: string) => {
-    if (confirm("¿Eliminar esta guía por completo?")) {
-      await supabase.from("guias").delete().eq("id", id)
-      setGuias(prev => prev.filter(g => g.id !== id))
-    }
-  }
-
   const fetchBlogs = async () => {
     const { data, error } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
     if (data) setBlogs(data)
@@ -558,7 +536,7 @@ export function useDashboard() {
       alert("¡Artículo publicado con éxito en la web!")
       await fetchBlogs() 
       setEditingBlogId(null)
-      setFormDataBlog({ id: "", titulo: "", categoria: "Novedades & Actualizaciones", contenido: "" })
+      setFormDataBlog({ id: "", titulo: "", categoria: "Tutoriales & Tips", contenido: "" })
     } catch (error: any) { console.error("Error Supabase Blog:", error); alert(`Error al guardar: ${error.message}`) } finally { setIsSavingBlog(false) }
   }
 
@@ -569,18 +547,21 @@ export function useDashboard() {
     }
   }
 
+  // 🚀 FUNCIÓN UPSERT PARA LA PÁGINA WEB - EVITA LOOP DE CARGA
   const handleSaveHome = async (e: React.FormEvent) => {
     if (e) e.preventDefault()
     setIsSavingHome(true)
     try {
       const { error } = await supabase
         .from("home_settings")
-        .update({
+        .upsert({
+          id: "main",
           ticker_text: homeSettings.ticker_text,
           ticker_visible: homeSettings.ticker_visible,
           hero_title: homeSettings.hero_title,
           hero_subtitle: homeSettings.hero_subtitle,
           hero_image_url: homeSettings.hero_image_url,
+          hero_cover_url: homeSettings.hero_cover_url,
           hero_visible: homeSettings.hero_visible,
           banners: homeSettings.banners,
           banners_visible: homeSettings.banners_visible,
@@ -588,12 +569,17 @@ export function useDashboard() {
           before_after_visible: homeSettings.before_after_visible,
           footer_whatsapp: homeSettings.footer_whatsapp,
           footer_email: homeSettings.footer_email,
-          footer_address: homeSettings.footer_address
+          footer_address: homeSettings.footer_address,
+          standards_text: homeSettings.standards_text,
+          standards_visible: homeSettings.standards_visible,
+          trust_badges: homeSettings.trust_badges,
+          standards_items: homeSettings.standards_items,
+          faqs: homeSettings.faqs,
+          faq_blog_url: homeSettings.faq_blog_url
         })
-        .eq("id", "main")
 
       if (error) throw error
-      alert("¡La Home de Pepti-Age se actualizó con éxito en vivo!")
+      alert("¡La Home de electro·nic se actualizó con éxito en vivo!")
     } catch (error: any) {
       console.error("Error al guardar configuraciones de Home:", error)
       alert("Error de Supabase: " + error.message)
@@ -637,10 +623,8 @@ export function useDashboard() {
     pctFichas, pctWP, pctPortal, pctCarritos, pctCompras,
     solicitudesPendientes: solicitudes.filter(s => s.estado === "Pendiente" || s.estado === "Pending").length,
     ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length,
-    guias, isSavingGuia, editingGuiaId, setEditingGuiaId, formDataGuia, setFormDataGuia, handleSaveGuia, deleteGuia,
     blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog,
     homeSettings, setHomeSettings, isSavingHome, handleSaveHome,
-    // 🚀 AGREGAMOS LOS ESTADOS DEL MODAL TALLER
     showNuevaReparacion, setShowNuevaReparacion
   }
 }
