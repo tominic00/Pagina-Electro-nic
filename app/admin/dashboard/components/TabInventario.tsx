@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Edit3, Plus, Loader2, Upload, X, Package, ClipboardList, Percent, Trash2, Bold, Italic, List, DollarSign, Users, Search, Smartphone, Headphones, EyeOff, Wrench, Download, UploadCloud, Undo, Redo, Indent, Outdent, Type, Palette } from "lucide-react"
+import { Edit3, Plus, Loader2, Upload, X, Package, ClipboardList, Percent, Trash2, Bold, Italic, List, DollarSign, Users, Search, Smartphone, Headphones, EyeOff, Wrench, Download, UploadCloud, Undo, Redo, Indent, Outdent } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabInventarioProps {
@@ -44,7 +44,6 @@ export function TabInventario({
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"todos" | "celulares" | "otros" | "service">("todos")
   
-  // Modal de Importación
   const [showImportModal, setShowImportModal] = useState(false)
 
   useEffect(() => {
@@ -53,8 +52,9 @@ export function TabInventario({
     }
   }, [editingId, formData.descripcion === ""])
 
-  // 🚀 CLASIFICACIÓN AVANZADA
-  const getCategoriaGeneral = (cat: string = "") => {
+  // 🚀 CORRECCIÓN ANTI-CRASH: Si la categoría es null, no rompe la página.
+  const getCategoriaGeneral = (cat: string | null | undefined) => {
+    if (!cat) return "otros"
     const c = cat.toLowerCase()
     if (c.includes("repara") || c.includes("service") || c.includes("taller") || c.includes("instalacion")) return "service"
     if (c.includes("iphone") || c.includes("celular") || c.includes("smartphone") || c.includes("ipad") || c.includes("mac")) return "celulares"
@@ -63,7 +63,11 @@ export function TabInventario({
 
   const productosFiltrados = productos.filter((producto) => {
     const term = searchTerm.toLowerCase()
-    const matchesSearch = producto.nombre?.toLowerCase().includes(term) || producto.categoria?.toLowerCase().includes(term)
+    // Protección por si el nombre o la categoría son null en la base de datos
+    const nombreValido = producto.nombre ? producto.nombre.toLowerCase() : ""
+    const catValida = producto.categoria ? producto.categoria.toLowerCase() : ""
+    
+    const matchesSearch = nombreValido.includes(term) || catValida.includes(term)
     
     let matchesTab = true
     const tipo = getCategoriaGeneral(producto.categoria)
@@ -77,7 +81,6 @@ export function TabInventario({
 
   const categoriasExistentes = Array.from(new Set(productos.map(p => p.categoria))).filter(Boolean)
 
-  // 🚀 EDITOR WYSIWYG MEJORADO
   const ejecutarComando = (comando: string, valor: string = "") => {
     document.execCommand(comando, false, valor)
     if (editorRef.current) {
@@ -85,7 +88,6 @@ export function TabInventario({
     }
   }
 
-  // 🚀 EXPORTACIÓN E IMPORTACIÓN A EXCEL / CSV
   const handleExportCSV = () => {
     if (productos.length === 0) return alert("No hay productos para exportar.")
     const headers = ["ID", "Nombre", "Categoria", "Moneda", "Costo", "Precio_Publico", "Precio_Gremio", "Stock"]
@@ -242,7 +244,7 @@ export function TabInventario({
             
             <div className="pt-2 flex gap-2">
               {editingId && (
-                <button type="button" onClick={() => { setEditingId(null); setFormData({ nombre: "", precio: 0, costo: 0, stock: 0, categoria: "", imagen_url: "", moneda: "ARS" }) }} className="flex-1 py-3 text-xs font-bold uppercase bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 transition-all">Cancelar</button>
+                <button type="button" onClick={() => { setEditingId(null); setFormData({ nombre: "", precio: 0, costo: 0, stock: 0, categoria: "", imagen_url: "", moneda: "ARS", visible_web: true }) }} className="flex-1 py-3 text-xs font-bold uppercase bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 transition-all">Cancelar</button>
               )}
               <button type="submit" disabled={isSaving || isUploading} className="flex-2 w-full flex items-center justify-center rounded-xl bg-white py-3.5 text-xs font-black tracking-widest uppercase text-black hover:bg-purple-100 transition-all active:scale-95 shadow-md">
                 {isSaving ? <Loader2 className="size-4 animate-spin"/> : editingId ? "Actualizar Ficha" : "Guardar Registro"}

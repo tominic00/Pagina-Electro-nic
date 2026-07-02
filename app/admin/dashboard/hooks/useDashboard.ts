@@ -42,6 +42,7 @@ export function useDashboard() {
   const [formData, setFormData] = useState({ 
     nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, 
     categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", 
+    moneda: "ARS", visible_web: true,
     precio_minorista: undefined as number | undefined, 
     precio_mayorista: undefined as number | undefined, 
     precio_volumen: undefined as number | undefined, 
@@ -177,7 +178,7 @@ export function useDashboard() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSaving(true);
-    const processedApplications = formData.applicationsRaw ? formData.applicationsRaw.split("\n").map(item => item.trim()).filter(Boolean) : []
+    const processedApplications = formData.applicationsRaw ? formData.applicationsRaw.split("\n").map((item: string) => item.trim()).filter(Boolean) : []
     const stockNumerico = parseInt(formData.stock.toString(), 10) || 0
     
     const payload = { 
@@ -189,6 +190,11 @@ export function useDashboard() {
       stock: stockNumerico, 
       categoria: formData.categoria, 
       imagen_url: formData.imagen_url, 
+      
+      // 🚀 ¡ESTO ERA LO QUE FALTABA!
+      moneda: formData.moneda || "ARS",
+      visible_web: formData.visible_web !== false,
+      
       researchOverview: formData.researchOverview, 
       applications: processedApplications, 
       coa_url: formData.coa_url || "", 
@@ -215,10 +221,13 @@ export function useDashboard() {
       if (!error && newProd && stockNumerico > 0) {
         await supabase.from("movimientos_stock").insert([{ producto_id: newProd.id, nombre_producto: newProd.nombre, cantidad: stockNumerico, motivo: "Stock Inicial (Alta de Producto)" }])
       } else if (error) {
-        alert("Error al crear compuesto: " + error.message)
+        alert("Asegurate de que Supabase tenga las columnas 'moneda' y 'visible_web' creadas en la tabla productos. Error: " + error.message)
       }
     }
-    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined })
+    
+    // Al limpiar, también reseteamos moneda y visible_web para el próximo producto
+    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined, moneda: "ARS", visible_web: true })
+    
     fetchData(); setIsSaving(false);
   }
 
