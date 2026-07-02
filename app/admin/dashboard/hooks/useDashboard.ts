@@ -11,6 +11,7 @@ export interface AdminCartItem { producto: Producto; cantidad: number; id?: stri
 export interface EgresoCaja { id: string; created_at: string; monto: number; motivo: string }
 export interface Cupon { id: string; created_at: string; codigo: string; tipo: 'porcentaje' | 'monto'; valor: number; activo: boolean; fecha_vencimiento?: string; un_solo_uso: boolean }
 export interface MovimientoStock { id: string; created_at: string; producto_id: string; 'font-weight': string; nombre_producto: string; cantidad: number; motivo: string }
+export interface Tecnico { id: string; nombre: string; whatsapp: string; estado: string }
 
 export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "blogs" | "home"
 
@@ -37,6 +38,25 @@ export function useDashboard() {
 
   const [homeSettings, setHomeSettings] = useState<any>(null)
   const [isSavingHome, setIsSavingHome] = useState(false)
+
+  // 🚀 PEGAR ESTO ACÁ ABAJO:
+  const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
+  const [tecnicoForm, setTecnicoForm] = useState({ nombre: "", whatsapp: "", estado: "Activo" })
+  const [editingTecnicoId, setEditingTecnicoId] = useState<string | null>(null)
+
+  const [reparacionForm, setReparacionForm] = useState({
+    cliente_referencia: "",
+    producto_id: "", 
+    imei: "",
+    color: "",
+    diagnostico_falla: "",
+    tecnico_id: "",
+    costo_tecnico: 0,
+    total_trato: 0, 
+    monto_pagado: 0,
+    metodo_pago: "Efectivo",
+    estado: "Ingresado" 
+  })
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ 
@@ -114,29 +134,25 @@ export function useDashboard() {
     const { data: teleData } = await supabase.from("telemetria_eventos").select("*").order("created_at", { ascending: false }) 
     const { data: reqData } = await supabase.from("solicitudes_registro").select("*").order("created_at", { ascending: false })
     const { data: blogsData } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
-
+    
+    // 🌐 Chupa los técnicos de la base de datos
+    const { data: tecData } = await supabase.from("tecnicos").select("*").order("nombre", { ascending: true })
+    // 🌐 Chupa la configuración web sin loops
     const { data: homeData } = await supabase.from("home_settings").select("*").eq("id", "main").single()
 
     if (homeData) {
       setHomeSettings(homeData)
     } else {
       setHomeSettings({
-        id: "main",
-        ticker_visible: true,
-        ticker_text: "🔥 Servicio técnico especializado Apple",
-        hero_visible: true,
-        hero_title: "Tecnología de punta a tu alcance",
-        hero_subtitle: "Reparación y venta de equipos garantizados.",
-        trust_badges: [],
-        standards_items: [],
-        banners: [],
-        before_after: [],
-        faqs: []
+        id: "main", ticker_visible: true, ticker_text: "🔥 Servicio técnico especializado Apple",
+        hero_visible: true, hero_title: "Tecnología de punta a tu alcance", hero_subtitle: "Reparación y venta de equipos garantizados.",
+        trust_badges: [], standards_items: [], banners: [], before_after: [], faqs: []
       })
     }
     
     if (blogsData) setBlogs(blogsData)
     if (reqData) setSolicitudes(reqData)
+    if (tecData) setTecnicos(tecData)
     if (prodData) setProductos((prodData as Producto[]) || [])
     if (vntData) setVentas((vntData as VentaHistorica[]) || [])
     if (clntData) setClientes((clntData as ClienteB2B[]) || [])
@@ -595,6 +611,58 @@ export function useDashboard() {
 
   useEffect(() => { fetchBlogs() }, [])
 
+  // 🚀 PEGAR ESTAS TRES FUNCIONES NUEVAS ACÁ:
+  const handleRegistrarReparacion = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsSaving(true);
+    try {
+      const servicioMatch = productos.find(p => p.id === reparacionForm.producto_id)
+      const nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+
+      const { error } = await supabase.from("ventas_b2b").insert([{
+        producto_id: reparacionForm.producto_id || null,
+        nombre_producto: nombreServicio,
+        cantidad: 1,
+        precio_unitario: Number(reparacionForm.total_trato),
+        costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
+        total_trato: Number(reparacionForm.total_trato),
+        monto_pagado: Number(reparacionForm.monto_pagado),
+        cliente_referencia: reparacionForm.cliente_referencia,
+        estado: reparacionForm.estado,
+        metodo_pago: reparacionForm.metodo_pago,
+        imei: reparacionForm.imei,
+        color: reparacionForm.color,
+        diagnostico_falla: reparacionForm.diagnostico_falla,
+        tecnico_id: reparacionForm.tecnico_id || null,
+        costo_tecnico: Number(reparacionForm.costo_tecnico),
+        pago_tecnico_estado: "Pendiente"
+      }])
+
+      if (error) throw error
+      alert("¡Equipo ingresado al taller correctamente!");
+      setShowNuevaReparacion(false);
+      setReparacionForm({ cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" });
+      fetchData();
+    } catch (error: any) { alert("Error: " + error.message) } 
+    finally { setIsSaving(false) }
+  }
+
+  const handleRegistrarTecnico = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsSaving(true);
+    if (editingTecnicoId) {
+      await supabase.from("tecnicos").update(tecnicoForm).eq("id", editingTecnicoId)
+      setEditingTecnicoId(null)
+    } else {
+      await supabase.from("tecnicos").insert([tecnicoForm])
+    }
+    setTecnicoForm({ nombre: "", whatsapp: "", estado: "Activo" }); fetchData(); setIsSaving(false);
+  }
+
+  const handleEliminarTecnico = async (id: string) => {
+    if (confirm("¿Eliminar este técnico de la base de datos?")) {
+      await supabase.from("tecnicos").delete().eq("id", id); fetchData();
+    }
+  }
+
   return {
     activeTab, setActiveTab: (tab: string) => setActiveTab(tab as ActiveTab), isLoading, isSaving, isUploading, handleLogout,
     isUploadingCoa, handleCoaUpload, 
@@ -630,6 +698,9 @@ export function useDashboard() {
     ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length,
     blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog,
     homeSettings, setHomeSettings, isSavingHome, handleSaveHome,
-    showNuevaReparacion, setShowNuevaReparacion
+    showNuevaReparacion, setShowNuevaReparacion,
+    tecnicos, tecnicoForm, setTecnicoForm, editingTecnicoId, setEditingTecnicoId, 
+    handleRegistrarTecnico, handleEliminarTecnico, 
+    reparacionForm, setReparacionForm, handleRegistrarReparacion
   }
 }

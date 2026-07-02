@@ -17,13 +17,11 @@ import { TabCampanas } from "./components/TabCampanas"
 import { TabAnaliticas } from "./components/TabAnaliticas"
 import { TabBlogs } from "./components/TabBlogs"
 import { TabHome } from "./components/TabHome"
-import { TabReparaciones } from "./components/TabReparaciones" // 🚀 IMPORTAMOS TU NUEVA PESTAÑA
+// 🚀 CORREGIDO: Importamos tu archivo real con su nombre exacto
+import { TabReparaciones } from "./components/TabReparaciones" 
 
 export default function AdminDashboard() {
   const dashboard = useDashboard()
-  const TALLER_TAB = "taller" as unknown as typeof dashboard.activeTab
-
-  // ESTADO PARA CONTROLAR EL SIDEBAR
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -35,11 +33,10 @@ export default function AdminDashboard() {
     )
   }
 
-  // 🚀 Arrays de navegación actualizados (Agregamos "Taller")
   const principalNav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "ventas", label: "Punto de Venta", icon: TrendingUp },
-    { id: "taller", label: "Reparaciones", icon: Wrench }, // <-- PESTAÑA AÑADIDA
+    { id: "taller", label: "Reparaciones", icon: Wrench }, 
     { id: "productos", label: "Inventario", icon: Boxes },
     { id: "clientes", label: "Clientes", icon: Users },
   ]
@@ -55,10 +52,14 @@ export default function AdminDashboard() {
     { id: "blogs", label: "Blog & FAQs", icon: FileText },
   ]
 
+  const tabCRMProps = {
+    ...dashboard,
+    setFiltroClientes: (dashboard as any).setFiltroClientes ?? (() => {}),
+  }
+
   return (
     <div className="flex min-h-screen bg-[#0E1117] text-zinc-300 font-sans selection:bg-primary/30">
       
-      {/* Carga los modales generales (incluyendo el nuevo de Reparaciones que pegaste) */}
       <DashboardModals {...dashboard} />
 
       {/* SIDEBAR (Barra Lateral) */}
@@ -176,15 +177,14 @@ export default function AdminDashboard() {
       {/* CONTENIDO PRINCIPAL (Lado Derecho) */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         
+        {/* CORREGIDO: Estructura HTML de la cabecera nivelada */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-800 bg-[#0E1117]/80 px-4 sm:px-6 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white"><Menu className="size-5" /></button>
             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500">
               <Link href="/" className="hover:text-white flex items-center gap-1"><Home className="size-3.5"/> Web</Link>
-              <span>/</span>
-              <span className="text-zinc-200 capitalize">
-                {principalNav.find(n => n.id === dashboard.activeTab)?.label || gestionNav.find(n => n.id === dashboard.activeTab)?.label || cmsNav.find(n => n.id === dashboard.activeTab)?.label || dashboard.activeTab}
-              </span>
+              <span className="text-zinc-700">/</span>
+              <span className="text-zinc-400 font-bold uppercase text-[10px] tracking-wider">{dashboard.activeTab}</span>
             </div>
           </div>
 
@@ -199,21 +199,22 @@ export default function AdminDashboard() {
           </div>
         </header>
 
+        {/* CUERPO CENTRAL DE COMPONENTES */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0E1117]">
           <div className="mx-auto max-w-7xl">
-            {/* 🚀 COMPUERTAS CONDICIONALES DE CADA PESTAÑA */}
             {dashboard.activeTab === "dashboard" && <TabDashboard {...dashboard} />}
             {dashboard.activeTab === "productos" && <TabInventario {...dashboard} />}
             {dashboard.activeTab === "ventas" && <TabVentas {...dashboard} />}
-            {dashboard.activeTab === "clientes" && <TabCRM {...(dashboard as any)} />}
             
-            {/* 🚀 PESTAÑA DEL TALLER CONECTADA */}
-            {dashboard.activeTab === TALLER_TAB && <TabReparaciones />}
-
+            {/* 🚀 CORREGIDO: Renderiza tu componente real TabReparaciones */}
+            {dashboard.activeTab === "taller" && <TabReparaciones {...dashboard} />} 
+            
             {dashboard.activeTab === "historial" && <TabHistorial {...dashboard} />}
+            {/* 🚀 CORREGIDO: Llamada adaptada a tu importación TabCRM */}
+            {dashboard.activeTab === "clientes" && <TabCRM {...tabCRMProps} />}
             {dashboard.activeTab === "analiticas" && <TabAnaliticas {...dashboard} />}
             {dashboard.activeTab === "campanas" && <TabCampanas {...dashboard} />}
-            {dashboard.activeTab === "blogs" && <TabBlogs {...(dashboard as any)} />}
+            {dashboard.activeTab === "blogs" && <TabBlogs {...dashboard} />}
             {dashboard.activeTab === "home" && <TabHome {...dashboard} />}
           </div>
         </main>

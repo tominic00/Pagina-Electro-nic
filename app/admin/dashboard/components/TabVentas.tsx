@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Package, Tag, Trash2, DollarSign, Calculator, CheckCircle2, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard } from "lucide-react"
+import { Package, Tag, Trash2, DollarSign, Calculator, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabVentasProps {
@@ -73,11 +73,10 @@ export function TabVentas({
   const [searchTerm, setSearchTerm] = useState("")
   const [tipoFacturacion, setTipoFacturacion] = useState<"interno" | "afip">("interno")
   
-  // 🚀 TASA DE DÓLAR BLUE (Para mostrar en pesos y cobrar en pesos)
+  // 🚀 TASA DE DÓLAR BLUE EN VIVO
   const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1250)
   const [isFetchingDolar, setIsFetchingDolar] = useState(true)
   
-  // Input local para que el cajero tipee en PESOS y el sistema lo traduzca a USD para ventaData
   const [montoEnPesos, setMontoEnPesos] = useState("")
 
   useEffect(() => {
@@ -92,13 +91,11 @@ export function TabVentas({
     fetchDolar()
   }, [])
 
-  // Si cambia el monto en pesos, actualiza el USD para el backend
   const handleCambioPesos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pesosStr = e.target.value
     setMontoEnPesos(pesosStr)
     const pesosNum = pesosStr === "" ? 0 : Number(pesosStr)
     
-    // Si pagan en USD o USDT, el valor tipeado es literal. Si es otra cosa, convierte ARS a USD.
     if (ventaData.metodoPago === "USD" || ventaData.metodoPago === "USDT") {
       setVentaData({...ventaData, montoPagado: pesosNum})
     } else {
@@ -118,10 +115,27 @@ export function TabVentas({
     return (usdAmount * tasaDolarBlue).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
+  // 🚀 METODOS PARA EL DETALLE MULTIMONEDA EN EL TICKET DE VENTA
+  const formatPrecioItemOriginal = (p: any) => {
+    const sim = p.moneda === "USD" ? "US$" : "$"
+    return `${sim} ${(p.precio_minorista ?? p.precio).toLocaleString("es-AR")}`
+  }
+
+  const totalTicketARS = carritoAdmin.reduce((sum, item) => {
+    const precioBase = item.producto.precio_minorista ?? item.producto.precio
+    const valorARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
+    return sum + (valorARS * item.cantidad)
+  }, 0)
+
+  const valorDescuentoCalculadoARS = descuentoData.tipo === "porcentaje"
+    ? totalTicketARS * (descuentoData.valor / 100)
+    : (descuentoData.tipo === "monto" ? (descuentoData.valor * tasaDolarBlue) : 0)
+
+  const totalFinalMostradorARS = Math.max(0, totalTicketARS - valorDescuentoCalculadoARS)
   const esMonedaExtranjera = ventaData.metodoPago === "USD" || ventaData.metodoPago === "USDT"
 
   return (
-    <div className="mx-auto max-w-6xl text-left grid lg:grid-cols-12 gap-6 animate-in fade-in duration-500">
+    <div className="mx-auto max-w-6xl text-left grid lg:grid-cols-12 gap-6 animate-in fade-in duration-500 w-full">
       
       {/* 🚀 PANEL IZQUIERDO: ARMAR CARRITO / POS */}
       <div className="lg:col-span-7 rounded-2xl bg-[#161B22] border border-zinc-800 p-5 sm:p-6 shadow-xl space-y-5 self-start">
@@ -155,7 +169,7 @@ export function TabVentas({
             <div className="sm:col-span-2">
               <select value={productoSeleccionadoId} onChange={e => setProductoSeleccionadoId(e.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all">
                 <option value="">-- Seleccionar artículo encontrado --</option>
-                {productosFiltrados.map(p => (<option key={p.id} value={p.id} disabled={p.stock < 1}>{p.nombre} - ${formatARS(p.precio)} ({p.stock} disp.)</option>))}
+                {productosFiltrados.map(p => (<option key={p.id} value={p.id} disabled={p.stock < 1}>{p.nombre} ({formatPrecioItemOriginal(p)})</option>))}
               </select>
             </div>
             <div className="flex gap-2">
@@ -176,28 +190,36 @@ export function TabVentas({
             </div>
             
             <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 pr-2">
-              {carritoAdmin.map((item, idx) => (
-                <div key={idx} className="flex flex-col bg-zinc-900/50 p-3.5 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors group">
-                  <div className="flex justify-between items-start mb-2">
-                    <p className="font-bold text-sm text-zinc-200 group-hover:text-purple-400 transition-colors pr-4 leading-tight">{item.producto.nombre}</p>
-                    <button onClick={() => removerDelCarritoAdmin(item.producto.id)} className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors shrink-0 -mt-1 -mr-1"><Trash2 className="size-4"/></button>
-                  </div>
-                  <div className="flex justify-between items-center border-t border-zinc-800/50 pt-2">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                      <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300">{item.cantidad} uni.</span>
-                      <span className="text-zinc-600">x</span>
-                      <span>${formatARS(item.producto.precio)} c/u</span>
+              {carritoAdmin.map((item, idx) => {
+                const precioBaseFila = item.producto.precio_minorista ?? item.producto.precio
+                const totalItemOriginal = precioBaseFila * item.cantidad
+                const esItemDolar = item.producto.moneda === "USD"
+
+                return (
+                  <div key={idx} className="flex flex-col bg-zinc-900/50 p-3.5 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors group">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-bold text-sm text-zinc-200 group-hover:text-purple-400 transition-colors pr-4 leading-tight">{item.producto.nombre}</p>
+                      <button onClick={() => removerDelCarritoAdmin(item.producto.id)} className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors shrink-0 -mt-1 -mr-1"><Trash2 className="size-4"/></button>
                     </div>
-                    <div className="text-right">
-                      <span className="font-black text-sm text-white block">${formatARS(item.cantidad * item.producto.precio)}</span>
-                      <span className="text-[9px] font-bold text-emerald-500 block -mt-1">USD {item.cantidad * item.producto.precio}</span>
+                    <div className="flex justify-between items-center border-t border-zinc-800/50 pt-2">
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                        <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300">{item.cantidad} uni.</span>
+                        <span className="text-zinc-600">x</span>
+                        <span>{formatPrecioItemOriginal(item.producto)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-sm text-white block">
+                          $ {(esItemDolar ? (totalItemOriginal * tasaDolarBlue) : totalItemOriginal).toLocaleString("es-AR", {maximumFractionDigits:0})}
+                        </span>
+                        {esItemDolar && <span className="text-[9px] font-bold text-purple-400 block -mt-0.5">USD {totalItemOriginal}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
-            {/* 🚀 MÓDULO DE DESCUENTOS (SIEMPRE VISIBLE SI HAY CARRITO) */}
+            {/* 🚀 MÓDULO DE DESCUENTOS SIEMPRE ADENTRO DEL RESUMEN */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 shadow-inner">
               <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-3"><Tag className="size-3.5 text-emerald-500"/> Aplicar Rebaja</h4>
               
@@ -229,24 +251,24 @@ export function TabVentas({
               )}
             </div>
 
-            {/* TOTALIZADOR */}
+            {/* TOTALIZADOR ADAPTADO COMPLETAMENTE A PESOS */}
             <div className="bg-[#0E1117] border border-purple-500/30 p-5 rounded-2xl shadow-xl space-y-2 relative overflow-hidden">
               <div className="absolute right-0 top-0 size-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"/>
-              <div className="flex justify-between items-center text-xs text-zinc-400 relative z-10">
-                <span className="uppercase tracking-widest font-bold">Subtotal Bruto</span>
-                <span>${formatARS(subtotalTratoCarrito)}</span>
+              <div className="flex justify-between items-center text-xs text-zinc-400 relative z-10 font-bold uppercase tracking-wider">
+                <span>Subtotal Mostrador</span>
+                <span>$ {totalTicketARS.toLocaleString("es-AR", {maximumFractionDigits:0})}</span>
               </div>
               {descuentoData.tipo !== "ninguno" && (
-                <div className="flex justify-between items-center text-xs font-bold text-emerald-400 border-b border-zinc-800 pb-2 relative z-10">
-                  <span className="uppercase tracking-widest">Rebaja Aplicada</span>
-                  <span>- ${formatARS(valorDelDescuentoApli)}</span>
+                <div className="flex justify-between items-center text-xs font-black text-emerald-400 border-b border-zinc-800 pb-2 relative z-10 font-bold uppercase tracking-wider">
+                  <span>Rebaja Aplicada</span>
+                  <span>- $ {valorDescuentoCalculadoARS.toLocaleString("es-AR", {maximumFractionDigits:0})}</span>
                 </div>
               )}
               <div className="flex justify-between items-end pt-2 relative z-10">
-                <span className="text-sm font-black uppercase tracking-widest text-white">Total Final</span>
+                <span className="text-sm font-black uppercase tracking-widest text-white mb-1">Total Caja</span>
                 <div className="text-right">
-                  <span className="text-3xl sm:text-4xl font-black text-purple-400 tracking-tighter block leading-none">${formatARS(totalTratoCarritoNeto)}</span>
-                  <span className="text-[10px] font-bold text-zinc-500 block mt-1">USD {totalTratoCarritoNeto.toFixed(2)}</span>
+                  <span className="text-3xl sm:text-4xl font-black text-purple-400 tracking-tighter block leading-none">$ {totalFinalMostradorARS.toLocaleString("es-AR", {maximumFractionDigits:0})}</span>
+                  <span className="text-[10px] font-bold text-zinc-500 block mt-1">Ref Sistema: USD {totalTratoCarritoNeto.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -279,7 +301,7 @@ export function TabVentas({
             </div>
             <select value={ventaData.clienteId} onChange={e => { const idSel = e.target.value; setVentaData({...ventaData, clienteId: idSel, clienteB2b: idSel ? "" : ventaData.clienteB2b}); }} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all">
               <option value="">-- Consumidor Final (Mostrador) --</option>
-              {clientes.map(c => (<option key={c.id} value={c.id}>{c.nombre} [Saldo: USD {c.saldo_usd || 0}]</option>))}
+              {clientes.map(c => (<option key={c.id} value={c.id}>{c.nombre} [CC: USD {c.saldo_usd || 0}]</option>))}
             </select>
           </div>
           
@@ -310,7 +332,7 @@ export function TabVentas({
               value={ventaData.metodoPago || "Efectivo"} 
               onChange={e => {
                 setVentaData({...ventaData, metodoPago: e.target.value});
-                setMontoEnPesos(""); // Limpiamos el input si cambia de moneda
+                setMontoEnPesos(""); 
               }} 
               className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all font-bold"
             >
@@ -324,7 +346,7 @@ export function TabVentas({
             </select>
           </div>
 
-          {/* 🚀 MONTO RECIBIDO INTELIGENTE */}
+          {/* MONTO RECIBIDO EN ARS */}
           <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center justify-between">
               Monto Recibido
