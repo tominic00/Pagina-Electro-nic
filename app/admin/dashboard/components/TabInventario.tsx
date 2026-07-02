@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Edit3, Plus, Loader2, Upload, X, Package, ClipboardList, Percent, Trash2, Bold, Italic, List, Link2, DollarSign, Users, Search, Smartphone, Headphones, EyeOff, Eye } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface TabInventarioProps {
   editingId: string | null
@@ -44,7 +45,6 @@ export function TabInventario({
 }: TabInventarioProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   
-  // 🚀 ESTADOS NUEVOS: Buscador y Pestañas
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"todos" | "celulares" | "otros">("todos")
 
@@ -54,12 +54,11 @@ export function TabInventario({
     }
   }, [editingId, formData.descripcion === ""])
 
-  // 🚀 LÓGICA DE FILTRADO AVANZADA (Buscador + Pestañas)
+  // LÓGICA DE FILTRADO AVANZADA (Buscador + Pestañas)
   const productosFiltrados = productos.filter((producto) => {
     const term = searchTerm.toLowerCase()
     const matchesSearch = producto.nombre?.toLowerCase().includes(term) || producto.categoria?.toLowerCase().includes(term)
     
-    // Detectamos si es celular por su categoría
     const isCelular = producto.categoria?.toLowerCase().includes("iphone") || producto.categoria?.toLowerCase().includes("celular") || producto.categoria?.toLowerCase().includes("smartphone")
 
     let matchesTab = true
@@ -69,7 +68,6 @@ export function TabInventario({
     return matchesSearch && matchesTab
   })
 
-  // Extraemos categorías únicas para las sugerencias
   const categoriasExistentes = Array.from(new Set(productos.map(p => p.categoria))).filter(Boolean)
 
   const ejecutarComando = (comando: string, valor: string = "") => {
@@ -95,6 +93,9 @@ export function TabInventario({
     if (editorRef.current) setFormData((prev: any) => ({ ...prev, descripcion: editorRef.current!.innerHTML }))
   }
 
+  // Helper para saber qué símbolo usar en el formulario según el estado reactivo
+  const simboloFormActual = formData.moneda === "USD" ? "US$" : "$"
+
   return (
     <div className="grid gap-6 sm:gap-10 grid-cols-1 xl:grid-cols-4 animate-in fade-in duration-500 text-left">
       
@@ -108,11 +109,11 @@ export function TabInventario({
           
           <form onSubmit={handleSave} className="space-y-4 text-left">
             
-            {/* 🚀 VISIBILIDAD WEB */}
+            {/* VISIBILIDAD WEB */}
             <div className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 border border-border p-3">
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-foreground">Visible en la Web</span>
-                <span className="text-[10px] text-muted-foreground">Desmarcar para ocultarlo del público</span>
+                <span className="text-[10px] text-muted-foreground">Desmarcar para ocultarlo</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input 
@@ -123,6 +124,19 @@ export function TabInventario({
                 />
                 <div className="w-9 h-5 bg-border rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
               </label>
+            </div>
+
+            {/* 🚀 NUEVA SECCIÓN: TIPO DE DIVISA (MULTIMONEDA) */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Moneda de Venta</label>
+              <select 
+                value={formData.moneda || "ARS"} 
+                onChange={e => setFormData({...formData, moneda: e.target.value})}
+                className="mt-1 w-full rounded-xl border border-border bg-muted/30 p-2.5 text-sm font-bold outline-none focus:border-primary text-foreground"
+              >
+                <option value="ARS">Pesos Argentinos ($ ARS)</option>
+                <option value="USD">Dólares Estadounidenses (US$ USD)</option>
+              </select>
             </div>
 
             <div>
@@ -157,21 +171,27 @@ export function TabInventario({
               </div>
             </div>
 
-            {/* PRECIOS */}
+            {/* PRECIOS DINÁMICOS EN BASE A LA MONEDA SELECCIONADA */}
             <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
               <h3 className="text-[10px] font-bold uppercase tracking-widest text-foreground flex items-center gap-1.5 border-b border-border pb-2 mb-1">
                 <DollarSign className="size-3.5" /> 
-                Precios de Venta (USD)
+                Precios de Venta ({formData.moneda || "ARS"})
               </h3>
               
               <div className="grid gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Precio Público (Web)</label>
-                <input required type="number" min="0" step="0.01" value={formData.precio_minorista ?? formData.precio ?? ""} onChange={e => setFormData({...formData, precio_minorista: Number(e.target.value)})} className="w-full rounded-lg border border-border bg-white p-2.5 text-xs font-bold text-foreground outline-none focus:border-primary" placeholder="Ej: 150" />
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-xs font-bold text-muted-foreground/60">{simboloFormActual}</span>
+                  <input required type="number" min="0" step="0.01" value={formData.precio_minorista ?? formData.precio ?? ""} onChange={e => setFormData({...formData, precio_minorista: Number(e.target.value)})} className={cn("w-full rounded-lg border border-border bg-white p-2.5 text-xs font-bold text-foreground outline-none focus:border-primary", formData.moneda === "USD" ? "pl-9" : "pl-6")} placeholder="Ej: 150" />
+                </div>
               </div>
               
               <div className="grid gap-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Users className="size-3" /> Precio Gremio / Técnico</label>
-                <input required type="number" min="0" step="0.01" value={formData.precio_mayorista ?? formData.precio ?? ""} onChange={e => setFormData({...formData, precio_mayorista: Number(e.target.value)})} className="w-full rounded-lg border border-border bg-white p-2.5 text-xs font-bold text-foreground outline-none focus:border-primary" placeholder="Ej: 120" />
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-xs font-bold text-muted-foreground/60">{simboloFormActual}</span>
+                  <input required type="number" min="0" step="0.01" value={formData.precio_mayorista ?? formData.precio ?? ""} onChange={e => setFormData({...formData, precio_mayorista: Number(e.target.value)})} className={cn("w-full rounded-lg border border-border bg-white p-2.5 text-xs font-bold text-foreground outline-none focus:border-primary", formData.moneda === "USD" ? "pl-9" : "pl-6")} placeholder="Ej: 120" />
+                </div>
               </div>
             </div>
 
@@ -217,7 +237,6 @@ export function TabInventario({
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-            {/* 🚀 EL NUEVO BUSCADOR */}
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <input 
@@ -225,7 +244,7 @@ export function TabInventario({
                 placeholder="Buscar modelo o categoría..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm font-medium text-foreground outline-none focus:border-primary shadow-sm transition-all"
+                className="w-full rounded-xl border border-border bg-white ltr pl-9 pr-4 py-2.5 text-sm font-medium text-foreground outline-none focus:border-primary shadow-sm transition-all"
               />
             </div>
 
@@ -236,26 +255,11 @@ export function TabInventario({
           </div>
         </div>
 
-        {/* 🚀 PESTAÑAS DE FILTRADO (Celulares / Otros) */}
+        {/* PESTAÑAS DE FILTRADO */}
         <div className="flex gap-2 mb-4 border-b border-border pb-px overflow-x-auto hide-scrollbar">
-          <button 
-            onClick={() => setFilterTab("todos")} 
-            className={`px-4 py-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "todos" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            Todos los Productos
-          </button>
-          <button 
-            onClick={() => setFilterTab("celulares")} 
-            className={`px-4 py-2 flex items-center gap-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "celulares" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            <Smartphone className="size-4" /> Celulares
-          </button>
-          <button 
-            onClick={() => setFilterTab("otros")} 
-            className={`px-4 py-2 flex items-center gap-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "otros" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            <Headphones className="size-4" /> Accesorios & Repuestos
-          </button>
+          <button onClick={() => setFilterTab("todos")} className={`px-4 py-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "todos" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Todos los Productos</button>
+          <button onClick={() => setFilterTab("celulares")} className={`px-4 py-2 flex items-center gap-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "celulares" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}><Smartphone className="size-4" /> Celulares</button>
+          <button onClick={() => setFilterTab("otros")} className={`px-4 py-2 flex items-center gap-2 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${filterTab === "otros" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}><Headphones className="size-4" /> Accesorios & Repuestos</button>
         </div>
         
         <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
@@ -275,60 +279,71 @@ export function TabInventario({
               <tbody className="divide-y divide-border">
                 {productosFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm font-medium">
-                      No hay productos para mostrar en esta vista.
-                    </td>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground text-sm font-medium">No hay productos para mostrar en esta vista.</td>
                   </tr>
                 ) : (
-                  productosFiltrados.map((producto) => (
-                    <tr key={producto.id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="p-4"><div className="flex size-10 items-center justify-center rounded-xl bg-white border border-border mx-auto overflow-hidden relative">
-                        {producto.imagen_url ? <img src={producto.imagen_url} alt="Item" className="h-full w-full object-contain p-1" /> : <Package className="size-4 text-muted-foreground/30" />}
-                        {/* 🚀 INDICADOR DE PRODUCTO OCULTO */}
-                        {producto.visible_web === false && (
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center" title="Oculto en la web">
-                            <EyeOff className="size-4 text-white" />
+                  productosFiltrados.map((producto) => {
+                    // 🚀 SÍMBOLO DINÁMICO POR REGISTRO EN LA TABLA
+                    const isUSD = producto.moneda === "USD"
+                    const txtSimbolo = isUSD ? "US$" : "$"
+
+                    return (
+                      <tr key={producto.id} className="hover:bg-muted/30 transition-colors group">
+                        <td className="p-4">
+                          <div className="flex size-10 items-center justify-center rounded-xl bg-white border border-border mx-auto overflow-hidden relative">
+                            {producto.imagen_url ? <img src={producto.imagen_url} alt="Item" className="h-full w-full object-contain p-1" /> : <Package className="size-4 text-muted-foreground/30" />}
+                            {producto.visible_web === false && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center" title="Oculto en la web">
+                                <EyeOff className="size-4 text-white" />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div></td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[9px] font-bold uppercase text-primary tracking-widest">{producto.categoria}</span>
-                          {producto.visible_web === false && <span className="bg-destructive/10 text-destructive text-[8px] font-black uppercase px-1.5 py-0.5 rounded">Privado</span>}
-                        </div>
-                        <span className="font-bold text-sm text-foreground truncate max-w-[200px] inline-block">{producto.nombre}</span>
-                      </td>
-                      
-                      <td className="p-4"><div className="relative flex items-center"><span className="absolute left-2 text-xs text-muted-foreground font-bold">$</span><input type="number" defaultValue={producto.costo || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.costo) handleUpdateInline(producto.id, 'costo', val); }} className="w-full bg-transparent hover:bg-muted focus:bg-white border border-transparent hover:border-border focus:border-primary rounded-lg py-1.5 pl-5 pr-2 text-xs font-bold text-muted-foreground outline-none transition-all"/></div></td>
-                      <td className="p-4"><div className="relative flex items-center"><span className="absolute left-2 text-xs text-muted-foreground font-bold">$</span><input type="number" defaultValue={producto.precio_minorista ?? producto.precio} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.precio_minorista) handleUpdateInline(producto.id, 'precio_minorista', val); }} className="w-full bg-transparent hover:bg-muted focus:bg-white border border-transparent hover:border-border focus:border-primary rounded-lg py-1.5 pl-5 pr-2 text-xs font-bold text-foreground outline-none transition-all"/></div></td>
-                      <td className="p-4"><div className="relative flex items-center"><span className="absolute left-2 text-xs text-primary/50 font-bold">$</span><input type="number" defaultValue={producto.precio_mayorista ?? producto.precio} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.precio_mayorista) handleUpdateInline(producto.id, 'precio_mayorista', val); }} className="w-full bg-primary/5 hover:bg-primary/10 focus:bg-white border border-transparent hover:border-primary/20 focus:border-primary rounded-lg py-1.5 pl-5 pr-2 text-xs font-bold text-primary outline-none transition-all"/></div></td>
-                      
-                      <td className="p-4 text-center"><button onClick={() => { setStockAdjustData({ producto, tipo: 'ingreso', quantity: "", motivo: "Compra a Proveedor", motivoLibre: "" }); setShowStockAdjustModal(true); }} className={`w-full py-1.5 px-3 rounded-xl border text-sm font-bold transition-all hover:scale-105 shadow-sm ${producto.stock === 0 ? 'bg-destructive/10 text-destructive border-destructive/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>{producto.stock} u.</button></td>
-                      
-                      <td className="p-4 text-center"><div className="flex items-center justify-center gap-1">
-                        <button 
-                          onClick={() => { 
-                            setEditingId(producto.id); 
-                            setFormData({ 
-                              nombre: producto.nombre, 
-                              precio: producto.precio, 
-                              precio_minorista: producto.precio_minorista ?? producto.precio,
-                              precio_mayorista: producto.precio_mayorista ?? producto.precio,
-                              costo: producto.costo || 0, 
-                              descripcion: producto.descripcion || "", 
-                              stock: producto.stock, 
-                              categoria: producto.categoria || "", 
-                              imagen_url: producto.imagen_url || "", 
-                              visible_web: producto.visible_web !== false // 🚀 Carga el estado de visibilidad
-                            }) 
-                          }} 
-                          className="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
-                        >
-                          <Edit3 className="size-4" />
-                        </button>
-                        <button onClick={() => deleteProducto(producto.id)} className="p-2 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 className="size-4" /></button></div></td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[9px] font-bold uppercase text-primary tracking-widest">{producto.categoria}</span>
+                            {isUSD && <span className="bg-emerald-500/10 text-emerald-600 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-emerald-500/20">USD</span>}
+                            {producto.visible_web === false && <span className="bg-destructive/10 text-destructive text-[8px] font-black uppercase px-1.5 py-0.5 rounded">Privado</span>}
+                          </div>
+                          <span className="font-bold text-sm text-foreground truncate max-w-[200px] inline-block">{producto.nombre}</span>
+                        </td>
+                        
+                        {/* INPUTS INLINE ADAPTADOS PARA MANEJAR SÍMBOLOS LARGOS COMO 'US$' SIN CHOCAR TEXTOS */}
+                        <td className="p-4"><div className="relative flex items-center"><span className={cn("absolute left-2 text-xs font-bold", isUSD ? "text-emerald-600" : "text-muted-foreground")}>{txtSimbolo}</span><input type="number" defaultValue={producto.costo || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.costo) handleUpdateInline(producto.id, 'costo', val); }} className={cn("w-full bg-transparent hover:bg-muted focus:bg-white border border-transparent hover:border-border focus:border-primary rounded-lg py-1.5 pr-2 text-xs font-bold outline-none transition-all text-muted-foreground", isUSD ? "pl-9" : "pl-5")}/></div></td>
+                        <td className="p-4"><div className="relative flex items-center"><span className={cn("absolute left-2 text-xs font-bold", isUSD ? "text-emerald-600" : "text-muted-foreground")}>{txtSimbolo}</span><input type="number" defaultValue={producto.precio_minorista ?? producto.precio} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.precio_minorista) handleUpdateInline(producto.id, 'precio_minorista', val); }} className={cn("w-full bg-transparent hover:bg-muted focus:bg-white border border-transparent hover:border-border focus:border-primary rounded-lg py-1.5 pr-2 text-xs font-bold outline-none transition-all text-foreground", isUSD ? "pl-9" : "pl-5")}/></div></td>
+                        <td className="p-4"><div className="relative flex items-center"><span className={cn("absolute left-2 text-xs font-bold", isUSD ? "text-emerald-600" : "text-primary/50")}>{txtSimbolo}</span><input type="number" defaultValue={producto.precio_mayorista ?? producto.precio} onBlur={(e) => { const val = Number(e.target.value); if (val !== producto.precio_mayorista) handleUpdateInline(producto.id, 'precio_mayorista', val); }} className={cn("w-full bg-primary/5 hover:bg-primary/10 focus:bg-white border border-transparent hover:border-primary/20 focus:border-primary rounded-lg py-1.5 pr-2 text-xs font-bold outline-none transition-all text-primary", isUSD ? "pl-9" : "pl-5")}/></div></td>
+                        
+                        <td className="p-4 text-center"><button onClick={() => { setStockAdjustData({ producto, tipo: 'ingreso', quantity: "", motivo: "Compra a Proveedor", motivoLibre: "" }); setShowStockAdjustModal(true); }} className={`w-full py-1.5 px-3 rounded-xl border text-sm font-bold transition-all hover:scale-105 shadow-sm ${producto.stock === 0 ? 'bg-destructive/10 text-destructive border-destructive/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>{producto.stock} u.</button></td>
+                        
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => { 
+                                setEditingId(producto.id); 
+                                setFormData({ 
+                                  nombre: producto.nombre, 
+                                  precio: producto.precio, 
+                                  precio_minorista: producto.precio_minorista ?? producto.precio,
+                                  precio_mayorista: producto.precio_mayorista ?? producto.precio,
+                                  costo: producto.costo || 0, 
+                                  descripcion: producto.descripcion || "", 
+                                  stock: producto.stock, 
+                                  categoria: producto.categoria || "", 
+                                  imagen_url: producto.imagen_url || "", 
+                                  visible_web: producto.visible_web !== false,
+                                  moneda: producto.moneda || "ARS" // 🚀 SINCRONIZA MONEDA AL EDITAR
+                                }) 
+                              }} 
+                              className="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
+                            >
+                              <Edit3 className="size-4" />
+                            </button>
+                            <button onClick={() => deleteProducto(producto.id)} className="p-2 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"><Trash2 className="size-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

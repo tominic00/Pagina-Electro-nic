@@ -88,7 +88,7 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
   const navLinks = [
     { name: "Inicio", href: "/" },
     { name: "Nosotros", href: "/#nosotros" },
-    { name: "iPhone (¿Cómo comprar?)", href: "/productos?cat=iPhone", highlight: true },
+    { name: "iPhone (¿Cómo comprar?)", href: "/iPhone", highlight: true },
     { name: "Catálogo", href: "/productos" },
     { name: "Servicio Técnico", href: "/#servicio-tecnico" },
     { name: "Ofertas", href: "/#top" },

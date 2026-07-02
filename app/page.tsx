@@ -15,17 +15,13 @@ import { WhatsAppButton } from "@/components/whatsapp-button"
 import { TrustBadges } from "@/components/trust-badges"
 import { InvestigatorRegister } from "@/components/investigator-register"
 import { PromoCarousel } from "@/components/promo-carousel"
-import Head from "next/head" // 🚀 IMPORTAMOS HEAD PARA EL SEO
 
 export default function Page() {
   const [isCartOpen, setIsCartOpen] = useState(false)
   const visitaRegistrada = useRef(false)
-
-  // 🎨 ESTADO NUEVO: Guarda la configuración de visibilidad del panel sin alterar tus componentes
   const [settings, setSettings] = useState<any>(null)
 
   useEffect(() => {
-    // 🎨 TRAER CONFIGURACIÓN DE HOME DESDE SUPABASE
     supabase
       .from("home_settings")
       .select("*")
@@ -45,43 +41,28 @@ export default function Page() {
       if (target.closest('a[href*="wa.me"]')) {
         supabase.from("telemetria_eventos").insert([{ tipo_evento: "click_whatsapp" }]).then()
       }
-      const isButtonOrLink = target.closest('button') || target.closest('a');
-      if (isButtonOrLink) {
-        const text = isButtonOrLink.textContent?.toLowerCase() || "";
-        if (text.includes("ficha") || text.includes("técnica") || text.includes("tecnica")) {
-          supabase.from("telemetria_eventos").insert([{ tipo_evento: "ver_ficha_tecnica" }]).then()
-        }
-      }
     }
 
     document.addEventListener("click", rastrearClics)
     return () => document.removeEventListener("click", rastrearClics)
   }, [])
 
-  // 🤖 CÓDIGO SCHEMA MARKUP CORREGIDO PARA B2B
+  // 🚀 ACTUALIZADO: SEO optimizado para tu tienda de tecnología y servicio técnico
   const schemaMarkup = {
     "@context": "https://schema.org",
-    "@type": "MedicalOrganization",
-    "name": "PEPTI-AGE Argentina",
-    "alternateName": "RxWellHealth Argentina",
-    "url": "https://pepti-age.vercel.app",
-    "logo": "https://pepti-age.vercel.app/icon.png",
-    "description": "Distribuidores oficiales de compuestos biotecnológicos y péptidos liofilizados de investigación con pureza mayor al 99% en Argentina.",
-    "brand": {
-      "@type": "Brand",
-      "name": "RxWellHealth"
-    },
+    "@type": "ElectronicsStore",
+    "name": "Electronic Yerba Buena",
+    "url": "https://electronic.vercel.app",
+    "description": "Venta oficial de iPhones, accesorios premium y servicio técnico especializado Apple en Yerba Buena, Tucumán.",
     "areaServed": {
       "@type": "Country",
       "name": "Argentina"
     },
     "knowsAbout": [
-      "Tirzepatide",
-      "CJC-1295",
-      "GHK-Cu",
-      "Péptidos Liofilizados",
-      "Investigación Biotecnológica",
-      "Longevidad Celular"
+      "iPhones",
+      "Accesorios Premium",
+      "Servicio Técnico Apple",
+      "Reparación de Celulares"
     ]
   }
 
@@ -92,10 +73,9 @@ export default function Page() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaMarkup) }}
       />
       
-      {/* 🎨 LA BARRA DE AVISOS SE SIENTA ARRIBA DE TODO, SI ESTÁ ACTIVA */}
       {settings?.ticker_visible && (
-        <div className="bg-cyan-rx text-[#081640] py-2 text-center text-xs font-bold sticky top-0 z-50 transition-all">
-          {settings.ticker_text || "❄️ Logística de envíos refrigerados normalizada"}
+        <div className="bg-primary text-white py-2 text-center text-xs font-bold sticky top-0 z-50 transition-all">
+          {settings.ticker_text || "🔥 ¡Nuevos ingresos de iPhone de esta semana disponibles!"}
         </div>
       )}
 
@@ -103,20 +83,28 @@ export default function Page() {
         <SiteHeader onOpenCart={() => setIsCartOpen(true)} />
         <div className="flex-1 w-full">
           
-          {/* 🎨 INTERRUPTOR PORTADA */}
+          {/* 1. Portada Principal */}
           {settings?.hero_visible !== false && <Hero />}
           
-          <TrustBadges />
+          {/* 🚀 2. INSIGNIAS CON FONDO VIOLETA SUTIL ESTILO APPLE */}
+          <div className="bg-purple-50/50 border-y border-purple-100/60 py-8 shadow-inner">
+            <TrustBadges />
+          </div>
+
+          {/* 3. Carrusel promocional y secciones informativas */}
           <PromoCarousel />
           <About />
           <Standards />
           <InvestigatorRegister />
+
+          {/* 4. Reseñas y Preguntas */}
+          {settings?.before_after_visible !== false && <Experience />}
+          <Faq />
+          
+          {/* 🚀 5. CATÁLOGO MOVIDO: Ahora se ubica justo arriba del formulario de soporte técnico */}
           <Catalog />
 
-          {/* 🎨 INTERRUPTOR ANTES Y DESPUÉS */}
-          {settings?.before_after_visible !== false && <Experience />}
-          
-          <Faq />
+          {/* 6. Bloque de Soporte / Contacto y Pie de página */}
           <CtaFooter />
         </div>
         <WhatsAppButton />

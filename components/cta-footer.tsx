@@ -106,7 +106,7 @@ export function CtaFooter() {
               <Link href="/#nosotros" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
                 Nosotros
               </Link>
-              <Link href="/productos?cat=iPhone" className="text-sm font-semibold text-primary transition-colors hover:text-primary/80 w-fit flex items-center gap-1.5">
+              <Link href="/iPhone" className="text-sm font-semibold text-primary transition-colors hover:text-primary/80 w-fit flex items-center gap-1.5">
                 <span className="inline-block size-1.5 rounded-full bg-primary animate-pulse" />
                 iPhone (¿Cómo comprar?)
               </Link>
