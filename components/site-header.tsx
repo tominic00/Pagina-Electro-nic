@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import Image from "next/image"
 import { usePathname } from "next/navigation" 
-import { Menu, X, ShoppingBag, LogIn, ChevronDown, ShieldCheck, Wrench, UserPlus } from "lucide-react" // 🚀 Cambiamos el icono User por Wrench (Llave inglesa)
+import { Menu, X, ShoppingBag, LogIn, ChevronDown, ShieldCheck, Wrench } from "lucide-react"
 import { useCart } from "@/context/cart-context"
+import { cn } from "@/lib/utils"
 import supabase from "@/lib/supabase"
 
 function HeaderLoginButton() {
@@ -25,7 +25,7 @@ function HeaderLoginButton() {
     <div className="relative inline-block text-left" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-primary border border-transparent text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wider uppercase hover:bg-primary/90 transition-all shadow-sm active:scale-95"
+        className="flex items-center gap-2 bg-foreground border border-transparent text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wider uppercase hover:bg-foreground/90 transition-all shadow-sm active:scale-95"
       >
         <LogIn className="size-3.5" />
         Portal
@@ -84,16 +84,17 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
     return () => { document.body.style.overflow = "unset" }
   }, [isMobileMenuOpen])
 
-  // 🚀 TUS NUEVAS CATEGORÍAS TECH
+  // 🚀 NUEVA LISTA DE MENÚS SOLICITADOS (Sincronizados con el Footer)
   const navLinks = [
-    { name: "iPhone", href: "/#iphone" },
-    { name: "Accesorios", href: "/#accesorios" },
-    { name: "Auriculares", href: "/#auriculares" },
-    { name: "Cargadores & Cables", href: "/#cables" },
-    { name: "Gaming", href: "/#gaming" },
+    { name: "Inicio", href: "/" },
+    { name: "Nosotros", href: "/#nosotros" },
+    { name: "iPhone (¿Cómo comprar?)", href: "/productos?cat=iPhone", highlight: true },
+    { name: "Catálogo", href: "/productos" },
+    { name: "Servicio Técnico", href: "/#servicio-tecnico" },
+    { name: "Ofertas", href: "/#top" },
+    { name: "Soporte", href: "/#faq" },
   ]
 
-  // 💻 ESTILO APPLE: Barra transparente que se vuelve blanca esmerilada al bajar
   const showSolidBackground = pathname !== "/" || isScrolled || isMobileMenuOpen
 
   const numeroWA = settings?.footer_whatsapp || "5493812184858"
@@ -108,21 +109,28 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 lg:px-10 relative z-[60]">
         
         {/* LOGO */}
-        <a href="/#inicio" className="relative flex items-center" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="relative flex h-10 sm:h-12 w-[180px] sm:w-[220px] transition-transform hover:scale-105">
-             {/* ⚠️ ACÁ PONÉ EL NOMBRE DE TU IMAGEN DEL LOGO NUEVO CUANDO LO TENGAS */}
-             <span className="font-bold text-2xl tracking-tighter text-foreground">electro·nic</span> 
-          </div>
+        <a href="/" className="relative flex items-center" onClick={() => setIsMobileMenuOpen(false)}>
+          <span className="font-bold text-2xl tracking-tighter text-foreground transition-transform hover:scale-105">
+            electro·nic
+          </span> 
         </a>
 
-        {/* NAVEGACIÓN DESKTOP */}
-        <nav className="hidden lg:flex items-center gap-6 xl:gap-8">
+        {/* NAVEGACIÓN DESKTOP (Computadoras) */}
+        <nav className="hidden lg:flex items-center gap-5 xl:gap-6">
           {navLinks.map((link) => (
             <a
               key={link.name}
               href={link.href}
-              className={`text-sm font-medium tracking-tight transition-colors ${showSolidBackground ? 'text-muted-foreground hover:text-foreground' : 'text-foreground/80 hover:text-foreground'}`}
+              className={cn(
+                "text-xs font-bold tracking-tight transition-colors relative py-1",
+                link.highlight
+                  ? "text-primary flex items-center gap-1 hover:text-primary/80"
+                  : showSolidBackground 
+                    ? "text-muted-foreground hover:text-foreground" 
+                    : "text-foreground/80 hover:text-foreground"
+              )}
             >
+              {link.highlight && <span className="size-1 rounded-full bg-primary animate-pulse" />}
               {link.name}
             </a>
           ))}
@@ -132,12 +140,12 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
         <div className="hidden lg:flex items-center gap-5">
           <button 
             onClick={onOpenCart}
-            className={`relative flex items-center justify-center p-2 transition-colors ${showSolidBackground ? 'text-foreground hover:text-primary' : 'text-foreground hover:text-primary'}`}
+            className="relative flex items-center justify-center p-2 text-foreground hover:text-primary transition-all active:scale-95 animate-in"
             aria-label="Abrir carrito"
           >
             <ShoppingBag className="size-[22px]" />
             {totalItems > 0 && (
-              <span className="absolute -top-1 -right-1 z-10 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-black text-white shadow-sm animate-in zoom-in duration-200">
+              <span className="absolute -top-1 -right-1 z-10 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-black text-white shadow-sm ring-2 ring-white">
                 {totalItems}
               </span>
             )}
@@ -149,15 +157,15 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
             href={whatsappLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-full bg-muted px-6 py-2.5 text-xs font-bold tracking-tight text-foreground transition-all hover:bg-border"
+            className="inline-flex items-center justify-center rounded-full bg-muted px-6 py-2.5 text-xs font-bold tracking-tight text-foreground transition-all hover:bg-border active:scale-95"
           >
             Contacto
           </a>
         </div>
 
-        {/* CONTROLES MÓVILES */}
+        {/* CONTROLES MÓVILES (Celulares) */}
         <div className="flex items-center gap-3 lg:hidden relative z-[60]">
-          <button onClick={onOpenCart} className="relative p-2 text-foreground" aria-label="Abrir carrito">
+          <button onClick={onOpenCart} className="relative p-2 text-foreground transition-transform active:scale-95" aria-label="Abrir carrito">
             <ShoppingBag className="size-6" />
             {totalItems > 0 && (
               <span className="absolute -top-0.5 -right-0.5 z-10 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-black text-white shadow-sm">
@@ -178,32 +186,36 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
           isMobileMenuOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
         }`}
       >
-        <div className="flex flex-col items-center gap-6 sm:gap-8 px-6 w-full max-w-[320px]">
+        <div className="flex flex-col items-center gap-6 sm:gap-8 px-6 w-full max-w-[340px] text-center">
           
-          <nav className="flex flex-col items-center gap-5 sm:gap-6 w-full">
+          <nav className="flex flex-col items-center gap-4 w-full">
             {navLinks.map((link) => (
               <a
                 key={link.name}
                 href={link.href}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="text-2xl font-semibold tracking-tight text-foreground hover:text-primary transition-colors"
+                className={cn(
+                  "text-xl font-bold tracking-tight transition-colors flex items-center gap-2",
+                  link.highlight ? "text-primary" : "text-foreground hover:text-primary"
+                )}
               >
+                {link.highlight && <span className="size-1.5 rounded-full bg-primary animate-pulse" />}
                 {link.name}
               </a>
             ))}
           </nav>
           
-          <div className="mt-4 flex w-full flex-col gap-5 text-center w-full">
-            <div className="w-full bg-muted border border-border rounded-3xl p-3 shadow-sm flex flex-col">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2 mt-1">Plataforma</span>
+          <div className="mt-2 flex w-full flex-col gap-4">
+            <div className="w-full bg-muted border border-border rounded-3xl p-2 shadow-sm flex flex-col gap-1">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block mb-1 mt-1">Portal Operativo</span>
               
               <a 
                 href="/portal/login" 
                 onClick={() => setIsMobileMenuOpen(false)} 
-                className="flex items-center justify-center gap-3 w-full py-3.5 rounded-2xl text-sm font-semibold text-foreground hover:bg-white transition-colors"
+                className="flex items-center justify-center gap-3 w-full py-2.5 rounded-xl text-xs font-bold text-foreground hover:bg-white transition-all border border-transparent hover:border-border"
               >
                 <Wrench className="size-4 text-primary" /> 
-                <span className="tracking-tight">Servicio Técnico</span>
+                <span>Servicio Técnico</span>
               </a>
             </div>
 
@@ -212,9 +224,9 @@ export function SiteHeader({ onOpenCart }: { onOpenCart?: () => void }) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsMobileMenuOpen(false)}
-              className="inline-flex w-full items-center justify-center rounded-full bg-primary py-4 text-sm font-bold tracking-tight text-white shadow-md active:scale-95 transition-transform"
+              className="inline-flex w-full items-center justify-center rounded-full bg-foreground py-3.5 text-xs font-bold tracking-wider uppercase text-white shadow-md active:scale-95 transition-all hover:bg-primary"
             >
-              Contactar por WhatsApp
+              WhatsApp Directo
             </a>
           </div>
         </div>

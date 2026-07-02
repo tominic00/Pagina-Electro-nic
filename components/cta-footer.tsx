@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
-import { Camera, MessageCircle, Mail, MapPin, Clock, Smartphone } from "lucide-react" // 🚀 Íconos tech
+import { Camera, MessageCircle, Mail, MapPin, Clock, Smartphone } from "lucide-react"
 import supabase from "@/lib/supabase"
 
 export function CtaFooter() {
@@ -65,11 +65,12 @@ export function CtaFooter() {
             {/* Columna 1: Marca y Ubicación */}
             <div className="lg:col-span-4">
               <div className="flex items-center">
-                {/* ⚠️ ACÁ PONÉ EL NOMBRE DE TU IMAGEN DEL LOGO NUEVO CUANDO LO TENGAS O DEJÁ EL TEXTO */}
-                <span className="font-bold text-3xl tracking-tighter text-foreground">electro·nic</span> 
+                <Link href="/" className="font-bold text-3xl tracking-tighter text-foreground hover:opacity-80 transition-opacity">
+                  electro·nic
+                </Link> 
               </div>
               <p className="mt-4 text-sm font-semibold tracking-[0.2em] text-muted-foreground uppercase">
-                Servicio Técnico Especializado
+                Servicio Técnico & Apple Specialist
               </p>
               
               <div className="mt-8 space-y-4">
@@ -94,22 +95,32 @@ export function CtaFooter() {
               </div>
             </div>
 
-            {/* Columna 2: Enlaces Rápidos */}
+            {/* 🚀 Columna 2: NUEVA NAVEGACIÓN SINCRONIZADA */}
             <nav className="lg:col-span-3 flex flex-col gap-4 text-left lg:pl-8">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
-                Navegación
+                Menú de Navegación
               </p>
-              <Link href="#catalogo" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
-                Equipos y Accesorios
+              <Link href="/" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+                Inicio
               </Link>
-              <Link href="#servicio-tecnico" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+              <Link href="/#nosotros" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+                Nosotros
+              </Link>
+              <Link href="/productos?cat=iPhone" className="text-sm font-semibold text-primary transition-colors hover:text-primary/80 w-fit flex items-center gap-1.5">
+                <span className="inline-block size-1.5 rounded-full bg-primary animate-pulse" />
+                iPhone (¿Cómo comprar?)
+              </Link>
+              <Link href="/productos" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+                Catálogo Completo
+              </Link>
+              <Link href="/#servicio-tecnico" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
                 Servicio Técnico
               </Link>
-              <Link href="#faq" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
-                Preguntas Frecuentes
+              <Link href="/#top" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+                Ofertas Especiales
               </Link>
-              <Link href="/blog" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
-                Blog y Novedades
+              <Link href="/#faq" className="text-sm font-semibold text-foreground/80 transition-colors hover:text-primary w-fit">
+                Soporte (FAQs)
               </Link>
             </nav>
 
