@@ -323,8 +323,10 @@ export function useDashboard() {
   }
 
   // 🚀 CORREGIDO Y CONECTADO CON AFIP: Guardado final impactando Supabase nativamente en PESOS ($) y obteniendo CAE
+  // 🚀 BLINDADO: Evita rebotes de ENUM en la base de datos y muestra errores exactos
   const handleRegistrarVentaManual = async (tipoFacturacion: "interno" | "afip" = "interno") => {
-    if (carritoAdmin.length === 0) return alert("El carrito está vacío."); setIsSaving(true);
+    if (carritoAdmin.length === 0) return alert("El carrito está vacío.");
+    setIsSaving(true);
     
     const totalTicketARS = totalTratoCarritoNeto * tasaDolarBlue
     const entregaEfectivoARS = ventaData.montoPagado * tasaDolarBlue
@@ -334,10 +336,11 @@ export function useDashboard() {
     let caeAsignado = null
     let nroLegalAfip = null
     let exitoTotal = true
+    let mensajeErrorDetallado = ""
     let asignoPago = false 
 
     try {
-      // 🌐 1. SI SE SELECCIONÓ FACTURAR EN BLANCO, CHOCAMOS CONTRA NUESTRO PUENTE DE AFIP
+      // 🌐 1. CONEXIÓN CON EL PUENTE DE AFIP
       if (tipoFacturacion === "afip") {
         const resAfip = await fetch("/api/facturar", {
           method: "POST",
@@ -345,7 +348,7 @@ export function useDashboard() {
           body: JSON.stringify({
             totalARS: totalTicketARS,
             clienteNombre: clienteTextoFinal,
-            clienteDNI: clienteSeleccionado?.whatsapp?.slice(-8) || null // Ojo: AFIP requiere DNI si pasa los $344.000
+            clienteDNI: clienteSeleccionado?.whatsapp?.slice(-8) || null 
           })
         })
         
@@ -358,13 +361,13 @@ export function useDashboard() {
         caeAsignado = dataAfip.cae
         nroLegalAfip = `${dataAfip.puntoVenta.toString().padStart(4, '0')}-${dataAfip.nroComprobante.toString().padStart(8, '0')}`
         
-        // 🚀 GUARDAMOS EN CALIENTE PARA EL VISOR DEL PDF
-        setInvoiceCAE(dataAfip.cae)
-        setInvoiceCAEVto(dataAfip.vencimiento)
-        setInvoiceNroLegal(nroLegalAfip)
+        // Pasamos los datos al modal de impresión (si existen los setters)
+        if (typeof setInvoiceCAE === "function") setInvoiceCAE(dataAfip.cae);
+        if (typeof setInvoiceCAEVto === "function") setInvoiceCAEVto(dataAfip.vencimiento);
+        if (typeof setInvoiceNroLegal === "function") setInvoiceNroLegal(nroLegalAfip);
       }
 
-      // 2. ACTUALIZAMOS SALDO DE CUENTA CORRIENTE (SI APLICA)
+      // 2. ACTUALIZAMOS SALDO CUENTA CORRIENTE
       if (ventaData.clienteId && clienteSeleccionado) {
         const saldoDiferenciaUSD = saldoDiferenciaARS / tasaDolarBlue
         await supabase.from("clientes_b2b").update({ saldo_usd: Number(clienteSeleccionado.saldo_usd || 0) + saldoDiferenciaUSD }).eq("id", ventaData.clienteId)
@@ -373,15 +376,20 @@ export function useDashboard() {
       const subtotalARS = subtotalTratoCarrito * tasaDolarBlue
       const factor = subtotalARS > 0 ? (totalTicketARS / subtotalARS) : 1;
       
-      // 3. ITERAMOS EL CARRITO Y GUARDAMOS EN SUPABASE
+      // 3. SE ASENTAN LOS ITEMS EN LA BASE DE DATOS
       for (const item of carritoAdmin) {
         const { error: stockError = null } = await supabase.from("productos").update({ stock: item.producto.stock - item.cantidad }).eq("id", item.producto.id)
+        
         if (!stockError) {
           const montoPagadoFilaARS = !asignoPago ? entregaEfectivoARS : 0; asignoPago = true;
           
           const precioBase = (item.producto as any).precio_minorista ?? item.producto.precio
           const precioFilaARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
           const costoFilaARS = item.producto.moneda === "USD" ? ((item.producto.costo || 0) * tasaDolarBlue) : (item.producto.costo || 0)
+
+          // 🔄 CORRECCIÓN ACÁ: Mantenemos el estado limpio y guardamos la info legal en comprobante_hash
+          const estadoVentaEstandar = (ventaData.clienteId && saldoDiferenciaARS < 0) ? "A Cuenta Corriente" : "Completada";
+          const infoLegalCombinada = tipoFacturacion === "afip" ? `FACTURA C N° ${nroLegalAfip} | CAE: ${caeAsignado}` : (caeAsignado || null);
 
           const { error: insertError } = await supabase.from("ventas_b2b").insert([{
             producto_id: item.producto.id, 
@@ -393,19 +401,25 @@ export function useDashboard() {
             monto_pagado: montoPagadoFilaARS, 
             cliente_referencia: clienteTextoFinal, 
             cliente_id: ventaData.clienteId || null, 
-            estado: tipoFacturacion === "afip" ? `Facturado C (${nroLegalAfip})` : ((ventaData.clienteId && saldoDiferenciaARS < 0) ? "A Cuenta Corriente" : "Completada"), 
+            estado: estadoVentaEstandar, 
             metodo_pago: ventaData.metodoPago || "Efectivo", 
             cupon_aplicado: descuentoData.codigoAplicado || null,
-            comprobante_hash: caeAsignado || null // Guardamos el CAE oficial en la columna comprobante_hash
+            comprobante_hash: infoLegalCombinada
           }])
           
           if (!insertError) {
             await supabase.from("movimientos_stock").insert([{ producto_id: item.producto.id, nombre_producto: item.producto.nombre, cantidad: -item.cantidad, motivo: `Venta (Ref: ${clienteTextoFinal})` }])
-          } else { exitoTotal = false; }
-        } else { exitoTotal = false; }
+          } else { 
+            exitoTotal = false; 
+            mensajeErrorDetallado = `Error de inserción: ${insertError.message}`;
+          }
+        } else { 
+          exitoTotal = false; 
+          mensajeErrorDetallado = `Error de stock: ${stockError.message}`;
+        }
       }
 
-      // 4. ALERTAS INTERACTIVAS Y CIERRE
+      // 4. RESPUESTA FINAL AL CAJERO
       if (exitoTotal) {
         alert(tipoFacturacion === "afip" ? `🎉 ¡Factura C emitida con éxito!\nCAE Oficial: ${caeAsignado}` : "🎉 ¡Venta interna registrada con éxito!");
         handleGenerarPresupuesto(); 
@@ -415,10 +429,10 @@ export function useDashboard() {
         removerDescuento(); 
         fetchData();
       } else {
-        alert("⚠️ Advertencia: El stock se redujo pero hubo un inconveniente al indexar la orden en el Libro Diario.");
+        alert(`⚠️ Advertencia: El stock se redujo pero la base de datos rechazó el movimiento.\nDetalle técnico: ${mensajeErrorDetallado}`);
       }
     } catch (err: any) {
-      alert(`❌ Error al facturar con AFIP: ${err.message || "Se interrumpió la conexión con la base de datos."}`);
+      alert(`❌ Error al facturar con AFIP: ${err.message || "Se interrumpió la conexión."}`);
     } finally {
       setIsSaving(false);
     }
