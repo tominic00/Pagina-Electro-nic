@@ -75,15 +75,16 @@ export async function POST(request: Request) {
     })
 
   } catch (error: any) {
-    // 🚀 ACÁ ATRAPAMOS EL MOTIVO REAL DEL REBOTE DE AFIP
-    let detalleAFIP = error.message;
+    console.error("AFIP Error Crítico:", error)
     
+    // 🚀 PERFECCIONADO: Si el servidor devuelve un JSON con el error, lo leemos completo
+    let detalleAFIP = error.message
     if (error.response && error.response.data) {
-      // Si AFIP mandó un texto con la explicación, lo extraemos
-      detalleAFIP = error.response.data.toString();
+      detalleAFIP = typeof error.response.data === 'object'
+        ? JSON.stringify(error.response.data)
+        : error.response.data.toString()
     }
 
-    console.error("AFIP Error Crítico:", detalleAFIP);
     return NextResponse.json(
       { success: false, error: detalleAFIP },
       { status: 500 }
