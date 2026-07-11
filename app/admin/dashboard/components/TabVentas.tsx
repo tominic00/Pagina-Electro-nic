@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Package, Tag, Trash2, DollarSign, Calculator, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard } from "lucide-react"
+import { Package, Tag, Trash2, DollarSign, Calculator, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabVentasProps {
@@ -73,11 +73,14 @@ export function TabVentas({
   const [searchTerm, setSearchTerm] = useState("")
   const [tipoFacturacion, setTipoFacturacion] = useState<"interno" | "afip">("interno")
   
-  // 🚀 TASA DE DÓLAR BLUE EN VIVO
-  const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1250)
+  // 🚀 COTIZACIÓN ACTUALIZADA A $1510 SEGÚN TU PANEL
+  const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1510)
   const [isFetchingDolar, setIsFetchingDolar] = useState(true)
-  
   const [montoEnPesos, setMontoEnPesos] = useState("")
+
+  // 🚀 ESTADOS PARA EL CONVERSOR RÁPIDO DE CAJA
+  const [convertidorUSD, setConvertidorUSD] = useState("")
+  const [convertidorARS, setConvertidorARS] = useState("")
 
   useEffect(() => {
     const fetchDolar = async () => {
@@ -85,7 +88,7 @@ export function TabVentas({
         const response = await fetch("https://dolarapi.com/v1/dolares/blue")
         const data = await response.json()
         if (data && data.venta) setTasaDolarBlue(data.venta)
-      } catch (error) { console.error("Error dólar:", error) } 
+      } catch (error) { console.error("Error trayendo cotización:", error) } 
       finally { setIsFetchingDolar(false) }
     }
     fetchDolar()
@@ -99,9 +102,21 @@ export function TabVentas({
     if (ventaData.metodoPago === "USD" || ventaData.metodoPago === "USDT") {
       setVentaData({...ventaData, montoPagado: pesosNum})
     } else {
-      const equivalenteUSD = pesosNum / tasaDolarBlue
-      setVentaData({...ventaData, montoPagado: equivalenteUSD})
+      setVentaData({...ventaData, montoPagado: pesosNum / tasaDolarBlue})
     }
+  }
+
+  // 🚀 CONTROLADORES DEL CONVERSOR INTERACTIVO
+  const handleConversionDesdeUSD = (val: string) => {
+    setConvertidorUSD(val)
+    if (val === "") setConvertidorARS("")
+    else setConvertidorARS((Number(val) * tasaDolarBlue).toFixed(0))
+  }
+
+  const handleConversionDesdeARS = (val: string) => {
+    setConvertidorARS(val)
+    if (val === "") setConvertidorUSD("")
+    else setConvertidorUSD((Number(val) / tasaDolarBlue).toFixed(2))
   }
 
   const clienteSeleccionado = ventaData.clienteId ? clientes?.find(c => c.id === ventaData.clienteId) : null
@@ -115,12 +130,13 @@ export function TabVentas({
     return (usdAmount * tasaDolarBlue).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
 
-  // 🚀 METODOS PARA EL DETALLE MULTIMONEDA EN EL TICKET DE VENTA
+  // Identifica dinámicamente cómo mostrar el precio individual de cada artículo
   const formatPrecioItemOriginal = (p: any) => {
     const sim = p.moneda === "USD" ? "US$" : "$"
     return `${sim} ${(p.precio_minorista ?? p.precio).toLocaleString("es-AR")}`
   }
 
+  // Suma total del ticket adaptado a lo que tiene que marcar la caja en pesos
   const totalTicketARS = carritoAdmin.reduce((sum, item) => {
     const precioBase = item.producto.precio_minorista ?? item.producto.precio
     const valorARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
@@ -234,7 +250,7 @@ export function TabVentas({
                   <div className="flex gap-2">
                     <select value={manualDescTipo} onChange={e => setManualDescTipo(e.target.value as "porcentaje" | "monto")} className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-300 outline-none focus:border-emerald-500">
                       <option value="porcentaje">%</option>
-                      <option value="monto">USD</option>
+                      <option value="monto">ARS ($)</option>
                     </select>
                     <input type="number" min="1" value={manualDescValor} onChange={e => setManualDescValor(e.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-white outline-none focus:border-emerald-500" placeholder="Manual" />
                     <button onClick={handleAplicarDescuentoManual} className="bg-zinc-800 text-white px-3 rounded-lg text-[10px] font-bold uppercase hover:bg-zinc-700 transition-colors shrink-0">Fijar</button>
@@ -244,14 +260,14 @@ export function TabVentas({
                 <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
                   <div>
                     <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Descuento {descuentoData.codigoAplicado ? `(${descuentoData.codigoAplicado})` : 'Manual'}</p>
-                    <p className="text-xs font-black text-emerald-400">- {descuentoData.valor}{descuentoData.tipo === 'porcentaje' ? '%' : ' USD'}</p>
+                    <p className="text-xs font-black text-emerald-400">- {descuentoData.valor}{descuentoData.tipo === 'porcentaje' ? '%' : ' ARS'}</p>
                   </div>
                   <button onClick={removerDescuento} className="text-red-400 hover:text-white hover:bg-red-500 p-1.5 rounded-lg transition-colors"><Trash2 className="size-4"/></button>
                 </div>
               )}
             </div>
 
-            {/* TOTALIZADOR ADAPTADO COMPLETAMENTE A PESOS */}
+            {/* TOTALIZADOR ADAPTADO COMPLETAMENTE A PESOS EN GRANDE */}
             <div className="bg-[#0E1117] border border-purple-500/30 p-5 rounded-2xl shadow-xl space-y-2 relative overflow-hidden">
               <div className="absolute right-0 top-0 size-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"/>
               <div className="flex justify-between items-center text-xs text-zinc-400 relative z-10 font-bold uppercase tracking-wider">
@@ -371,6 +387,36 @@ export function TabVentas({
                 Equivale a USD {ventaData.montoPagado.toFixed(2)}
               </p>
             )}
+          </div>
+
+          {/* 🚀 NUEVO: WIDGET CONVERSOR MULTIMONEDA INTERACTIVO EN CAJA */}
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
+            <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
+              <RefreshCw className="size-3.5 animate-pulse text-amber-500"/> Conversor Rápido de Divisas
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-zinc-600">USD</span>
+                <input 
+                  type="number" 
+                  value={convertidorUSD} 
+                  onChange={e => handleConversionDesdeUSD(e.target.value)} 
+                  className="w-full text-xs bg-zinc-900 text-white rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-bold" 
+                  placeholder="0.00" 
+                />
+              </div>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-zinc-600">ARS</span>
+                <input 
+                  type="number" 
+                  value={convertidorARS} 
+                  onChange={e => handleConversionDesdeARS(e.target.value)} 
+                  className="w-full text-xs bg-zinc-900 text-amber-400 rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-black" 
+                  placeholder="0" 
+                />
+              </div>
+            </div>
+            <p className="text-[8px] font-bold text-zinc-600 text-center uppercase tracking-wider">Cálculo basado en la cotización del mostrador ($1510)</p>
           </div>
 
           {/* Aviso de Cuenta Corriente */}

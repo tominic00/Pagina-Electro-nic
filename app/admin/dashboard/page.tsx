@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { LogOut, LayoutDashboard, Boxes, TrendingUp, BarChart3, Users, PieChart as PieChartIcon, MessageCircle, Loader2, Home, FileText, Sliders, Menu, X, ChevronLeft, Wrench } from "lucide-react"
+import { LogOut, LayoutDashboard, Boxes, TrendingUp, BarChart3, Users, PieChart as PieChartIcon, MessageCircle, Loader2, Home, FileText, Sliders, Menu, X, ChevronLeft, Wrench, BookOpen } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 
@@ -17,8 +17,9 @@ import { TabCampanas } from "./components/TabCampanas"
 import { TabAnaliticas } from "./components/TabAnaliticas"
 import { TabBlogs } from "./components/TabBlogs"
 import { TabHome } from "./components/TabHome"
-// 🚀 CORREGIDO: Importamos tu archivo real con su nombre exacto
 import { TabReparaciones } from "./components/TabReparaciones" 
+// 🚀 NUEVO: Importamos el Libro Diario
+import { TabLibroDiario } from "./components/TabLibroDiario" 
 
 export default function AdminDashboard() {
   const dashboard = useDashboard()
@@ -42,6 +43,8 @@ export default function AdminDashboard() {
   ]
 
   const gestionNav = [
+    // 🚀 NUEVO: Botón de Libro Diario agregado arriba de Auditoría
+    { id: "libro_diario", label: "Libro Diario (Caja)", icon: BookOpen },
     { id: "historial", label: "Auditoría / Órdenes", icon: BarChart3, badge: dashboard.ordenesPendientesAccion },
     { id: "analiticas", label: "Métricas", icon: PieChartIcon, badge: dashboard.solicitudesPendientes },
     { id: "campanas", label: "Campañas CRM", icon: MessageCircle },
@@ -62,7 +65,6 @@ export default function AdminDashboard() {
       
       <DashboardModals {...dashboard} />
 
-      {/* SIDEBAR (Barra Lateral) */}
       <aside 
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-zinc-800 bg-[#161B22] transition-all duration-300 ease-in-out lg:relative",
@@ -72,9 +74,7 @@ export default function AdminDashboard() {
       >
         <div className="flex h-16 items-center justify-between border-b border-zinc-800 px-4">
           <div className={cn("flex items-center overflow-hidden transition-all", !isSidebarOpen && "hidden lg:flex lg:opacity-0 lg:w-0")}>
-            <span className="text-xl font-black tracking-tighter text-white uppercase select-none">
-              electro·nic
-            </span>
+            <span className="text-xl font-black tracking-tighter text-white uppercase select-none">electro·nic</span>
           </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden lg:flex p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors ml-auto">
             {isSidebarOpen ? <ChevronLeft className="size-5" /> : <Menu className="size-5" />}
@@ -95,9 +95,7 @@ export default function AdminDashboard() {
                   onClick={() => { dashboard.setActiveTab(item.id); setIsMobileMenuOpen(false); }}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all group",
-                    dashboard.activeTab === item.id 
-                      ? "bg-primary/10 text-primary" 
-                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                    dashboard.activeTab === item.id ? "bg-primary/10 text-primary" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
                     !isSidebarOpen && "justify-center px-0"
                   )}
                   title={!isSidebarOpen ? item.label : undefined}
@@ -174,17 +172,15 @@ export default function AdminDashboard() {
 
       {isMobileMenuOpen && <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      {/* CONTENIDO PRINCIPAL (Lado Derecho) */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         
-        {/* CORREGIDO: Estructura HTML de la cabecera nivelada */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-800 bg-[#0E1117]/80 px-4 sm:px-6 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white"><Menu className="size-5" /></button>
             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500">
               <Link href="/" className="hover:text-white flex items-center gap-1"><Home className="size-3.5"/> Web</Link>
               <span className="text-zinc-700">/</span>
-              <span className="text-zinc-400 font-bold uppercase text-[10px] tracking-wider">{dashboard.activeTab}</span>
+              <span className="text-zinc-400 font-bold uppercase text-[10px] tracking-wider">{dashboard.activeTab.replace("_", " ")}</span>
             </div>
           </div>
 
@@ -199,18 +195,17 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* CUERPO CENTRAL DE COMPONENTES */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0E1117]">
           <div className="mx-auto max-w-7xl">
             {dashboard.activeTab === "dashboard" && <TabDashboard {...dashboard} />}
             {dashboard.activeTab === "productos" && <TabInventario {...dashboard} />}
             {dashboard.activeTab === "ventas" && <TabVentas {...dashboard} />}
+            {dashboard.activeTab === "taller" && <TabReparaciones {...(dashboard as any)} />} 
             
-            {/* 🚀 CORREGIDO: Renderiza tu componente real TabReparaciones */}
-            {dashboard.activeTab === "taller" && <TabReparaciones {...dashboard} />} 
+            {/* 🚀 NUEVO: Compuerta para dibujar el Libro Diario */}
+            {(dashboard.activeTab as string) === "libro_diario" && <TabLibroDiario {...(dashboard as any)} />} 
             
             {dashboard.activeTab === "historial" && <TabHistorial {...dashboard} />}
-            {/* 🚀 CORREGIDO: Llamada adaptada a tu importación TabCRM */}
             {dashboard.activeTab === "clientes" && <TabCRM {...tabCRMProps} />}
             {dashboard.activeTab === "analiticas" && <TabAnaliticas {...dashboard} />}
             {dashboard.activeTab === "campanas" && <TabCampanas {...dashboard} />}
