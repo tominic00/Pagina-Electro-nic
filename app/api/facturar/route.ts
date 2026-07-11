@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       cert: certPath,
       key: keyPath,
       production: true,
-      token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX",
+      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX",
       ta_folder: rootCertsDir,   // Guarda el Token de acceso en tu carpeta raíz afip_certs
       res_folder: rootCertsDir    // Ignora la caché residual de node_modules
     })
