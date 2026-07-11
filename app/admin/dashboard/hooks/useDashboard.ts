@@ -11,9 +11,8 @@ export interface AdminCartItem { producto: Producto; cantidad: number; id?: stri
 export interface EgresoCaja { id: string; created_at: string; monto: number; motivo: string }
 export interface Cupon { id: string; created_at: string; codigo: string; tipo: 'porcentaje' | 'monto'; valor: number; activo: boolean; fecha_vencimiento?: string; un_solo_uso: boolean }
 export interface MovimientoStock { id: string; created_at: string; producto_id: string; 'font-weight': string; nombre_producto: string; cantidad: number; motivo: string }
-export interface Tecnico { id: string; nombre: string; whatsapp: string; estado: string; id_tecnico?: string }
+export interface Tecnico { id: string; nombre: string; whatsapp: string; estado: string }
 
-// 🚀 ACTUALIZADO: Agregamos la pestaña "libro_diario" al tipado oficial
 export type ActiveTab = "dashboard" | "productos" | "ventas" | "taller" | "historial" | "clientes" | "analiticas" | "campanas" | "blogs" | "home" | "libro_diario"
 
 export function useDashboard() {
@@ -40,7 +39,7 @@ export function useDashboard() {
   const [homeSettings, setHomeSettings] = useState<any>(null)
   const [isSavingHome, setIsSavingHome] = useState(false)
 
-  // 🚀 TASA DE CONVERSIÓN CONECTADA EN EL CEREBRO
+  // 🚀 TASA DE CONVERSIÓN FIJADA EN EL NÚCLEO ELECTRÓNIC
   const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1510)
   const [isFetchingDolar, setIsFetchingDolar] = useState(true)
 
@@ -49,28 +48,12 @@ export function useDashboard() {
   const [editingTecnicoId, setEditingTecnicoId] = useState<string | null>(null)
 
   const [reparacionForm, setReparacionForm] = useState({
-    cliente_referencia: "",
-    producto_id: "", 
-    imei: "",
-    color: "",
-    diagnostico_falla: "",
-    tecnico_id: "",
-    costo_tecnico: 0,
-    total_trato: 0, 
-    monto_pagado: 0,
-    metodo_pago: "Efectivo",
-    estado: "Ingresado" 
+    cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" 
   })
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ 
-    nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, 
-    categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", 
-    moneda: "ARS", visible_web: true,
-    precio_minorista: undefined as number | undefined, 
-    precio_mayorista: undefined as number | undefined, 
-    precio_volumen: undefined as number | undefined, 
-    cantidad_volumen: undefined as number | undefined
+    nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined as number | undefined, precio_mayorista: undefined as number | undefined, precio_volumen: undefined as number | undefined, cantidad_volumen: undefined as number | undefined 
   })
   
   const [showMassUpdateModal, setShowMassUpdateModal] = useState(false)
@@ -78,7 +61,7 @@ export function useDashboard() {
   const [showStockHistoryModal, setShowStockHistoryModal] = useState(false)
   const [showNuevaReparacion, setShowNuevaReparacion] = useState(false)
 
-  const [stockAdjustData, setStockAdjustData] = useState<{producto: Producto | null, tipo: 'ingreso' | 'egreso', cantidad: string, motivo: string, motivoLibre: string}>({ producto: null, tipo: 'ingreso', quantity: "", cantidad: "", motivo: "Compra a Proveedor", motivoLibre: "" } as any)
+  const [stockAdjustData, setStockAdjustData] = useState<{producto: Producto | null, tipo: 'ingreso' | 'egreso', cantidad: string, motivo: string, motivoLibre: string}>({ producto: null, tipo: 'ingreso', cantidad: "", motivo: "Compra a Proveedor", motivoLibre: "" })
   const [massUpdateData, setMassUpdateData] = useState({ porcentaje: "", tipo: "aumento" })
 
   const [carritoAdmin, setCarritoAdmin] = useState<AdminCartItem[]>([])
@@ -94,7 +77,11 @@ export function useDashboard() {
   const [cuponForm, setCuponForm] = useState({ codigo: "", tipo: "porcentaje", valor: "", fecha_vencimiento: "", un_solo_uso: false })
 
   const [showInvoice, setShowInvoice] = useState(false)
-  const [invoiceType, setInvoiceType] = useState<"VENTA" | "PRESUPUESTO">("VENTA")
+  // 🚀 NUEVO: Estados para que el diseño del PDF lea los datos de AFIP
+  const [invoiceCAE, setInvoiceCAE] = useState<string | null>(null)
+  const [invoiceCAEVto, setInvoiceCAEVto] = useState<string | null>(null)
+  const [invoiceNroLegal, setInvoiceNroLegal] = useState<string | null>(null)
+  const [invoiceType, setInvoiceType] = useState<"VENTA" | "PRESUPUESTO" | "FACTURA C">("VENTA")
   const [invoiceItems, setInvoiceItems] = useState<AdminCartItem[]>([])
   const [invoiceClientName, setInvoiceClientName] = useState("")
   const [invoiceDate, setInvoiceDate] = useState("")
@@ -157,9 +144,7 @@ export function useDashboard() {
       setHomeSettings(homeData)
     } else {
       setHomeSettings({
-        id: "main", ticker_visible: true, ticker_text: "🔥 Servicio técnico especializado Apple",
-        hero_visible: true, hero_title: "Tecnología de punta a tu alcance", hero_subtitle: "Reparación y venta de equipos garantizados.",
-        trust_badges: [], standards_items: [], banners: [], before_after: [], faqs: []
+        id: "main", ticker_visible: true, ticker_text: "🔥 Servicio técnico especializado Apple", hero_visible: true, hero_title: "Tecnología de punta a tu alcance", hero_subtitle: "Reparación y venta de equipos garantizados.", trust_badges: [], standards_items: [], banners: [], before_after: [], faqs: []
       })
     }
     
@@ -199,28 +184,14 @@ export function useDashboard() {
       if (uploadError) throw uploadError
       const { data: { publicUrl } } = supabase.storage.from('coas').getPublicUrl(fileName)
       setFormData(prev => ({ ...prev, coa_url: publicUrl }))
-    } catch (error: any) { 
-      console.error("Error detallado de Supabase:", error);
-      alert("Error de Supabase: " + (error.message || JSON.stringify(error))); 
-    } finally { setIsUploadingCoa(false) }
+    } catch (error: any) { alert("Error de Supabase: " + error.message); } finally { setIsUploadingCoa(false) }
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSaving(true);
     const stockNumerico = parseInt(formData.stock.toString(), 10) || 0
-    
     const payload = { 
-      nombre: formData.nombre, 
-      precio: formData.precio_minorista ?? formData.precio, 
-      costo: formData.costo, 
-      descripcion: formData.descripcion, 
-      stock: stockNumerico, 
-      categoria: formData.categoria, 
-      imagen_url: formData.imagen_url, 
-      moneda: formData.moneda || "ARS",
-      visible_web: formData.visible_web !== false,
-      precio_minorista: formData.precio_minorista ?? formData.precio,
-      precio_mayorista: formData.precio_mayorista ?? formData.precio
+      nombre: formData.nombre, precio: formData.precio_minorista ?? formData.precio, costo: formData.costo, descripcion: formData.descripcion, stock: stockNumerico, categoria: formData.categoria, imagen_url: formData.imagen_url, moneda: formData.moneda || "ARS", visible_web: formData.visible_web !== false, precio_minorista: formData.precio_minorista ?? formData.precio, precio_mayorista: formData.precio_mayorista ?? formData.precio
     }
 
     if (editingId) {
@@ -232,57 +203,38 @@ export function useDashboard() {
           await supabase.from("movimientos_stock").insert([{ producto_id: editingId, nombre_producto: payload.nombre, cantidad: diff, motivo: "Ajuste desde Edición de Ficha" }])
         }
         setEditingId(null)
-      } else {
-        alert("Error al actualizar: " + error.message)
-      }
+      } else { alert("Error al actualizar: " + error.message) }
     } else {
       const { data: newProd, error } = await supabase.from("productos").insert([payload]).select().single()
       if (!error && newProd && stockNumerico > 0) {
         await supabase.from("movimientos_stock").insert([{ producto_id: newProd.id, nombre_producto: newProd.nombre, cantidad: stockNumerico, motivo: "Stock Inicial (Alta de Producto)" }])
-      } else if (error) {
-        alert("Error Supabase. Validá que tengas la tabla actualizada: " + error.message)
-      }
+      } else if (error) { alert("Error Supabase. Validá que tengas la tabla actualizada: " + error.message) }
     }
-    
     setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined })
     fetchData(); setIsSaving(false);
   }
 
   const handleUpdateInline = async (id: string, campo: string, valor: any) => {
-    // Soporta cambios de texto (como estados del taller) o numéricos
     setProductos(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p))
     const { error = null } = await supabase.from("productos").update({ [campo]: valor }).eq("id", id)
     if (error) { 
-      // Si no es un producto, intentamos impactar en ventas_b2b (para los estados de las reparaciones)
-      const { error: errVenta } = await supabase.from("ventas_b2b").update({ [campo]: valor }).eq("id", id)
+      const { error: errVenta = null } = await supabase.from("ventas_b2b").update({ [campo]: valor }).eq("id", id)
       if (errVenta) alert(`Error actualizando: ${errVenta.message}`)
     }
     fetchData();
   }
 
   const handleMassUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const porc = Number(massUpdateData.porcentaje)
-    if (!porc || porc <= 0) return alert("Ingrese un porcentaje válido.")
-    if (!confirm(`¿Aplicar un ${massUpdateData.tipo} del ${porc}% a TODOS los artículos?`)) return
-    setIsSaving(true)
+    e.preventDefault(); const porc = Number(massUpdateData.porcentaje); if (!porc || porc <= 0) return alert("Ingrese un porcentaje válido.")
+    if (!confirm(`¿Aplicar un ${massUpdateData.tipo} del ${porc}% a TODOS los artículos?`)) return; setIsSaving(true)
     const factor = massUpdateData.tipo === "aumento" ? (1 + (porc / 100)) : (1 - (porc / 100))
-    const promesas = productos.map((p: any) => supabase.from("productos").update({ 
-      precio: Math.round(p.precio * factor * 100) / 100,
-      precio_minorista: Math.round((p.precio_minorista ?? p.precio) * factor * 100) / 100,
-      precio_mayorista: Math.round((p.precio_mayorista ?? p.precio) * factor * 100) / 100
-    }).eq("id", p.id))
-    await Promise.all(promesas)
-    alert("¡Lista de precios actualizada!");
-    setShowMassUpdateModal(false); setMassUpdateData({ porcentaje: "", tipo: "aumento" }); fetchData(); setIsSaving(false);
+    const promesas = productos.map((p: any) => supabase.from("productos").update({ precio: Math.round(p.precio * factor * 100) / 100, precio_minorista: Math.round((p.precio_minorista ?? p.precio) * factor * 100) / 100, precio_mayorista: Math.round((p.precio_mayorista ?? p.precio) * factor * 100) / 100 }).eq("id", p.id))
+    await Promise.all(promesas); alert("¡Lista de precios actualizada!"); setShowMassUpdateModal(false); setMassUpdateData({ porcentaje: "", tipo: "aumento" }); fetchData(); setIsSaving(false);
   }
 
   const handleAjusteStockManual = async (e: React.FormEvent) => {
     e.preventDefault(); if (!stockAdjustData.producto || !stockAdjustData.cantidad || Number(stockAdjustData.cantidad) <= 0) return;
-    setIsSaving(true);
-    const cantNumerica = Number(stockAdjustData.cantidad)
-    const difStock = stockAdjustData.tipo === 'ingreso' ? cantNumerica : -cantNumerica
-    const nuevoStock = (stockAdjustData.producto.stock || 0) + difStock
+    setIsSaving(true); const cantNumerica = Number(stockAdjustData.cantidad); const difStock = stockAdjustData.tipo === 'ingreso' ? cantNumerica : -cantNumerica; const nuevoStock = (stockAdjustData.producto.stock || 0) + difStock
     if (nuevoStock < 0) { alert("El stock no puede quedar en negativo."); setIsSaving(false); return; }
     const motivoFinal = stockAdjustData.motivo === "Otro" ? stockAdjustData.motivoLibre : stockAdjustData.motivo
     await supabase.from("productos").update({ stock: nuevoStock }).eq("id", stockAdjustData.producto.id)
@@ -296,17 +248,13 @@ export function useDashboard() {
     if (editingClienteId) {
       const { error } = await supabase.from("clientes_b2b").update({ ...clienteForm, email: clienteForm.email.trim() || null, password_portal: clienteForm.password_portal.trim() || null }).eq("id", editingClienteId)
       if (!error) { alert(`Datos actualizados.`); setEditingClienteId(null); } else alert(`Error: ${error.message}`)
-    } else {
-      const { error } = await supabase.from("clientes_b2b").insert([clienteForm])
-      if (!error) alert(`Cliente guardado.`)
-    }
+    } else { const { error } = await supabase.from("clientes_b2b").insert([clienteForm]); if (!error) alert(`Cliente guardado.`) }
     setClienteForm({ nombre: "", institucion_o_laboratorio: "", whatsapp: "", email: "", password_portal: "", saldo_usd: 0, notas: "" }); fetchData(); setIsSaving(false);
   }
 
   const handleEliminarCliente = async (id: string) => {
     if (!window.confirm("⚠️ ¿Eliminar cliente?")) return; setIsSaving(true);
-    const { error } = await supabase.from("clientes_b2b").delete().eq("id", id)
-    if (!error) { alert("✅ Cliente eliminado."); fetchData(); } else alert("❌ Error.")
+    const { error } = await supabase.from("clientes_b2b").delete().eq("id", id); if (!error) { alert("✅ Cliente eliminado."); fetchData(); } else alert("❌ Error.")
     setIsSaving(false);
   }
 
@@ -319,32 +267,15 @@ export function useDashboard() {
     if (!errCliente) {
       await supabase.from("solicitudes_registro").update({ estado: "Aprobado" }).eq("id", sol.id)
       await supabase.from("cupones").insert([{ codigo: cuponBienvenida, tipo: "porcentaje", valor: 10, un_solo_uso: true, activo: true }])
-      const cleanWA = sol.whatsapp.replace(/\D/g, '')
-      let text = `¡Hola ${sol.nombre}! 📱\nTu acceso a *electro·nic* fue validado.\n🔐 *Credenciales:*\n• Email: ${sol.email}\n• Contraseña: ${claveAutomatica}\n🎁 Cupón 10% OFF: *${cuponBienvenida}*`
-      window.open(`https://wa.me/${cleanWA}?text=${encodeURIComponent(text)}`, '_blank')
+      window.open(`https://wa.me/${sol.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Acceso aprobado. Clave: ${claveAutomatica}`)}`, '_blank')
       fetchData()
     }
     setIsSaving(false)
   }
 
-  const handleRechazarSolicitud = async (id: string) => {
-    if (!confirm("¿Rechazar esta solicitud?")) return; setIsSaving(true);
-    await supabase.from("solicitudes_registro").update({ estado: "Rechazado" }).eq("id", id)
-    fetchData(); setIsSaving(false);
-  }
-
-  const handleCrearCupon = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!cuponForm.codigo || !cuponForm.valor) return; setIsSaving(true);
-    const payload = { codigo: cuponForm.codigo.toUpperCase().trim(), tipo: cuponForm.tipo, valor: Number(cuponForm.valor), fecha_vencimiento: cuponForm.fecha_vencimiento || null, un_solo_uso: cuponForm.un_solo_uso }
-    const { error } = await supabase.from("cupones").insert([payload])
-    if (!error) { alert("Cupón creado."); setCuponForm({ codigo: "", tipo: "porcentaje", valor: "", fecha_vencimiento: "", un_solo_uso: false }); fetchData(); }
-    setIsSaving(false);
-  }
-
-  const handleEliminarCupon = async (id: string) => {
-    if(!confirm("¿Eliminar este cupón?")) return; setIsSaving(true);
-    await supabase.from("cupones").delete().eq("id", id); fetchData(); setIsSaving(false);
-  }
+  const handleRechazarSolicitud = async (id: string) => { if (!confirm("¿Rechazar esta solicitud?")) return; setIsSaving(true); await supabase.from("solicitudes_registro").update({ estado: "Rechazado" }).eq("id", id); fetchData(); setIsSaving(false); }
+  const handleCrearCupon = async (e: React.FormEvent) => { e.preventDefault(); if (!cuponForm.codigo || !cuponForm.valor) return; setIsSaving(true); const { error } = await supabase.from("cupones").insert([{ codigo: cuponForm.codigo.toUpperCase().trim(), tipo: cuponForm.tipo, valor: Number(cuponForm.valor), fecha_vencimiento: cuponForm.fecha_vencimiento || null, un_solo_uso: cuponForm.un_solo_uso }]); if (!error) { alert("Cupón creado."); setCuponForm({ codigo: "", tipo: "porcentaje", valor: "", fecha_vencimiento: "", un_solo_uso: false }); fetchData(); } setIsSaving(false); }
+  const handleEliminarCupon = async (id: string) => { if(!confirm("¿Eliminar este cupón?")) return; setIsSaving(true); await supabase.from("cupones").delete().eq("id", id); fetchData(); setIsSaving(false); }
 
   const agregarAlCarritoAdmin = () => {
     if (!productoSeleccionadoId) return alert("Seleccione un producto.")
@@ -362,92 +293,135 @@ export function useDashboard() {
   }
 
   const removerDelCarritoAdmin = (id: string) => setCarritoAdmin(prev => prev.filter(item => item.producto.id !== id))
-
-  const handleValidarCupon = async () => {
-    if (!inputCupon) return
-    const cuponMatch = cupones.find(c => c.codigo === inputCupon.toUpperCase().trim() && c.activo)
-    if (!cuponMatch) return alert("Cupón inválido.")
-    if (cuponMatch.fecha_vencimiento && new Date() > new Date(cuponMatch.fecha_vencimiento)) return alert(`❌ Cupón expirado.`)
-    setDescuentoData({ tipo: cuponMatch.tipo, valor: cuponMatch.valor, codigoAplicado: cuponMatch.codigo })
-    alert("¡Cupón validado!")
-    setInputCupon("")
-  }
-
+  const handleValidarCupon = async () => { if (!inputCupon) return; const cuponMatch = cupones.find(c => c.codigo === inputCupon.toUpperCase().trim() && c.activo); if (!cuponMatch) return alert("Cupón inválido."); setDescuentoData({ tipo: cuponMatch.tipo, valor: cuponMatch.valor, codigoAplicado: cuponMatch.codigo }); alert("¡Cupón validado!"); setInputCupon("") }
   const handleAplicarDescuentoManual = () => { if (!manualDescValor || Number(manualDescValor) <= 0) return alert("Ingrese un valor."); setDescuentoData({ tipo: manualDescTipo, valor: Number(manualDescValor), codigoAplicado: "" }); }
   const removerDescuento = () => setDescuentoData({ tipo: "ninguno", valor: 0, codigoAplicado: "" })
 
-  // 🚀 ACTUALIZADO: El carrito ahora calcula y totaliza de forma nativa en PESOS (ARS)
+  // 🚀 CORREGIDO: Calculamos el subtotal interno en el equivalente real en USD para que "Ref Sistema" no marque números gigantes.
   const subtotalTratoCarrito = carritoAdmin.reduce((sum, item) => {
-    // precio_minorista may not exist on the Producto type, fall back to precio
     const precioBase = (item.producto as any).precio_minorista ?? item.producto.precio
-    const valorARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
-    return sum + (valorARS * item.cantidad)
+    const valorUSD = item.producto.moneda === "USD" ? precioBase : (precioBase / tasaDolarBlue)
+    return sum + (valorUSD * item.cantidad)
   }, 0)
 
   const valorDelDescuentoApli = descuentoData.tipo === "porcentaje"
     ? subtotalTratoCarrito * (descuentoData.valor / 100)
-    : (descuentoData.tipo === "monto" ? descuentoData.valor : 0) // Soporta rebajas manuales fijas en Pesos (valor en ARS)
+    : (descuentoData.tipo === "monto" ? (descuentoData.valor / (carritoAdmin.some(i => i.producto.moneda === "USD") ? 1 : tasaDolarBlue)) : 0)
 
   const totalTratoCarritoNeto = Math.max(0, subtotalTratoCarrito - valorDelDescuentoApli)
   const clienteSeleccionado = ventaData.clienteId ? clientes?.find(c => c.id === ventaData.clienteId) : null
   
-  // Sincronizamos el balance de Cuenta Corriente (Se calcula la diferencia neta en pesos y se guarda el equivalente USD)
-  const saldoFinalCalculado = (clienteSeleccionado ? Number(clienteSeleccionado.saldo_usd || 0) : 0) + ((ventaData.montoPagado * tasaDolarBlue - totalTratoCarritoNeto) / tasaDolarBlue)
+  // Sincronizamos el balance de Cuenta Corriente en dólares estables
+  const saldoFinalCalculado = (clienteSeleccionado ? Number(clienteSeleccionado.saldo_usd || 0) : 0) + ((ventaData.montoPagado * tasaDolarBlue - (totalTratoCarritoNeto * tasaDolarBlue)) / tasaDolarBlue)
 
   const handleGenerarPresupuesto = () => {
     if (carritoAdmin.length === 0) return alert("El carrito está vacío.")
     setInvoiceItems([...carritoAdmin]); setInvoiceType("PRESUPUESTO")
     setInvoiceClientName(clienteSeleccionado ? `${clienteSeleccionado.nombre}` : ventaData.clienteB2b || "Consumidor Final")
     setInvoiceDate(new Date().toLocaleDateString()); setInvoiceId(Math.random().toString(36).substr(2, 8).toUpperCase())
-    setInvoiceDiscountAmount(valorDelDescuentoApli); setShowInvoice(true)
+    setInvoiceDiscountAmount(valorDelDescuentoApli * tasaDolarBlue); setShowInvoice(true)
   }
 
-  // 🚀 ACTUALIZADO: Registra y guarda la transacción impactando la tabla directamente en PESOS (ARS) para unificar métricas
-  const handleRegistrarVentaManual = async () => {
+  // 🚀 CORREGIDO Y CONECTADO CON AFIP: Guardado final impactando Supabase nativamente en PESOS ($) y obteniendo CAE
+  const handleRegistrarVentaManual = async (tipoFacturacion: "interno" | "afip" = "interno") => {
     if (carritoAdmin.length === 0) return alert("El carrito está vacío."); setIsSaving(true);
     
+    const totalTicketARS = totalTratoCarritoNeto * tasaDolarBlue
     const entregaEfectivoARS = ventaData.montoPagado * tasaDolarBlue
-    const saldoDiferenciaARS = entregaEfectivoARS - totalTratoCarritoNeto
+    const saldoDiferenciaARS = entregaEfectivoARS - totalTicketARS
     const clienteTextoFinal = clienteSeleccionado ? `${clienteSeleccionado.nombre}` : ventaData.clienteB2b || "Mostrador"
-    let exitoTotal = true, asignoPago = false 
-
-    if (ventaData.clienteId && clienteSeleccionado) {
-      const saldoDiferenciaUSD = saldoDiferenciaARS / tasaDolarBlue
-      await supabase.from("clientes_b2b").update({ saldo_usd: Number(clienteSeleccionado.saldo_usd || 0) + saldoDiferenciaUSD }).eq("id", ventaData.clienteId)
-    }
-
-    const factor = subtotalTratoCarrito > 0 ? (totalTratoCarritoNeto / subtotalTratoCarrito) : 1;
     
-    for (const item of carritoAdmin) {
-      const { error: stockError = null } = await supabase.from("productos").update({ stock: item.producto.stock - item.cantidad }).eq("id", item.producto.id)
-      if (!stockError) {
-        const montoPagadoFilaARS = !asignoPago ? entregaEfectivoARS : 0; asignoPago = true;
+    let caeAsignado = null
+    let nroLegalAfip = null
+    let exitoTotal = true
+    let asignoPago = false 
+
+    try {
+      // 🌐 1. SI SE SELECCIONÓ FACTURAR EN BLANCO, CHOCAMOS CONTRA NUESTRO PUENTE DE AFIP
+      if (tipoFacturacion === "afip") {
+        const resAfip = await fetch("/api/facturar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            totalARS: totalTicketARS,
+            clienteNombre: clienteTextoFinal,
+            clienteDNI: clienteSeleccionado?.whatsapp?.slice(-8) || null // Ojo: AFIP requiere DNI si pasa los $344.000
+          })
+        })
         
-        const precioBaseItem = item.producto.precio
-        const precioFilaARS = item.producto.moneda === "USD" ? (precioBaseItem * tasaDolarBlue) : precioBaseItem
-        const costoFilaARS = item.producto.moneda === "USD" ? ((item.producto.costo || 0) * tasaDolarBlue) : (item.producto.costo || 0)
+        const dataAfip = await resAfip.json()
+        
+        if (!dataAfip.success) {
+          throw new Error(dataAfip.error || "AFIP rechazó el comprobante.")
+        }
+        
+        caeAsignado = dataAfip.cae
+        nroLegalAfip = `${dataAfip.puntoVenta.toString().padStart(4, '0')}-${dataAfip.nroComprobante.toString().padStart(8, '0')}`
+        
+        // 🚀 GUARDAMOS EN CALIENTE PARA EL VISOR DEL PDF
+        setInvoiceCAE(dataAfip.cae)
+        setInvoiceCAEVto(dataAfip.vencimiento)
+        setInvoiceNroLegal(nroLegalAfip)
+      }
 
-        await supabase.from("ventas_b2b").insert([{
-          producto_id: item.producto.id, 
-          nombre_producto: `${item.producto.nombre}${descuentoData.tipo !== "ninguno" ? " (Desc)" : ""}`, 
-          cantidad: item.cantidad, 
-          precio_unitario: precioFilaARS * factor, 
-          costo_unitario_historico: costoFilaARS, 
-          total_trato: precioFilaARS * item.cantidad * factor, 
-          monto_pagado: montoPagadoFilaARS, 
-          cliente_referencia: clienteTextoFinal, 
-          cliente_id: ventaData.clienteId || null, 
-          estado: (ventaData.clienteId && saldoDiferenciaARS < 0) ? "A Cuenta Corriente" : "Completada", 
-          metodo_pago: ventaData.metodoPago || "Efectivo", 
-          cupon_aplicado: descuentoData.codigoAplicado || null
-        }])
-        await supabase.from("movimientos_stock").insert([{ producto_id: item.producto.id, nombre_producto: item.producto.nombre, cantidad: -item.cantidad, motivo: `Venta (Ref: ${clienteTextoFinal})` }])
-      } else exitoTotal = false
+      // 2. ACTUALIZAMOS SALDO DE CUENTA CORRIENTE (SI APLICA)
+      if (ventaData.clienteId && clienteSeleccionado) {
+        const saldoDiferenciaUSD = saldoDiferenciaARS / tasaDolarBlue
+        await supabase.from("clientes_b2b").update({ saldo_usd: Number(clienteSeleccionado.saldo_usd || 0) + saldoDiferenciaUSD }).eq("id", ventaData.clienteId)
+      }
+
+      const subtotalARS = subtotalTratoCarrito * tasaDolarBlue
+      const factor = subtotalARS > 0 ? (totalTicketARS / subtotalARS) : 1;
+      
+      // 3. ITERAMOS EL CARRITO Y GUARDAMOS EN SUPABASE
+      for (const item of carritoAdmin) {
+        const { error: stockError = null } = await supabase.from("productos").update({ stock: item.producto.stock - item.cantidad }).eq("id", item.producto.id)
+        if (!stockError) {
+          const montoPagadoFilaARS = !asignoPago ? entregaEfectivoARS : 0; asignoPago = true;
+          
+          const precioBase = (item.producto as any).precio_minorista ?? item.producto.precio
+          const precioFilaARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
+          const costoFilaARS = item.producto.moneda === "USD" ? ((item.producto.costo || 0) * tasaDolarBlue) : (item.producto.costo || 0)
+
+          const { error: insertError } = await supabase.from("ventas_b2b").insert([{
+            producto_id: item.producto.id, 
+            nombre_producto: `${item.producto.nombre}${descuentoData.tipo !== "ninguno" ? " (Desc)" : ""}`, 
+            cantidad: item.cantidad, 
+            precio_unitario: precioFilaARS * factor, 
+            costo_unitario_historico: costoFilaARS, 
+            total_trato: precioFilaARS * item.cantidad * factor, 
+            monto_pagado: montoPagadoFilaARS, 
+            cliente_referencia: clienteTextoFinal, 
+            cliente_id: ventaData.clienteId || null, 
+            estado: tipoFacturacion === "afip" ? `Facturado C (${nroLegalAfip})` : ((ventaData.clienteId && saldoDiferenciaARS < 0) ? "A Cuenta Corriente" : "Completada"), 
+            metodo_pago: ventaData.metodoPago || "Efectivo", 
+            cupon_aplicado: descuentoData.codigoAplicado || null,
+            comprobante_hash: caeAsignado || null // Guardamos el CAE oficial en la columna comprobante_hash
+          }])
+          
+          if (!insertError) {
+            await supabase.from("movimientos_stock").insert([{ producto_id: item.producto.id, nombre_producto: item.producto.nombre, cantidad: -item.cantidad, motivo: `Venta (Ref: ${clienteTextoFinal})` }])
+          } else { exitoTotal = false; }
+        } else { exitoTotal = false; }
+      }
+
+      // 4. ALERTAS INTERACTIVAS Y CIERRE
+      if (exitoTotal) {
+        alert(tipoFacturacion === "afip" ? `🎉 ¡Factura C emitida con éxito!\nCAE Oficial: ${caeAsignado}` : "🎉 ¡Venta interna registrada con éxito!");
+        handleGenerarPresupuesto(); 
+        setInvoiceType(tipoFacturacion === "afip" ? "FACTURA C" : "VENTA"); 
+        setCarritoAdmin([]); 
+        setVentaData({ montoPagado: 0, clienteId: "", clienteB2b: "", metodoPago: "Efectivo" }); 
+        removerDescuento(); 
+        fetchData();
+      } else {
+        alert("⚠️ Advertencia: El stock se redujo pero hubo un inconveniente al indexar la orden en el Libro Diario.");
+      }
+    } catch (err: any) {
+      alert(`❌ Error al facturar con AFIP: ${err.message || "Se interrumpió la conexión con la base de datos."}`);
+    } finally {
+      setIsSaving(false);
     }
-
-    if (exitoTotal) {
-      handleGenerarPresupuesto(); setInvoiceType("VENTA"); setCarritoAdmin([]); setVentaData({ montoPagado: 0, clienteId: "", clienteB2b: "", metodoPago: "Efectivo" }); removerDescuento(); fetchData();
-    } else alert("Error en stock."); setIsSaving(false);
   }
 
   const verComprobanteHistorico = (venta: VentaHistorica) => {
@@ -455,117 +429,56 @@ export function useDashboard() {
     setInvoiceType("VENTA"); setInvoiceClientName(venta.cliente_referencia); setInvoiceDate(new Date(venta.created_at).toLocaleDateString()); setInvoiceId(venta.id.slice(0, 8).toUpperCase()); setInvoiceDiscountAmount(0); setShowInvoice(true);
   }
 
-  const handlePrintPDF = () => { const originalTitle = document.title; document.title = `Comprobante_${invoiceClientName}_${invoiceId}`; window.print(); document.title = originalTitle; }
-
-  const handleAprobarUSDT = async (venta: VentaHistorica) => {
-    const formattedTotal = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(venta.total_trato)
-    if (!confirm(`¿Ingresaron ${formattedTotal}?`)) return; setIsSaving(true);
-    await supabase.from("ventas_b2b").update({ estado: "Completada", monto_pagado: venta.total_trato }).eq("id", venta.id); alert("Orden Aprobada!"); fetchData(); setIsSaving(false);
-  }
-
-  const handleAnularVenta = async (venta: VentaHistorica) => {
-    if (!confirm(`¿ANULAR "${venta.nombre_producto}"?`)) return; setIsSaving(true);
-    if (venta.producto_id) {
-      const prodOriginal = productos.find(p => p.id === venta.producto_id)
-      if (prodOriginal) {
-        await supabase.from("productos").update({ stock: prodOriginal.stock + venta.cantidad }).eq("id", venta.producto_id)
-        await supabase.from("movimientos_stock").insert([{ producto_id: venta.producto_id, nombre_producto: prodOriginal.nombre, cantidad: Math.abs(venta.cantidad), motivo: `Anulación (Ref: ${venta.cliente_referencia})` }])
+  // 🚀 CORREGIDO: Filtro de impresión inteligente por CSS Media. Enmascara sidebars, headers negros y fondos al imprimir remitos
+  const handlePrintPDF = () => { 
+    const originalTitle = document.title; 
+    document.title = `Comprobante_${invoiceClientName}_${invoiceId}`; 
+    
+    const style = document.createElement('style');
+    style.id = 'print-layout-booster';
+    style.innerHTML = `
+      @media print {
+        body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        aside, header, button, .no-print, nav, aside.fixed, .sidebar { display: none !important; }
+        main { padding: 0 !important; margin: 0 !important; background: white !important; }
+        div[role="dialog"], .invoice-box { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; max-width: 100% !important; background: white !important; color: black !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
       }
-    }
-    await supabase.from("ventas_b2b").delete().eq("id", venta.id); fetchData(); setIsSaving(false);
+    `;
+    document.head.appendChild(style);
+    window.print(); 
+    
+    const targetBlock = document.getElementById('print-layout-booster');
+    if (targetBlock) targetBlock.remove();
+    document.title = originalTitle; 
   }
 
-  const procesarAbono = async (e: React.FormEvent) => {
-    e.preventDefault(); const montoNumARS = Number(abonoData.monto); if (!abonoData.clienteId || !montoNumARS || !abonoData.motivo) return; setIsSaving(true);
-    const cliente = clientes.find(c => c.id === abonoData.clienteId); if (!cliente) return;
-    const { error } = await supabase.from("clientes_b2b").update({ saldo_usd: Number(cliente.saldo_usd || 0) + (montoNumARS / tasaDolarBlue) }).eq("id", cliente.id)
-    if (!error) {
-      await supabase.from("ventas_b2b").insert([{ nombre_producto: `💰 ABONO: ${abonoData.motivo}`, cantidad: 1, precio_unitario: 0, costo_unitario_historico: 0, total_trato: 0, monto_pagado: montoNumARS, cliente_referencia: cliente.nombre, cliente_id: cliente.id, estado: "Abono", metodo_pago: "Manual" }])
-      alert("Abono procesado."); setAbonoData({ clienteId: "", monto: "", motivo: "" }); setShowAbonoModal(false); fetchData();
-    }
-    setIsSaving(false);
-  }
-
-  const handleRegistrarDevolucion = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const cliente = clientes.find(c => c.id === devolucionData.clienteId)
-    const producto = productos.find(p => p.id === devolucionData.productoId)
-    const cantNum = Number(devolucionData.cantidad)
-    const valorNumARS = Number(devolucionData.valorReintegro)
-
-    if (!cliente || !producto || cantNum <= 0 || valorNumARS < 0) return alert("Por favor completá los campos correctamente.")
-    setIsSaving(true)
-
-    const nuevoSaldoUSD = Number(cliente.saldo_usd || 0) + (valorNumARS / tasaDolarBlue)
-    await supabase.from("clientes_b2b").update({ saldo_usd: nuevoSaldoUSD }).eq("id", cliente.id)
-
-    if (devolucionData.reingresarStock) {
-      await supabase.from("productos").update({ stock: producto.stock + cantNum }).eq("id", producto.id)
-      await supabase.from("movimientos_stock").insert([{ producto_id: producto.id, nombre_producto: producto.nombre, cantidad: cantNum, motivo: `Devolución (Ref: ${cliente.nombre}) - ${devolucionData.motivo}` }])
-    }
-
-    await supabase.from("ventas_b2b").insert([{ producto_id: producto.id, nombre_producto: `🔄 Devolución: ${producto.nombre} (${devolucionData.motivo})`, cantidad: -cantNum, precio_unitario: -(valorNumARS / cantNum), costo_unitario_historico: devolucionData.reingresarStock ? (producto.costo * tasaDolarBlue) : 0, total_trato: -valorNumARS, monto_pagado: 0, cliente_referencia: cliente.nombre, cliente_id: cliente.id, estado: "Devolución", metodo_pago: "A Cuenta Corriente" }])
-    alert("¡Devolución registrada correctamente! Se reintegró el saldo a favor en pesos.")
-    setDevolucionData({ clienteId: "", productoId: "", cantidad: 1, valorReintegro: "", motivo: "", reingresarStock: true })
-    setShowDevolucionModal(false); fetchData(); setIsSaving(false);
-  }
-
+  const handleAprobarUSDT = async (venta: VentaHistorica) => { await supabase.from("ventas_b2b").update({ estado: "Completada", monto_pagado: venta.total_trato }).eq("id", venta.id); alert("Orden Aprobada!"); fetchData(); }
+  const handleAnularVenta = async (venta: VentaHistorica) => { if (!confirm(`¿ANULAR "${venta.nombre_producto}"?`)) return; setIsSaving(true); if (venta.producto_id) { const prodOriginal = productos.find(p => p.id === venta.producto_id); if (prodOriginal) { await supabase.from("productos").update({ stock: prodOriginal.stock + venta.cantidad }).eq("id", venta.producto_id); await supabase.from("movimientos_stock").insert([{ producto_id: venta.producto_id, nombre_producto: prodOriginal.nombre, cantidad: Math.abs(venta.cantidad), motivo: `Anulación (Ref: ${venta.cliente_referencia})` }]) } }; await supabase.from("ventas_b2b").delete().eq("id", venta.id); fetchData(); setIsSaving(false); }
+  const procesarAbono = async (e: React.FormEvent) => { e.preventDefault(); const montoNumARS = Number(abonoData.monto); if (!abonoData.clienteId || !montoNumARS || !abonoData.motivo) return; setIsSaving(true); const cliente = clientes.find(c => c.id === abonoData.clienteId); if (cliente) { const { error } = await supabase.from("clientes_b2b").update({ saldo_usd: Number(cliente.saldo_usd || 0) + (montoNumARS / tasaDolarBlue) }).eq("id", cliente.id); if (!error) { await supabase.from("ventas_b2b").insert([{ nombre_producto: `💰 ABONO: ${abonoData.motivo}`, cantidad: 1, precio_unitario: 0, costo_unitario_historico: 0, total_trato: 0, monto_pagado: montoNumARS, cliente_referencia: cliente.nombre, cliente_id: cliente.id, estado: "Abono", metodo_pago: "Manual" }]); alert("Abono procesado."); setAbonoData({ clienteId: "", monto: "", motivo: "" }); setShowAbonoModal(false); fetchData(); } }; setIsSaving(false); }
+  const handleRegistrarDevolucion = async (e: React.FormEvent) => { e.preventDefault(); const cliente = clientes.find(c => c.id === devolucionData.clienteId); const producto = productos.find(p => p.id === devolucionData.productoId); const cantNum = Number(devolucionData.cantidad); const valorNumARS = Number(devolucionData.valorReintegro); if (!cliente || !producto || cantNum <= 0 || valorNumARS < 0) return alert("Por favor completá los campos correctamente."); setIsSaving(true); const nuevoSaldoUSD = Number(cliente.saldo_usd || 0) + (valorNumARS / tasaDolarBlue); await supabase.from("clientes_b2b").update({ saldo_usd: nuevoSaldoUSD }).eq("id", cliente.id); if (devolucionData.reingresarStock) { await supabase.from("productos").update({ stock: producto.stock + cantNum }).eq("id", producto.id); await supabase.from("movimientos_stock").insert([{ producto_id: producto.id, nombre_producto: producto.nombre, cantidad: cantNum, motivo: `Devolución (Ref: ${cliente.nombre}) - ${devolucionData.motivo}` }]) }; await supabase.from("ventas_b2b").insert([{ producto_id: producto.id, nombre_producto: `🔄 Devolución: ${producto.nombre} (${devolucionData.motivo})`, cantidad: -cantNum, precio_unitario: -(valorNumARS / cantNum), costo_unitario_historico: devolucionData.reingresarStock ? (producto.costo * tasaDolarBlue) : 0, total_trato: -valorNumARS, monto_pagado: 0, cliente_referencia: cliente.nombre, cliente_id: cliente.id, estado: "Devolución", metodo_pago: "A Cuenta Corriente" }]); alert("¡Devolución registrada correctamente! Se reintegró el saldo a favor en pesos."); setDevolucionData({ clienteId: "", productoId: "", cantidad: 1, valorReintegro: "", motivo: "", reingresarStock: true }); setShowDevolucionModal(false); fetchData(); setIsSaving(false); }
   const deleteProducto = async (id: string) => { if (confirm("¿Eliminar artículo?")) { await supabase.from("productos").delete().eq("id", id); fetchData(); } }
-
+  
   const handleRegistrarEgreso = async (e: React.FormEvent) => {
     e.preventDefault(); if (!egresoData.monto || !egresoData.motivo) return; setIsSaving(true);
-    // Guardamos los retiros de caja directamente en pesos
-    const { error } = await supabase.from("egresos_caja").insert([{ monto: Number(egresoData.monto) / tasaDolarBlue, motivo: egresoData.motivo }])
-    if (!error) { alert("Retiro de caja registrado."); setEgresoData({ monto: "", motivo: "" }); setShowEgresoModal(false); fetchData(); }
+    // Guardamos los retiros de caja directamente en pesos para que impacte el libro diario de forma nativa
+    const { error } = await supabase.from("egresos_caja").insert([{ monto: Number(egresoData.monto), motivo: egresoData.motivo }]); if (!error) { alert("Retiro de caja registrado."); setEgresoData({ monto: "", motivo: "" }); setShowEgresoModal(false); fetchData(); }
     setIsSaving(false);
   }
-
+  
   const handleBorrarEgreso = async (id: string) => { if (confirm("¿Anular retiro?")) { setIsSaving(true); await supabase.from("egresos_caja").delete().eq("id", id); fetchData(); setIsSaving(false); } }
+  const handleActualizarTracking = async (e: React.FormEvent) => { e.preventDefault(); setIsSaving(true); const { error } = await supabase.from("ventas_b2b").update({ estado_envio: trackingData.estado_envio, codigo_seguimiento: trackingData.codigo_seguimiento }).eq("id", trackingData.id); if (!error) { alert("Tracking actualizado!"); setShowTrackingModal(false); fetchData(); }; setIsSaving(false); }
 
-  const handleActualizarTracking = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSaving(true);
-    const { error } = await supabase.from("ventas_b2b").update({ estado_envio: trackingData.estado_envio, codigo_seguimiento: trackingData.codigo_seguimiento }).eq("id", trackingData.id)
-    if (!error) { alert("Tracking actualizado!"); setShowTrackingModal(false); fetchData(); }
-    setIsSaving(false);
-  }
-
-  const filterByDate = (dateString: string) => {
-    if (!fechaInicio && !fechaFin) return true;
-    const dateV = new Date(dateString);
-    if (fechaInicio && dateV < new Date(fechaInicio + 'T00:00:00')) return false;
-    if (fechaFin && dateV > new Date(fechaFin + 'T23:59:59')) return false;
-    return true;
-  }
+  const filterByDate = (dateString: string) => { if (!fechaInicio && !fechaFin) return true; const dateV = new Date(dateString); if (fechaInicio && dateV < new Date(fechaInicio + 'T00:00:00')) return false; if (fechaFin && dateV > new Date(fechaFin + 'T23:59:59')) return false; return true; }
 
   const ventasFiltradas = ventas.filter(v => filterByDate(v.created_at))
   const egresosFiltrados = egresos.filter(e => filterByDate(e.created_at))
 
-  // 🚀 CAPA DE COMPATIBILIDAD INTERNA: Traduce registros viejos de USD a ARS sobre la marcha para unificar el Dashboard
-  const totalFacturado = ventasFiltradas.reduce((acc, v) => {
-    const raw = Number(v.total_trato || 0)
-    const enPesos = raw > 0 && raw < 3000 ? (raw * tasaDolarBlue) : raw
-    return acc + enPesos
-  }, 0)
-
-  const ingresosCaja = ventasFiltradas.reduce((acc, v) => {
-    const raw = Number(v.monto_pagado || 0)
-    const enPesos = raw > 0 && raw < 3000 ? (raw * tasaDolarBlue) : raw
-    return acc + enPesos
-  }, 0)
-
-  const salidasCaja = egresosFiltrados.reduce((acc, e) => {
-    const raw = Number(e.monto || 0)
-    return acc + (raw * tasaDolarBlue)
-  }, 0)
-
+  // 🚀 CAPA DE COMPATIBILIDAD INTERNA: Si un registro histórico quedó guardado con escala chica (< 300) se asume viejo USD y se pasa a Pesos, el resto se computa nativo
+  const totalFacturado = ventasFiltradas.reduce((acc, v) => { const raw = Number(v.total_trato || 0); const enPesos = (raw > 0 && raw < 300) ? (raw * tasaDolarBlue) : raw; return acc + enPesos }, 0)
+  const ingresosCaja = ventasFiltradas.reduce((acc, v) => { const raw = Number(v.monto_pagado || 0); const enPesos = (raw > 0 && raw < 300) ? (raw * tasaDolarBlue) : raw; return acc + enPesos }, 0)
+  const salidasCaja = egresosFiltrados.reduce((acc, e) => { const raw = Number(e.monto || 0); const enPesos = (raw > 0 && raw < 300) ? (raw * tasaDolarBlue) : raw; return acc + enPesos }, 0)
   const totalCajaReal = ingresosCaja - salidasCaja
-
-  const totalCostosLotes = ventasFiltradas.reduce((acc, v) => {
-    const rawCost = Number(v.costo_unitario_historico || 0) * (v.cantidad || 0)
-    const enPesos = rawCost > 0 && rawCost < 3000 ? (rawCost * tasaDolarBlue) : rawCost
-    return acc + enPesos
-  }, 0)
-
+  const totalCostosLotes = ventasFiltradas.reduce((acc, v) => { const rawCost = Number(v.costo_unitario_historico || 0) * (v.cantidad || 0); const enPesos = (rawCost > 0 && rawCost < 300) ? (rawCost * tasaDolarBlue) : rawCost; return acc + enPesos }, 0)
   const gananciaNetaReal = totalFacturado - totalCostosLotes 
   const totalVialesVendidos = ventasFiltradas.filter(v => v.estado !== 'Abono').reduce((acc, v) => acc + v.cantidad, 0)
   const ticketPromedio = ventasFiltradas.filter(v => v.estado !== 'Abono').length > 0 ? (totalFacturado / ventasFiltradas.filter(v => v.estado !== 'Abono').length) : 0
@@ -587,120 +500,27 @@ export function useDashboard() {
   const pctCarritos = Math.min(100, Math.round((eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length / maxFunnel) * 100));
   const pctCompras = Math.min(100, Math.round((ventasFiltradas.filter(v => v.estado !== 'Abono').length / maxFunnel) * 100));
 
-  const fetchBlogs = async () => {
-    const { data, error } = await supabase.from("blogs").select("*").order("created_at", { ascending: false })
-    if (data) setBlogs(data)
-  }
-  const handleSaveBlog = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSavingBlog(true);
-    try {
-      await supabase.from("blogs").upsert({ id: formDataBlog.id.trim(), titulo: formDataBlog.titulo.trim(), categoria: formDataBlog.categoria, contenido: formDataBlog.contenido })
-      alert("¡Artículo publicado!"); fetchBlogs(); setEditingBlogId(null); setFormDataBlog({ id: "", titulo: "", categoria: "Tutoriales & Tips", contenido: "" })
-    } catch (error) {} finally { setIsSavingBlog(false) }
-  }
-
+  const fetchBlogs = async () => { const { data } = await supabase.from("blogs").select("*").order("created_at", { ascending: false }); if (data) setBlogs(data); }
+  const handleSaveBlog = async (e: React.FormEvent) => { e.preventDefault(); setIsSavingBlog(true); try { await supabase.from("blogs").upsert({ id: formDataBlog.id.trim(), titulo: formDataBlog.titulo.trim(), categoria: formDataBlog.categoria, contenido: formDataBlog.contenido }); alert("¡Artículo publicado!"); fetchBlogs(); setEditingBlogId(null); setFormDataBlog({ id: "", titulo: "", categoria: "Tutoriales & Tips", contenido: "" }); fetchData(); } catch (error) {} finally { setIsSavingBlog(false) } }
   const deleteBlog = async (id: string) => { if (confirm("¿Eliminar artículo?")) { await supabase.from("blogs").delete().eq("id", id); fetchBlogs(); } }
+  const handleSaveHome = async (e: React.FormEvent) => { if (e) e.preventDefault(); setIsSavingHome(true); try { await supabase.from("home_settings").upsert({ id: "main", ticker_text: homeSettings.ticker_text, ticker_visible: homeSettings.ticker_visible, hero_title: homeSettings.hero_title, hero_subtitle: homeSettings.hero_subtitle, hero_image_url: homeSettings.hero_image_url, hero_cover_url: homeSettings.hero_cover_url, hero_visible: homeSettings.hero_visible, banners: homeSettings.banners, banners_visible: homeSettings.banners_visible, before_after: homeSettings.before_after, before_after_visible: homeSettings.before_after_visible, footer_whatsapp: homeSettings.footer_whatsapp, footer_email: homeSettings.footer_email, footer_address: homeSettings.footer_address, standards_text: homeSettings.standards_text, standards_visible: homeSettings.standards_visible, trust_badges: homeSettings.trust_badges, standards_items: homeSettings.standards_items, faqs: homeSettings.faqs, faq_blog_url: homeSettings.faq_blog_url }); alert("¡Home actualizada!"); } catch (error) {} finally { setIsSavingHome(false) } }
 
-  const handleSaveHome = async (e: React.FormEvent) => {
-    if (e) e.preventDefault(); setIsSavingHome(true);
-    try {
-      await supabase.from("home_settings").upsert({ id: "main", ticker_text: homeSettings.ticker_text, ticker_visible: homeSettings.ticker_visible, hero_title: homeSettings.hero_title, hero_subtitle: homeSettings.hero_subtitle, hero_image_url: homeSettings.hero_image_url, hero_cover_url: homeSettings.hero_cover_url, hero_visible: homeSettings.hero_visible, banners: homeSettings.banners, banners_visible: homeSettings.banners_visible, before_after: homeSettings.before_after, before_after_visible: homeSettings.before_after_visible, footer_whatsapp: homeSettings.footer_whatsapp, footer_email: homeSettings.footer_email, footer_address: homeSettings.footer_address, standards_text: homeSettings.standards_text, standards_visible: homeSettings.standards_visible, trust_badges: homeSettings.trust_badges, standards_items: homeSettings.standards_items, faqs: homeSettings.faqs, faq_blog_url: homeSettings.faq_blog_url })
-      alert("¡Home actualizada!");
-    } catch (error) {} finally { setIsSavingHome(false) }
-  }
-
-  // 🚀 ACTUALIZADO: Las órdenes de taller se ingresan guardando los montos multiplicados por el Blue para homogeneizar el Libro Diario
   const handleRegistrarReparacion = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSaving(true);
     try {
       const servicioMatch = productos.find(p => p.id === reparacionForm.producto_id)
       const nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
-
-      const { error } = await supabase.from("ventas_b2b").insert([{
-        producto_id: reparacionForm.producto_id || null,
-        nombre_producto: nombreServicio,
-        cantidad: 1,
-        precio_unitario: Number(reparacionForm.total_trato) * tasaDolarBlue,
-        costo_unitario_historico: Number(reparacionForm.costo_tecnico) * tasaDolarBlue, 
-        total_trato: Number(reparacionForm.total_trato) * tasaDolarBlue,
-        monto_pagado: Number(reparacionForm.monto_pagado) * tasaDolarBlue,
-        cliente_referencia: reparacionForm.cliente_referencia,
-        estado: reparacionForm.estado,
-        metodo_pago: reparacionForm.metodo_pago,
-        imei: reparacionForm.imei,
-        color: reparacionForm.color,
-        diagnostico_falla: reparacionForm.diagnostico_falla,
-        tecnico_id: reparacionForm.tecnico_id || null,
-        costo_tecnico: Number(reparacionForm.costo_tecnico) * tasaDolarBlue,
-        pago_tecnico_estado: "Pendiente"
-      }])
-
-      if (error) throw error
-      alert("¡Equipo ingresado al taller correctamente!");
-      setShowNuevaReparacion(false);
-      setReparacionForm({ cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" });
-      fetchData();
-    } catch (error: any) { alert("Error: " + error.message) } 
-    finally { setIsSaving(false) }
+      const { error } = await supabase.from("ventas_b2b").insert([{ producto_id: reparacionForm.producto_id || null, nombre_producto: nombreServicio, cantidad: 1, precio_unitario: Number(reparacionForm.total_trato), costo_unitario_historico: Number(reparacionForm.costo_tecnico), total_trato: Number(reparacionForm.total_trato), monto_pagado: Number(reparacionForm.monto_pagado), cliente_referencia: reparacionForm.cliente_referencia, estado: reparacionForm.estado, metodo_pago: reparacionForm.metodo_pago, imei: reparacionForm.imei, color: reparacionForm.color, diagnostico_falla: reparacionForm.diagnostico_falla, tecnico_id: reparacionForm.tecnico_id || null, costo_tecnico: Number(reparacionForm.costo_tecnico), pago_tecnico_estado: "Pendiente" }])
+      if (error) throw error; alert("¡Equipo ingresado al taller correctamente!"); setShowNuevaReparacion(false); setReparacionForm({ cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" }); fetchData();
+    } catch (error: any) { alert("Error: " + error.message) } finally { setIsSaving(false) }
   }
 
-  const handleRegistrarTecnico = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSaving(true);
-    if (editingTecnicoId) {
-      await supabase.from("tecnicos").update(tecnicoForm).eq("id", editingTecnicoId)
-      setEditingTecnicoId(null)
-    } else {
-      await supabase.from("tecnicos").insert([tecnicoForm])
-    }
-    setTecnicoForm({ nombre: "", whatsapp: "", estado: "Activo" }); fetchData(); setIsSaving(false);
-  }
-
-  const handleEliminarTecnico = async (id: string) => {
-    if (confirm("¿Eliminar este técnico de la base de datos?")) {
-      await supabase.from("tecnicos").delete().eq("id", id); fetchData();
-    }
-  }
+  const handleRegistrarTecnico = async (e: React.FormEvent) => { e.preventDefault(); setIsSaving(true); if (editingTecnicoId) { await supabase.from("tecnicos").update(tecnicoForm).eq("id", editingTecnicoId); setEditingTecnicoId(null); } else { await supabase.from("tecnicos").insert([tecnicoForm]) }; setTecnicoForm({ nombre: "", whatsapp: "", estado: "Activo" }); fetchData(); setIsSaving(false); }
+  const handleEliminarTecnico = async (id: string) => { if (confirm("¿Eliminar este técnico de la base de datos?")) { await supabase.from("tecnicos").delete().eq("id", id); fetchData(); } }
 
   const itemIsDolar = carritoAdmin.some(item => item.producto.moneda === "USD")
 
   return {
-    activeTab, setActiveTab: (tab: string) => setActiveTab(tab as ActiveTab), isLoading, isSaving, isUploading, handleLogout,
-    isUploadingCoa, handleCoaUpload, tasaDolarBlue, isFetchingDolar,
-    productos, ventas, clientes, egresos, cupones, movimientosStock, eventosTelemetria, solicitudes,
-    editingId, setEditingId, formData, setFormData, handleImageUpload, handleSave, handleUpdateInline, deleteProducto,
-    showMassUpdateModal, setShowMassUpdateModal, massUpdateData, setMassUpdateData, handleMassUpdate,
-    showStockAdjustModal, setShowStockAdjustModal, stockAdjustData, setStockAdjustData, handleAjusteStockManual,
-    showStockHistoryModal, setShowStockHistoryModal,
-    carritoAdmin, agregarAlCarritoAdmin, removerDelCarritoAdmin, productoSeleccionadoId, setProductoSeleccionadoId, cantidadSeleccionada, setCantidadSeleccionada,
-    ventaData, setVentaData, descuentoData, inputCupon, setInputCupon, handleValidarCupon, manualDescTipo, setManualDescTipo, manualDescValor, setManualDescValor, handleAplicarDescuentoManual, removerDescuento,
-    subtotalTratoCarrito, valorDelDescuentoApli, totalTratoCarritoNeto, saldoFinalCalculado, handleGenerarPresupuesto, handleRegistrarVentaManual,
-    showCuponModal, setShowCuponModal, cuponForm, setCuponForm, handleCrearCupon, handleEliminarCupon,
-    showInvoice, setShowInvoice, invoiceType, invoiceItems, invoiceClientName, invoiceDate, invoiceId, invoiceDiscountAmount, handlePrintPDF, verComprobanteHistorico,
-    clienteForm, setClienteForm, editingClienteId, setEditingClienteId, handleRegistrarCliente, deleteCliente: handleEliminarCliente,
-    searchTermClientes, setSearchTermClientes, filtroClientes, setFiltrowClientes: setFiltroClientes, filtroClientesValor: filtroClientes,
-    showAbonoModal, setShowAbonoModal, abonoData, setAbonoData, procesarAbono,
-    showDevolucionModal, setShowDevolucionModal, devolucionData, setDevolucionData, handleRegistrarDevolucion,
-    showHistorialClienteId, setShowHistorialClienteId, filtroHistorialCliente, setFiltroHistorialCliente, historialVentasCliente, clienteDelHistorial,
-    fechaInicio, setFechaInicio, fechaFin, setFechaFin, ventasFiltradas, egresosFiltrados, clientesNuevosFiltrados: clientes.filter(c => c.created_at ? filterByDate(c.created_at) : true),
-    showEgresoModal, setShowEgresoModal, egresoData, setEgresoData, handleRegistrarEgreso, handleBorrarEgreso,
-    showTrackingModal, setShowTrackingModal, trackingData, setTrackingData, handleActualizarTracking,
-    handleAprobarUSDT, handleAnularVenta, handleAprobarSolicitud, handleRechazarSolicitud,
-    totalFacturado, totalCajaReal, salidasCaja, totalCostosLotes, gananciaNetaReal, totalVialesVendidos, ticketPromedio,
-    pRevenue, pCosts, pProfit, conicGradient,
-    visitasLanding: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_landing").length,
-    vistasFichas: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "ver_ficha_tecnica").length,
-    clicsWP: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "click_whatsapp").length,
-    visitasRealesPortal: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_portal").length,
-    agregadosCarrito: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length,
-    comprasReales: ventasFiltradas.filter(v => v.estado !== 'Abono').length,
-    pctFichas, pctWP, pctPortal, pctCarritos, pctCompras,
-    solicitudesPendientes: solicitudes.filter(s => s.estado === "Pendiente" || s.estado === "Pending").length,
-    ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length,
-    blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog,
-    homeSettings, setHomeSettings, isSavingHome, handleSaveHome,
-    showNuevaReparacion, setShowNuevaReparacion,
-    tecnicos, tecnicoForm, setTecnicoForm, editingTecnicoId, setEditingTecnicoId, 
-    handleRegistrarTecnico, handleEliminarTecnico, 
-    reparacionForm, setReparacionForm, handleRegistrarReparacion
+    activeTab, setActiveTab: (tab: string) => setActiveTab(tab as ActiveTab), isLoading, isSaving, isUploading, handleLogout, isUploadingCoa, handleCoaUpload, tasaDolarBlue, isFetchingDolar, productos, ventas, clientes, egresos, cupones, movimientosStock, eventosTelemetria, solicitudes, editingId, setEditingId, formData, setFormData, handleImageUpload, handleSave, handleUpdateInline, deleteProducto, showMassUpdateModal, setShowMassUpdateModal, massUpdateData, setMassUpdateData, handleMassUpdate, showStockAdjustModal, setShowStockAdjustModal, stockAdjustData, setStockAdjustData, handleAjusteStockManual, showStockHistoryModal, setShowStockHistoryModal, carritoAdmin, agregarAlCarritoAdmin, removerDelCarritoAdmin, productoSeleccionadoId, setProductoSeleccionadoId, cantidadSeleccionada, setCantidadSeleccionada, ventaData, setVentaData, descuentoData, inputCupon, setInputCupon, handleValidarCupon, manualDescTipo, setManualDescTipo, manualDescValor, setManualDescValor, handleAplicarDescuentoManual, removerDescuento, subtotalTratoCarrito, valorDelDescuentoApli, totalTratoCarritoNeto, saldoFinalCalculado, handleGenerarPresupuesto, handleRegistrarVentaManual, showCuponModal, setShowCuponModal, cuponForm, setCuponForm, handleCrearCupon, handleEliminarCupon, showInvoice, setShowInvoice, invoiceType, invoiceItems, invoiceClientName, invoiceDate, invoiceId, invoiceDiscountAmount, handlePrintPDF, verComprobanteHistorico, invoiceCAE, invoiceCAEVto, invoiceNroLegal, clienteForm, setClienteForm, editingClienteId, setEditingClienteId, handleRegistrarCliente, deleteCliente: handleEliminarCliente, searchTermClientes, setSearchTermClientes, filtroClientes, setFiltrowClientes: setFiltroClientes, filtroClientesValor: filtroClientes, showAbonoModal, setShowAbonoModal, abonoData, setAbonoData, procesarAbono, showDevolucionModal, setShowDevolucionModal, devolucionData, setDevolucionData, handleRegistrarDevolucion, showHistorialClienteId, setShowHistorialClienteId, filtroHistorialCliente, setFiltroHistorialCliente, historialVentasCliente, clienteDelHistorial, fechaInicio, setFechaInicio, fechaFin, setFechaFin, ventasFiltradas, egresosFiltrados, clientesNuevosFiltrados: clientes.filter(c => c.created_at ? filterByDate(c.created_at) : true), showEgresoModal, setShowEgresoModal, egresoData, setEgresoData, handleRegistrarEgreso, handleBorrarEgreso, showTrackingModal, setShowTrackingModal, trackingData, setTrackingData, handleActualizarTracking, handleAprobarUSDT, handleAnularVenta, handleAprobarSolicitud, handleRechazarSolicitud, totalFacturado, totalCajaReal, salidasCaja, totalCostosLotes, gananciaNetaReal, totalVialesVendidos, ticketPromedio, pRevenue, pCosts, pProfit, conicGradient, visitasLanding: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_landing").length, vistasFichas: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "ver_ficha_tecnica").length, clicsWP: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "click_whatsapp").length, visitasRealesPortal: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_portal").length, agregadosCarrito: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length, comprasReales: ventasFiltradas.filter(v => v.estado !== 'Abono').length, pctFichas, pctWP, pctPortal, pctCarritos, pctCompras, solicitudesPendientes: solicitudes.filter(s => s.estado === "Pendiente" || s.estado === "Pending").length, ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length, blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog, homeSettings, setHomeSettings, isSavingHome, handleSaveHome, showNuevaReparacion, setShowNuevaReparacion, tecnicos, tecnicoForm, setTecnicoForm, editingTecnicoId, setEditingTecnicoId, handleRegistrarTecnico, handleEliminarTecnico, reparacionForm, setReparacionForm, handleRegistrarReparacion, 
   }
 }

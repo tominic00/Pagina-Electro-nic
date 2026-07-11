@@ -15,8 +15,8 @@ export function DashboardModals(props: any) {
     showEgresoModal, setShowEgresoModal, egresoData, setEgresoData, handleRegistrarEgreso,
     showHistorialClienteId, setShowHistorialClienteId, clienteDelHistorial, filtroHistorialCliente, setFiltroHistorialCliente, historialVentasCliente,
     showInvoice, setShowInvoice, invoiceType, invoiceClientName, invoiceId, invoiceDate, invoiceItems, invoiceDiscountAmount, handlePrintPDF,
-    // 🚀 AGREGAMOS LOS ESTADOS DEL MODAL TALLER DESDE LAS PROPS
-    showNuevaReparacion, setShowNuevaReparacion, clientes
+    showNuevaReparacion, setShowNuevaReparacion, clientes,
+    invoiceCAE, invoiceCAEVto, invoiceNroLegal, tasaDolarBlue
   } = props;
 
   return (
@@ -140,57 +140,216 @@ export function DashboardModals(props: any) {
         </div>
       )}
 
-      {/* 🚀 🖨️ MODAL: COMPROBANTE DE COMPRA PDF (FACTURA) */}
+      {/* 🚀 🖨️ MODAL: COMPROBANTE ADAPTATIVO (REMITO INTELIGENTE O FACTURA C) */}
       {showInvoice && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:static print:block print:bg-transparent print:p-0">
-          <style type="text/css" media="print">{`@page { margin: 0; size: auto; } body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; background-color: white !important; } #printable-invoice { padding-top: 1.5cm !important; margin: 0 auto !important; box-shadow: none !important; background-color: white !important; color: black !important; }`}</style>
+          <style type="text/css" media="print">{`@page { margin: 0.5cm; size: auto; } body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; color: black !important; } #printable-invoice { box-shadow: none !important; background-color: white !important; color: black !important; padding: 0 !important; }`}</style>
           
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full">
-            <div className="p-8 print:p-8 text-black" id="printable-invoice">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full max-h-[92vh] flex flex-col">
+            <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible flex-1" id="printable-invoice">
               
-              <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
-                  <p className="text-[9px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
-                </div>
-                <div className="text-right">
-                  <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUESTO" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
-                  <p className="text-xs font-mono text-gray-500">#{invoiceId}</p>
-                </div>
-              </div>
+              {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
+              {invoiceCAE ? (
+                <div className="space-y-6">
+                  
+                  {/* ENCABEZADO RECUADRADO HOMOLOGADO AFIP */}
+                  <div className="relative border border-black p-4 grid grid-cols-2 gap-4 text-[11px] leading-tight font-medium">
+                    
+                    {/* Cuadro de la Letra C en el Centro Exacto */}
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-black px-4 py-2 text-center z-10 shrink-0">
+                      <span className="text-3xl font-black block leading-none">C</span>
+                      <span className="text-[7px] font-black uppercase tracking-wider block mt-1">COD. 011</span>
+                    </div>
+                    
+                    {/* Lado Izquierdo: Datos de Electro·nic */}
+                    <div className="space-y-0.5 pr-4 border-r border-dashed border-gray-400">
+                      <h1 className="text-2xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
+                      <p className="font-bold text-[9px] text-gray-500 uppercase tracking-widest">Apple Specialist & Tech Store</p>
+                      <p className="pt-2 font-semibold">Av. Aconquija 1200, Showroom</p>
+                      <p className="text-gray-600">Yerba Buena - Tucumán</p>
+                      <p className="text-[10px] font-bold text-gray-700 pt-1">Condición IVA: Responsable Monotributo</p>
+                    </div>
+                    
+                    {/* Lado Derecho: Numeración y CUIT */}
+                    <div className="space-y-0.5 pl-4 text-right">
+                      <h2 className="text-xl font-black uppercase tracking-wider mb-0.5">FACTURA</h2>
+                      <p className="font-mono font-black text-sm text-gray-900">N° {invoiceNroLegal}</p>
+                      <p className="font-bold pt-1">Fecha de Emisión: {invoiceDate}</p>
+                      <p className="font-black pt-2 text-xs">CUIT: 27-232392628-8</p>
+                      <p className="text-gray-600 text-[10px]">Ingresos Brutos: 27232392628</p>
+                      <p className="text-gray-600 text-[10px]">Inicio de Actividades: 01/10/2022</p>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
-                <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Cliente / Facturado a:</p><p className="font-bold text-black">{invoiceClientName}</p></div>
-                <div className="text-right"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Fecha de Emisión:</p><p className="font-bold text-black">{invoiceDate}</p></div>
-              </div>
+                  {/* BOX RECEPTOR / CLIENTE */}
+                  <div className="border border-black p-3.5 bg-gray-50/50 grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-0.5">Señor(es):</p>
+                      <p className="font-black text-gray-900 text-sm">{invoiceClientName}</p>
+                    </div>
+                    <div className="text-right space-y-0.5">
+                      <p className="text-[9px] font-black text-gray-400 uppercase">Condición de Venta:</p>
+                      <p className="font-bold text-gray-800 uppercase text-[10px] tracking-wider">Contado / Pago Único</p>
+                    </div>
+                  </div>
 
-              <table className="w-full text-left mb-10 text-sm">
-                <thead className="bg-black text-white text-[10px] uppercase">
-                  <tr className="text-left"><th className="p-3">Descripción</th><th className="p-3 text-center">Cant.</th><th className="p-3 text-right">Unit.</th><th className="p-3 text-right">Total</th></tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {invoiceItems.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td className="p-4 font-semibold">{item.producto.nombre}</td>
-                      <td className="p-4 text-center">{item.cantidad}</td>
-                      <td className="p-4 text-right text-gray-600">USD {item.producto.precio}</td>
-                      <td className="p-4 text-right font-black">USD {item.producto.precio * item.cantidad}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  {/* TABLA DE ITEMS EN PESOS ARGENTINOS (Obligatorio AFIP) */}
+                  <table className="w-full text-left text-xs border border-black">
+                    <thead className="bg-black text-white text-[9px] font-black uppercase tracking-wider">
+                      <tr>
+                        <th className="p-2.5 pl-4">Descripción / Concepto</th>
+                        <th className="p-2.5 text-center">Cant.</th>
+                        <th className="p-2.5 text-right">Precio Unit.</th>
+                        <th className="p-2.5 text-right pr-4">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {invoiceItems.map((item: any, idx: number) => {
+                        const precioOriginal = item.producto.precio_minorista ?? item.producto.precio;
+                        const precioARS = item.producto.moneda === "USD" ? (precioOriginal * (tasaDolarBlue || 1510)) : precioOriginal;
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50 font-medium text-gray-900">
+                            <td className="p-3 pl-4 font-bold">{item.producto.nombre}</td>
+                            <td className="p-3 text-center font-bold text-gray-700">{item.cantidad}</td>
+                            <td className="p-3 text-right text-gray-600">$ {precioARS.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                            <td className="p-3 text-right font-black pr-4">$ {(precioARS * item.cantidad).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
 
-              <div className="flex justify-end mb-8">
-                <div className="w-56 space-y-2">
-                  <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>USD {invoiceItems.reduce((sum: number, item: any) => sum + (item.producto.precio * item.cantidad), 0)}</span></div>
-                  {invoiceDiscountAmount > 0 && <div className="flex justify-between text-xs font-bold text-emerald-600"><span>Descuento B2B</span><span>- USD {invoiceDiscountAmount.toFixed(2)}</span></div>}
-                  <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-2"><span>Total Neto</span><span>USD {Math.max(0, invoiceItems.reduce((sum: number, item: any) => sum + (item.producto.precio * item.cantidad), 0) - invoiceDiscountAmount).toFixed(2)}</span></div>
+                  {/* RESUMEN FINAL EN PESOS */}
+                  <div className="flex justify-between items-start pt-1">
+                    <p className="text-[9px] text-gray-400 font-bold uppercase italic tracking-wide">
+                      Comprobante oficial CAEA emitido mediante conexión Web Service AFIP
+                    </p>
+                    <div className="w-60 border border-black p-3.5 space-y-1 bg-gray-50/50">
+                      {invoiceDiscountAmount > 0 && (
+                        <div className="flex justify-between text-xs font-bold text-emerald-600">
+                          <span>Rebaja Aplicada</span>
+                          <span>- $ {invoiceDiscountAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-black text-black border-t border-black pt-1.5">
+                        <span>TOTAL NETO</span>
+                        <span>
+                          $ {Math.max(0, invoiceItems.reduce((sum: number, item: any) => {
+                            const pOrig = item.producto.precio_minorista ?? item.producto.precio;
+                            const pARS = item.producto.moneda === "USD" ? (pOrig * (tasaDolarBlue || 1510)) : pOrig;
+                            return sum + (pARS * item.cantidad);
+                          }, 0) - invoiceDiscountAmount).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PIE DE FACTURA LEGAL CON EL CAE HOMOLOGADO */}
+                  <div className="border border-black p-4 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 text-xs">
+                    <div className="border-l-4 border-black pl-3 py-0.5">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Comprobante Fiscal Autorizado</p>
+                      <p className="text-[10px] font-mono font-black text-gray-900 mt-0.5">CAE - CONSTANCIA ELECTRÓNICA AFIP</p>
+                    </div>
+                    <div className="text-left sm:text-right font-mono space-y-0.5">
+                      <p className="font-bold text-sm text-black">CAE N°: <span className="font-black select-all text-black">{invoiceCAE}</span></p>
+                      <p className="text-[11px] font-black text-gray-600">
+                        Vencimiento CAE: {invoiceCAEVto ? `${invoiceCAEVto.slice(6, 8)}/${invoiceCAEVto.slice(4, 6)}/${invoiceCAEVto.slice(0, 4)}` : ""}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                
+                /* 💵 CASO B: REMITO INTERNO INTELIGENTE (PESOS POR DEFECTO, USD SI SON SOLO IPHONES) */
+                (() => {
+                  // Lógica: Si TODOS los items del carrito están en Dólares, imprimimos el remito en Dólares. Si hay aunque sea uno en pesos, unificamos en Pesos.
+                  const isDolarInvoice = invoiceItems.length > 0 && invoiceItems.every((i: any) => i.producto.moneda === "USD");
+                  const currencySymbol = isDolarInvoice ? "USD" : "$";
+
+                  const subtotalCalc = invoiceItems.reduce((sum: number, item: any) => {
+                    const pOrig = item.producto.precio_minorista ?? item.producto.precio;
+                    if (isDolarInvoice) {
+                      return sum + (pOrig * item.cantidad);
+                    } else {
+                      const pARS = item.producto.moneda === "USD" ? (pOrig * (tasaDolarBlue || 1510)) : pOrig;
+                      return sum + (pARS * item.cantidad);
+                    }
+                  }, 0);
+
+                  const discountCalc = isDolarInvoice ? (invoiceDiscountAmount / (tasaDolarBlue || 1510)) : invoiceDiscountAmount;
+                  const totalCalc = Math.max(0, subtotalCalc - discountCalc);
+
+                  return (
+                    <>
+                      <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
+                        <div>
+                          <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
+                          <p className="text-[9px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
+                        </div>
+                        <div className="text-right">
+                          <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUESTO" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
+                          <p className="text-xs font-mono text-gray-500">#{invoiceId}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
+                        <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Cliente / Facturado a:</p><p className="font-bold text-black">{invoiceClientName}</p></div>
+                        <div className="text-right"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Fecha de Emisión:</p><p className="font-bold text-black">{invoiceDate}</p></div>
+                      </div>
+
+                      <table className="w-full text-left mb-10 text-sm">
+                        <thead className="bg-black text-white text-[10px] uppercase">
+                          <tr className="text-left"><th className="p-3">Descripción</th><th className="p-3 text-center">Cant.</th><th className="p-3 text-right">Unit.</th><th className="p-3 text-right">Total</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {invoiceItems.map((item: any, idx: number) => {
+                            const pOrig = item.producto.precio_minorista ?? item.producto.precio;
+                            const pRow = isDolarInvoice ? pOrig : (item.producto.moneda === "USD" ? (pOrig * (tasaDolarBlue || 1510)) : pOrig);
+                            
+                            return (
+                              <tr key={idx}>
+                                <td className="p-4 font-semibold">{item.producto.nombre}</td>
+                                <td className="p-4 text-center">{item.cantidad}</td>
+                                <td className="p-4 text-right text-gray-600">{currencySymbol} {pRow.toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</td>
+                                <td className="p-4 text-right font-black">{currencySymbol} {(pRow * item.cantidad).toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+
+                      <div className="flex justify-end mb-8">
+                        <div className="w-64 space-y-2">
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Subtotal</span>
+                            <span>{currencySymbol} {subtotalCalc.toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</span>
+                          </div>
+                          {discountCalc > 0 && (
+                            <div className="flex justify-between text-xs font-bold text-emerald-600">
+                              <span>Descuento B2B</span>
+                              <span>- {currencySymbol} {discountCalc.toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-2">
+                            <span>Total Neto</span>
+                            <span>{currencySymbol} {totalCalc.toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</span>
+                          </div>
+                          {!isDolarInvoice && (
+                            <div className="flex justify-between text-[10px] font-bold text-gray-400 pt-1">
+                              <span>Ref. Sistema</span>
+                              <span>USD {(totalCalc / (tasaDolarBlue || 1510)).toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()
+              )}
 
             </div>
             
-            <div className="bg-zinc-100 p-6 flex justify-end gap-3 print:hidden border-t border-zinc-200">
+            <div className="bg-zinc-100 p-6 flex justify-end gap-3 print:hidden border-t border-zinc-200 shrink-0">
               <button onClick={() => setShowInvoice(false)} className="px-5 py-2 rounded-xl text-sm font-bold text-zinc-500 hover:bg-zinc-200 transition-colors">Cerrar</button>
               <button onClick={handlePrintPDF} className="bg-purple-600 text-white px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-purple-700 transition-colors shadow-md active:scale-95"><Printer className="size-4"/> Imprimir PDF</button>
             </div>
