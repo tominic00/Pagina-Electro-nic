@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import path from "path"
 import fs from "fs"
 // @ts-ignore
-import Afip from "afip.js"
+import Afip from "@afipsdk/afip.js"
 
 export async function POST(request: Request) {
   try {
