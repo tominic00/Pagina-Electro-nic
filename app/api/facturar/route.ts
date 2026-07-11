@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const { totalARS, clienteNombre, clienteDNI } = await request.json()
 
-    // 1. 🚀 EN LA RAÍZ: Resolvemos la ruta absoluta en la raíz del proyecto
+    // 1. Resolvemos las rutas absolutas de tus llaves
     const rootCertsDir = path.join(process.cwd(), "afip_certs")
     const keyPath = path.join(rootCertsDir, "privada.key")
     const certPath = path.join(rootCertsDir, "certificado.crt")
@@ -20,15 +20,19 @@ export async function POST(request: Request) {
       )
     }
 
-    // 2. 🚀 BYPASS: Inicializamos con bypass de caché para romper el Token de node_modules
+    // 🚀 NUEVO: Leemos el CONTENIDO real de los archivos de texto
+    const certContenido = fs.readFileSync(certPath, "utf-8")
+    const keyContenido = fs.readFileSync(keyPath, "utf-8")
+
+    // 2. 🚀 COMPLETAMENTE CONFIGURADO PARA VERCEL (Con contenidos y carpeta /tmp)
     const afip = new (Afip as any)({
       CUIT: 27232392628,
-      cert: certPath,
-      key: keyPath,
+      cert: certContenido, // 👈 CAMBIADO: Ahora le pasamos el contenido del archivo
+      key: keyContenido,   // 👈 CAMBIADO: Ahora le pasamos el contenido del archivo
       production: true,
-      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX",
-      ta_folder: "/tmp",   // Guarda el Token de acceso en tu carpeta raíz afip_certs
-      res_folder: "/tmp",  // Ignora la caché residual de node_modules
+      access_token: "TU_TOKEN_DE_AFIPSDK", // 👈 Tu token real
+      ta_folder: "/tmp",   
+      res_folder: "/tmp"
     })
 
     // 3. Obtenemos el próximo número de comprobante disponible de AFIP
