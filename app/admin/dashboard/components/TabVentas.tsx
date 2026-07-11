@@ -32,7 +32,7 @@ interface TabVentasProps {
   clientes: any[]
   saldoFinalCalculado: number
   handleGenerarPresupuesto: () => void
-  handleRegistrarVentaManual: () => void
+  handleRegistrarVentaManual: (tipo: "interno" | "afip") => void // 🚀 Sincronizado en interfaz
   setShowCuponModal: (show: boolean) => void
   setActiveTab: (tab: string) => void 
 }
@@ -70,15 +70,11 @@ export function TabVentas({
   setActiveTab
 }: TabVentasProps) {
   
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useState<string>("")
   const [tipoFacturacion, setTipoFacturacion] = useState<"interno" | "afip">("interno")
-  
-  // 🚀 COTIZACIÓN ACTUALIZADA A $1510 SEGÚN TU PANEL
   const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1510)
   const [isFetchingDolar, setIsFetchingDolar] = useState(true)
   const [montoEnPesos, setMontoEnPesos] = useState("")
-
-  // 🚀 ESTADOS PARA EL CONVERSOR RÁPIDO DE CAJA
   const [convertidorUSD, setConvertidorUSD] = useState("")
   const [convertidorARS, setConvertidorARS] = useState("")
 
@@ -98,7 +94,6 @@ export function TabVentas({
     const pesosStr = e.target.value
     setMontoEnPesos(pesosStr)
     const pesosNum = pesosStr === "" ? 0 : Number(pesosStr)
-    
     if (ventaData.metodoPago === "USD" || ventaData.metodoPago === "USDT") {
       setVentaData({...ventaData, montoPagado: pesosNum})
     } else {
@@ -106,7 +101,6 @@ export function TabVentas({
     }
   }
 
-  // 🚀 CONTROLADORES DEL CONVERSOR INTERACTIVO
   const handleConversionDesdeUSD = (val: string) => {
     setConvertidorUSD(val)
     if (val === "") setConvertidorARS("")
@@ -119,24 +113,16 @@ export function TabVentas({
     else setConvertidorUSD((Number(val) / tasaDolarBlue).toFixed(2))
   }
 
-  const clienteSeleccionado = ventaData.clienteId ? clientes?.find(c => c.id === ventaData.clienteId) : null
-
   const productosFiltrados = productos.filter(p => 
     p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.categoria?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const formatARS = (usdAmount: number) => {
-    return (usdAmount * tasaDolarBlue).toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-  }
-
-  // Identifica dinámicamente cómo mostrar el precio individual de cada artículo
   const formatPrecioItemOriginal = (p: any) => {
     const sim = p.moneda === "USD" ? "US$" : "$"
     return `${sim} ${(p.precio_minorista ?? p.precio).toLocaleString("es-AR")}`
   }
 
-  // Suma total del ticket adaptado a lo que tiene que marcar la caja en pesos
   const totalTicketARS = carritoAdmin.reduce((sum, item) => {
     const precioBase = item.producto.precio_minorista ?? item.producto.precio
     const valorARS = item.producto.moneda === "USD" ? (precioBase * tasaDolarBlue) : precioBase
@@ -153,7 +139,7 @@ export function TabVentas({
   return (
     <div className="mx-auto max-w-6xl text-left grid lg:grid-cols-12 gap-6 animate-in fade-in duration-500 w-full">
       
-      {/* 🚀 PANEL IZQUIERDO: ARMAR CARRITO / POS */}
+      {/* PANEL IZQUIERDO: ARMAR CARRITO / POS */}
       <div className="lg:col-span-7 rounded-2xl bg-[#161B22] border border-zinc-800 p-5 sm:p-6 shadow-xl space-y-5 self-start">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div className="flex items-center gap-3">
@@ -168,7 +154,6 @@ export function TabVentas({
           </button>
         </div>
 
-        {/* Buscador y Selección de Artículo */}
         <div className="space-y-4 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
@@ -197,7 +182,6 @@ export function TabVentas({
           </div>
         </div>
 
-        {/* 🚀 LISTA DE ÍTEMS DETALLADA */}
         {carritoAdmin.length > 0 && (
           <div className="border-t border-zinc-800 pt-5 space-y-4">
             <div className="flex justify-between items-end">
@@ -235,7 +219,6 @@ export function TabVentas({
               })}
             </div>
 
-            {/* 🚀 MÓDULO DE DESCUENTOS SIEMPRE ADENTRO DEL RESUMEN */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 shadow-inner">
               <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-3"><Tag className="size-3.5 text-emerald-500"/> Aplicar Rebaja</h4>
               
@@ -243,9 +226,7 @@ export function TabVentas({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex gap-2">
                     <input type="text" value={inputCupon} onChange={e => setInputCupon(e.target.value.toUpperCase())} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs uppercase text-white outline-none focus:border-emerald-500" placeholder="Código web" />
-                    <button onClick={handleValidarCupon} disabled={isSaving} className="bg-zinc-800 text-white px-3 rounded-lg text-[10px] font-bold uppercase hover:bg-zinc-700 transition-colors shrink-0">
-                      {isSaving ? <Loader2 className="size-3 animate-spin" /> : "Usar"}
-                    </button>
+                    <button onClick={handleValidarCupon} disabled={isSaving} className="bg-zinc-800 text-white px-3 rounded-lg text-[10px] font-bold uppercase hover:bg-zinc-700 transition-colors shrink-0">Usar</button>
                   </div>
                   <div className="flex gap-2">
                     <select value={manualDescTipo} onChange={e => setManualDescTipo(e.target.value as "porcentaje" | "monto")} className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-300 outline-none focus:border-emerald-500">
@@ -267,8 +248,7 @@ export function TabVentas({
               )}
             </div>
 
-            {/* TOTALIZADOR ADAPTADO COMPLETAMENTE A PESOS EN GRANDE */}
-            <div className="bg-[#0E1117] border border-purple-500/30 p-5 rounded-2xl shadow-xl space-y-2 relative overflow-hidden">
+            <div className="bg-zinc-950 border border-purple-500/30 p-5 rounded-2xl shadow-xl space-y-2 relative overflow-hidden">
               <div className="absolute right-0 top-0 size-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"/>
               <div className="flex justify-between items-center text-xs text-zinc-400 relative z-10 font-bold uppercase tracking-wider">
                 <span>Subtotal Mostrador</span>
@@ -292,7 +272,7 @@ export function TabVentas({
         )}
       </div>
 
-      {/* 🚀 PANEL DERECHO: CLIENTE Y FACTURACIÓN */}
+      {/* PANEL DERECHO: CLIENTE Y FACTURACIÓN */}
       <div className="lg:col-span-5 rounded-2xl bg-[#161B22] border border-zinc-800 p-5 sm:p-6 shadow-xl space-y-6 self-start">
         
         <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
@@ -307,7 +287,6 @@ export function TabVentas({
         </div>
 
         <div className="space-y-4">
-          {/* Asignación de Cliente */}
           <div>
             <div className="flex justify-between items-end mb-1">
               <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Asignar Cliente</label>
@@ -339,17 +318,13 @@ export function TabVentas({
             </div>
           </div>
 
-          {/* MÉTODO DE PAGO */}
           <div>
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-1.5">
               <CreditCard className="size-3.5" /> Método de Cobro
             </label>
             <select 
               value={ventaData.metodoPago || "Efectivo"} 
-              onChange={e => {
-                setVentaData({...ventaData, metodoPago: e.target.value});
-                setMontoEnPesos(""); 
-              }} 
+              onChange={e => { setVentaData({...ventaData, metodoPago: e.target.value}); setMontoEnPesos(""); }} 
               className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all font-bold"
             >
               <option value="Efectivo">💵 Efectivo (ARS)</option>
@@ -362,7 +337,6 @@ export function TabVentas({
             </select>
           </div>
 
-          {/* MONTO RECIBIDO EN ARS */}
           <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center justify-between">
               Monto Recibido
@@ -389,7 +363,6 @@ export function TabVentas({
             )}
           </div>
 
-          {/* 🚀 NUEVO: WIDGET CONVERSOR MULTIMONEDA INTERACTIVO EN CAJA */}
           <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3.5 space-y-2.5 shadow-inner">
             <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
               <RefreshCw className="size-3.5 animate-pulse text-amber-500"/> Conversor Rápido de Divisas
@@ -397,29 +370,16 @@ export function TabVentas({
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-zinc-600">USD</span>
-                <input 
-                  type="number" 
-                  value={convertidorUSD} 
-                  onChange={e => handleConversionDesdeUSD(e.target.value)} 
-                  className="w-full text-xs bg-zinc-900 text-white rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-bold" 
-                  placeholder="0.00" 
-                />
+                <input type="number" value={convertidorUSD} onChange={e => handleConversionDesdeUSD(e.target.value)} className="w-full text-xs bg-zinc-900 text-white rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-bold" placeholder="0.00" />
               </div>
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-zinc-600">ARS</span>
-                <input 
-                  type="number" 
-                  value={convertidorARS} 
-                  onChange={e => handleConversionDesdeARS(e.target.value)} 
-                  className="w-full text-xs bg-zinc-900 text-amber-400 rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-black" 
-                  placeholder="0" 
-                />
+                <input type="number" value={convertidorARS} onChange={e => handleConversionDesdeARS(e.target.value)} className="w-full text-xs bg-zinc-900 text-amber-400 rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-black" placeholder="0" />
               </div>
             </div>
             <p className="text-[8px] font-bold text-zinc-600 text-center uppercase tracking-wider">Cálculo basado en la cotización del mostrador ($1510)</p>
           </div>
 
-          {/* Aviso de Cuenta Corriente */}
           {ventaData.clienteId && carritoAdmin.length > 0 && (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs">
               <div className="flex justify-between items-center">
@@ -443,7 +403,8 @@ export function TabVentas({
             </button>
           </div>
 
-          <button onClick={() => { handleRegistrarVentaManual(); setMontoEnPesos(""); }} disabled={isSaving || carritoAdmin.length === 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none">
+          {/* 🚀 CORREGIDO: Ahora sí le pasa el parámetro tipoFacturacion en vivo al cerebro */}
+          <button onClick={() => { handleRegistrarVentaManual(tipoFacturacion); setMontoEnPesos(""); }} disabled={isSaving || carritoAdmin.length === 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none">
             {isSaving ? <Loader2 className="size-5 animate-spin" /> : (
               <>
                 <Receipt className="size-5" /> 

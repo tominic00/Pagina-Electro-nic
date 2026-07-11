@@ -9,10 +9,7 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
   const [metodoPagoFiltro, setMetodoPagoFiltro] = useState("todos")
-  
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>({ key: 'created_at', direction: 'desc' })
-
-  // Tasa para normalizar a Pesos el display (la misma de tu punto de venta)
   const [tasaDolarBlue, setTasaDolarBlue] = useState<number>(1510)
 
   useEffect(() => {
@@ -26,7 +23,13 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
     fetchDolar()
   }, [])
 
-  // 1. Unificamos Ventas y Egresos en un solo "Libro"
+  // Normalizador interno de compatibilidad histórica
+  const normalizarARS = (montoRaw: number) => {
+    const num = Number(montoRaw || 0)
+    return (num > 0 && num < 500) ? (num * tasaDolarBlue) : num
+  }
+
+  // 1. Unificamos Ventas y Egresos directamente en ARS nativos
   const movimientosUnificados = useMemo(() => {
     const vnts = ventas.map((v: any) => ({
       id: v.id,
@@ -36,7 +39,7 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
       concepto: v.nombre_producto,
       cliente: v.cliente_referencia || "Mostrador",
       metodo: v.metodo_pago || "Efectivo",
-      montoUSD: Number(v.monto_pagado || 0),
+      montoARS: normalizarARS(v.monto_pagado || v.total_trato),
       estado: v.estado
     }))
 
@@ -47,13 +50,13 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
       created_at: e.created_at,
       concepto: e.motivo,
       cliente: "N/A",
-      metodo: "Efectivo", // Por lo general los egresos de caja son billetes
-      montoUSD: Number(e.monto || 0),
+      metodo: "Efectivo",
+      montoARS: normalizarARS(e.monto),
       estado: "Completada"
     }))
 
     return [...vnts, ...egrs]
-  }, [ventas, egresos])
+  }, [ventas, egresos, tasaDolarBlue])
 
   // 2. Filtramos el Libro
   const movimientosFiltrados = useMemo(() => {
@@ -88,13 +91,12 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
     setSortConfig({ key, direction })
   }
 
-  // 4. Métricas Superiores
-  const totalIngresosARS = movimientosFiltrados.filter(m => m.tipo === "ingreso").reduce((sum, m) => sum + (m.montoUSD * tasaDolarBlue), 0)
-  const totalEgresosARS = movimientosFiltrados.filter(m => m.tipo === "egreso").reduce((sum, m) => sum + (m.montoUSD * tasaDolarBlue), 0)
+  // 4. Métricas Superiores corregidas de sumatoria directa sin re-multiplicar
+  const totalIngresosARS = movimientosFiltrados.filter(m => m.tipo === "ingreso").reduce((sum, m) => sum + m.montoARS, 0)
+  const totalEgresosARS = movimientosFiltrados.filter(m => m.tipo === "egreso").reduce((sum, m) => sum + m.montoARS, 0)
   
-  // Desglose por Método
   const metodosAgrupados = movimientosFiltrados.filter(m => m.tipo === "ingreso").reduce((acc: any, m) => {
-    acc[m.metodo] = (acc[m.metodo] || 0) + (m.montoUSD * tasaDolarBlue)
+    acc[m.metodo] = (acc[m.metodo] || 0) + m.montoARS
     return acc
   }, {})
 
@@ -104,14 +106,12 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
     <div className="space-y-6 text-left w-full animate-in fade-in duration-500">
       
       {/* CABECERA */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2"><BookOpen className="size-6 text-emerald-500"/> Libro Diario</h2>
-          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Caja y movimientos detallados (Ref: 1 USD = ${tasaDolarBlue})</p>
-        </div>
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2"><BookOpen className="size-6 text-emerald-500"/> Libro Diario</h2>
+        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Caja y movimientos detallados (Ref: 1 USD = ${tasaDolarBlue})</p>
       </div>
 
-      {/* MÉTRICAS FINANCIERAS */}
+      {/* METRICAS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#161B22] border border-zinc-800 p-5 rounded-2xl">
           <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1.5"><ArrowUpCircle className="size-3.5"/> Total Ingresos ARS</span>
@@ -163,27 +163,17 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
         </div>
       </div>
 
-      {/* TABLA ESTILO EXCEL */}
+      {/* TABLA PRINCIPAL */}
       <div className="bg-[#161B22] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
               <tr>
-                <th className="p-4 pl-6 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('created_at')}>
-                  <div className="flex items-center gap-1.5">Fecha & Hora <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div>
-                </th>
-                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('concepto')}>
-                  <div className="flex items-center gap-1.5">Concepto / Artículo <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div>
-                </th>
-                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('cliente')}>
-                  <div className="flex items-center gap-1.5">Cliente <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div>
-                </th>
-                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('metodo')}>
-                  <div className="flex items-center gap-1.5">Medio de Pago <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div>
-                </th>
-                <th className="p-4 text-right cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('montoUSD')}>
-                  <div className="flex items-center justify-end gap-1.5">Monto Final ARS <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div>
-                </th>
+                <th className="p-4 pl-6 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('created_at')}><div className="flex items-center gap-1.5">Fecha & Hora <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div></th>
+                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('concepto')}><div className="flex items-center gap-1.5">Concepto / Artículo <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div></th>
+                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('cliente')}><div className="flex items-center gap-1.5">Cliente <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div></th>
+                <th className="p-4 cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('metodo')}><div className="flex items-center gap-1.5">Medio de Pago <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div></th>
+                <th className="p-4 text-right cursor-pointer hover:text-white transition-colors group" onClick={() => requestSort('montoARS')}><div className="flex items-center justify-end gap-1.5">Monto Final ARS <ArrowDownUp className="size-3 opacity-0 group-hover:opacity-100"/></div></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/40">
@@ -209,15 +199,13 @@ export function TabLibroDiario({ ventas = [], egresos = [] }: any) {
                       </span>
                     </td>
                     <td className="p-4">
-                      <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-300">
-                        <CreditCard className="size-3.5 text-zinc-500"/> {mov.metodo}
-                      </span>
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-300"><CreditCard className="size-3.5 text-zinc-500"/> {mov.metodo}</span>
                     </td>
                     <td className="p-4 text-right">
                       <span className={cn("font-black text-sm block", isIngreso ? "text-emerald-400" : "text-red-400")}>
-                        {isIngreso ? "+" : "-"} {formatARS(mov.montoUSD * tasaDolarBlue)}
+                        {isIngreso ? "+" : "-"} {formatARS(mov.montoARS)}
                       </span>
-                      <span className="text-[9px] font-bold text-zinc-600 block mt-0.5">USD {mov.montoUSD.toFixed(2)}</span>
+                      <span className="text-[9px] font-bold text-zinc-600 block mt-0.5">USD {(mov.montoARS / tasaDolarBlue).toFixed(2)}</span>
                     </td>
                   </tr>
                 )

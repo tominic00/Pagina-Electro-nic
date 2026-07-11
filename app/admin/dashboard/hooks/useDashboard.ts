@@ -444,6 +444,7 @@ export function useDashboard() {
   }
 
   // 🚀 CORREGIDO: Filtro de impresión inteligente por CSS Media. Enmascara sidebars, headers negros y fondos al imprimir remitos
+  // 🚀 AISLADOR TOTAL DE IMPRESIÓN: Borra sidebars, layouts negros y fuerza al PDF a renderizar solo el papel blanco
   const handlePrintPDF = () => { 
     const originalTitle = document.title; 
     document.title = `Comprobante_${invoiceClientName}_${invoiceId}`; 
@@ -452,15 +453,39 @@ export function useDashboard() {
     style.id = 'print-layout-booster';
     style.innerHTML = `
       @media print {
-        body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        aside, header, button, .no-print, nav, aside.fixed, .sidebar { display: none !important; }
-        main { padding: 0 !important; margin: 0 !important; background: white !important; }
-        div[role="dialog"], .invoice-box { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; max-width: 100% !important; background: white !important; color: black !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+        /* 1. Apaga el fondo negro de la app completa */
+        html, body, main, #root, #__next { 
+          background: white !important; 
+          color: black !important; 
+          margin: 0 !important; 
+          padding: 0 !important; 
+        }
+        /* 2. Oculta absolutamente CUALQUIER elemento administrativo del panel */
+        aside, header, nav, footer, button, .no-print, [className*="sidebar"], [className*="navbar"], .fixed.inset-y-0 { 
+          display: none !important; 
+          visibility: hidden !important; 
+        }
+        /* 3. Aísla el cuadro del diálogo flotante y lo expande a plano completo A4 */
+        div[role="dialog"], .fixed.inset-0, #printable-invoice, #printable-invoice * { 
+          display: block !important; 
+          visibility: visible !important;
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          background: white !important;
+          color: black !important;
+          box-shadow: none !important;
+          border: none !important;
+          margin: 0 !important;
+        }
       }
     `;
     document.head.appendChild(style);
     window.print(); 
     
+    // Limpiamos los estilos al cerrar la ventana de la impresora
     const targetBlock = document.getElementById('print-layout-booster');
     if (targetBlock) targetBlock.remove();
     document.title = originalTitle; 
