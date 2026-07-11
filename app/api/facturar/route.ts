@@ -27,8 +27,8 @@ export async function POST(request: Request) {
       key: keyPath,
       production: true,
       access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX",
-      ta_folder: rootCertsDir,   // Guarda el Token de acceso en tu carpeta raíz afip_certs
-      res_folder: rootCertsDir    // Ignora la caché residual de node_modules
+      ta_folder: "/tmp",   // Guarda el Token de acceso en tu carpeta raíz afip_certs
+      res_folder: "/tmp",  // Ignora la caché residual de node_modules
     })
 
     // 3. Obtenemos el próximo número de comprobante disponible de AFIP
