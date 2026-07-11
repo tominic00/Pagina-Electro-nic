@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       cert: certContenido, // 👈 CAMBIADO: Ahora le pasamos el contenido del archivo
       key: keyContenido,   // 👈 CAMBIADO: Ahora le pasamos el contenido del archivo
       production: true,
-      access_token: "TU_TOKEN_DE_AFIPSDK", // 👈 Tu token real
+      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX", // 👈 Tu token real
       ta_folder: "/tmp",   
       res_folder: "/tmp"
     })
