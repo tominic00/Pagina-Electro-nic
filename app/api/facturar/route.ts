@@ -8,42 +8,46 @@ export async function POST(request: Request) {
   try {
     const { totalARS, clienteNombre, clienteDNI } = await request.json()
 
-    // 1. Resolvemos las rutas absolutas de tus llaves en la Mac/Servidor
+    // 1. 🚀 EN LA RAÍZ: Resolvemos la ruta absoluta en la raíz del proyecto
     const rootCertsDir = path.join(process.cwd(), "afip_certs")
     const keyPath = path.join(rootCertsDir, "privada.key")
     const certPath = path.join(rootCertsDir, "certificado.crt")
 
     if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
       return NextResponse.json(
-        { success: false, error: "Faltan los archivos key o crt en la carpeta afip_certs" },
+        { success: false, error: "Faltan los archivos key o crt en la carpeta afip_certs (Raíz)" },
         { status: 500 }
       )
     }
 
-    // 2. Inicializamos el SDK de AFIP con tu CUIT de producción
+    // 2. 🚀 BYPASS: Inicializamos con bypass de caché para romper el Token de node_modules
     const afip = new (Afip as any)({
-     CUIT: 27232392628,
-     cert: certPath,
-     key: keyPath,
-     production: true 
-})
+      CUIT: 27232392628,
+      cert: certPath,
+      key: keyPath,
+      production: true,
+      ta_folder: rootCertsDir,   // Guarda el Token de acceso en tu carpeta raíz afip_certs
+      res_folder: rootCertsDir    // Ignora la caché residual de node_modules
+    })
 
     // 3. Obtenemos el próximo número de comprobante disponible de AFIP
-    const PUNTO_VENTA = 10 // 👈 ⚠️ REEMPLAZÁ EL 2 POR EL NÚMERO QUE CREASTE EN EL PASO 4 DE AFIP
+    const PUNTO_VENTA = 10 
     const TIPO_COMPROBANTE = 11 // 11 significa Factura C
 
     const lastVoucher = await afip.ElectronicBilling.getLastVoucher(PUNTO_VENTA, TIPO_COMPROBANTE)
     const proximoNumero = lastVoucher + 1
 
-    // 4. Estructuramos el pedido oficial bajo normas estrictas de AFIP
-    const fechaHoyYMD = parseInt(new Date().toISOString().replace(/-/g, "").split("T")[0])
+    // 4. 🚀 BLINDADO: Fecha en YYYYMMDD clavada con hora local argentina (evita rebotes horarios)
+    const opcionesFecha = { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' } as const
+    const formateador = new Intl.DateTimeFormat('fr-CA', opcionesFecha)
+    const fechaHoyYMD = parseInt(formateador.format(new Date()).replace(/-/g, ""))
 
     const payloadAFIP = {
       CantReg: 1,
       PtoVta: PUNTO_VENTA,
       CbteTipo: TIPO_COMPROBANTE,
-      Concepto: 1, // 1 = Productos (Accesorios/iPhones)
-      DocTipo: clienteDNI ? 96 : 99, // 96 = DNI, 99 = Consumidor Final sin identificar
+      Concepto: 1, // 1 = Productos
+      DocTipo: clienteDNI ? 96 : 99, // 96 = DNI, 99 = Consumidor Final
       DocNro: clienteDNI ? parseInt(clienteDNI) : 0,
       CbteDesde: proximoNumero,
       CbteHasta: proximoNumero,
@@ -54,11 +58,11 @@ export async function POST(request: Request) {
       ImpOpEx: 0,
       ImpIVA: 0,
       ImpTrib: 0,
-      MonId: "PES", // Moneda oficial de mostrador: Pesos Argentinos
+      MonId: "PES",
       MonCotiz: 1
     }
 
-    // 5. Despachamos a los servidores de AFIP para que nos devuelva el CAE
+    // 5. Despachamos a los servidores de AFIP
     const resultado = await afip.ElectronicBilling.createVoucher(payloadAFIP)
 
     return NextResponse.json({
