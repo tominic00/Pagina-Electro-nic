@@ -74,9 +74,17 @@ export async function POST(request: Request) {
     })
 
   } catch (error: any) {
-    console.error("AFIP Error Crítico:", error)
+    // 🚀 ACÁ ATRAPAMOS EL MOTIVO REAL DEL REBOTE DE AFIP
+    let detalleAFIP = error.message;
+    
+    if (error.response && error.response.data) {
+      // Si AFIP mandó un texto con la explicación, lo extraemos
+      detalleAFIP = error.response.data.toString();
+    }
+
+    console.error("AFIP Error Crítico:", detalleAFIP);
     return NextResponse.json(
-      { success: false, error: error.message || "Error de comunicación con el WS de AFIP" },
+      { success: false, error: detalleAFIP },
       { status: 500 }
     )
   }
