@@ -220,3 +220,31 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #1D1D1F; 
 }
+@media print {
+  /* 1. Oculta TODO el panel de administrador, menús y fondos */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 2. Hace visible ÚNICAMENTE tu factura y lo que tenga adentro */
+  #ticket-factura, #ticket-factura * {
+    visibility: visible;
+  }
+
+  /* 3. Acomoda la factura bien arriba a la izquierda de la hoja de papel */
+  #ticket-factura {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+  }
+
+  /* 4. Obliga a la impresora a respetar los colores de fondo y logos (sino los borra) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

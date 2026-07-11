@@ -143,9 +143,50 @@ export function DashboardModals(props: any) {
       {/* 🚀 🖨️ MODAL: COMPROBANTE ADAPTATIVO (REMITO INTELIGENTE O FACTURA C) */}
       {showInvoice && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:static print:block print:bg-transparent print:p-0">
-          <style type="text/css" media="print">{`@page { margin: 0.5cm; size: auto; } body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; color: black !important; } #printable-invoice { box-shadow: none !important; background-color: white !important; color: black !important; padding: 0 !important; }`}</style>
+          <style type="text/css" media="print">{`
+            @page { 
+              margin: 1cm; 
+              size: auto; 
+            }
+            body { 
+              background-color: white !important; 
+              color: black !important; 
+            }
+            /* 1. Oculta absolutamente TODO el dashboard, barras y fondos negros */
+            body * { 
+              visibility: hidden; 
+            }
+            /* 2. Hace visible ÚNICAMENTE el contenido del comprobante (Factura o Remito) */
+            #printable-invoice, #printable-invoice * { 
+              visibility: visible !important; 
+            }
+            /* 3. Desclava el ticket de las restricciones de altura del modal y lo pega arriba a la izquierda */
+            #printable-invoice { 
+              position: absolute !important; 
+              left: 0 !important; 
+              top: 0 !important; 
+              width: 100% !important; 
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              padding: 0 !important; 
+              margin: 0 !important; 
+              box-shadow: none !important;
+              background-color: white !important;
+              color: black !important;
+            }
+            /* 4. Obliga a Chrome/Safari a imprimir los colores de las tablas y el cuadro de la letra C */
+            * { 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+            }
+            .bg-black { background-color: black !important; color: white !important; }
+            .bg-black * { color: white !important; }
+            .text-white { color: white !important; }
+          `}</style>
           
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full max-h-[92vh] flex flex-col">
+          {/* Modificamos agregando: print:max-h-none print:h-auto print:overflow-visible */}
+           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible flex flex-col">
             <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible flex-1" id="printable-invoice">
               
               {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
@@ -164,8 +205,8 @@ export function DashboardModals(props: any) {
                     {/* Lado Izquierdo: Datos de Electro·nic */}
                     <div className="space-y-0.5 pr-4 border-r border-dashed border-gray-400">
                       <h1 className="text-2xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
-                      <p className="font-bold text-[9px] text-gray-500 uppercase tracking-widest">Apple Specialist & Tech Store</p>
-                      <p className="pt-2 font-semibold">Av. Aconquija 1200, Showroom</p>
+                      <p className="font-bold text-[9px] text-gray-500 uppercase tracking-widest">Tecnologia en General Y Servicio Tecnico Especializado</p>
+                      <p className="pt-2 font-semibold">Florida Sur 24, Local 2</p>
                       <p className="text-gray-600">Yerba Buena - Tucumán</p>
                       <p className="text-[10px] font-bold text-gray-700 pt-1">Condición IVA: Responsable Monotributo</p>
                     </div>
