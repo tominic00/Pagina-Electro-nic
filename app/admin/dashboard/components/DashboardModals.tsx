@@ -142,7 +142,9 @@ export function DashboardModals(props: any) {
 
       {/* 🚀 🖨️ MODAL: COMPROBANTE ADAPTATIVO (REMITO INTELIGENTE O FACTURA C) */}
       {showInvoice && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:static print:block print:bg-transparent print:p-0">
+        <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:absolute print:inset-0 print:block print:bg-white print:p-0">
+          
+          {/* 🧙‍♂️ CSS MÁGICO: Obliga a la impresora a ignorar el modo oscuro y centrar la factura */}
           <style type="text/css" media="print">{`
             @page { 
               margin: 1cm; 
@@ -152,30 +154,38 @@ export function DashboardModals(props: any) {
               background-color: white !important; 
               color: black !important; 
             }
-            /* 1. Oculta absolutamente TODO el dashboard, barras y fondos negros */
+            /* 1. Oculta absolutamente todo el sitio web de fondo (sidebar, tablas oscuras, etc.) */
             body * { 
-              visibility: hidden; 
+              visibility: hidden !important; 
             }
-            /* 2. Hace visible ÚNICAMENTE el contenido del comprobante (Factura o Remito) */
-            #printable-invoice, #printable-invoice * { 
+            /* 2. Hace visible únicamente nuestro modal de facturación y lo que tenga adentro */
+            #invoice-modal-root, #invoice-modal-root * { 
               visibility: visible !important; 
             }
-            /* 3. Desclava el ticket de las restricciones de altura del modal y lo pega arriba a la izquierda */
-            #printable-invoice { 
+            /* 3. Desclava el modal de la pantalla y lo posiciona al principio de la hoja de papel */
+            #invoice-modal-root { 
               position: absolute !important; 
               left: 0 !important; 
               top: 0 !important; 
               width: 100% !important; 
-              height: auto !important;
-              max-height: none !important;
-              overflow: visible !important;
+              height: auto !important; 
+              background-color: white !important;
               padding: 0 !important; 
               margin: 0 !important; 
-              box-shadow: none !important;
-              background-color: white !important;
-              color: black !important;
+              display: block !important;
             }
-            /* 4. Obliga a Chrome/Safari a imprimir los colores de las tablas y el cuadro de la letra C */
+            /* 4. Aplana los contenedores internos para que fluyan en múltiples páginas si es necesario */
+            #invoice-modal-root > div {
+              max-height: none !important;
+              height: auto !important;
+              width: 100% !important;
+              box-shadow: none !important;
+              border: none !important;
+              border-radius: 0 !important;
+              overflow: visible !important;
+              background-color: white !important;
+            }
+            /* 5. Fuerza a Chrome/Safari a pintar las barras negras de los títulos y recuadros */
             * { 
               -webkit-print-color-adjust: exact !important; 
               print-color-adjust: exact !important; 
@@ -183,10 +193,10 @@ export function DashboardModals(props: any) {
             .bg-black { background-color: black !important; color: white !important; }
             .bg-black * { color: white !important; }
             .text-white { color: white !important; }
+            .bg-gray-50 { background-color: #f9fafb !important; }
           `}</style>
           
-          {/* Modificamos agregando: print:max-h-none print:h-auto print:overflow-visible */}
-           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible flex flex-col">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible flex flex-col">
             <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible flex-1" id="printable-invoice">
               
               {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
@@ -205,7 +215,7 @@ export function DashboardModals(props: any) {
                     {/* Lado Izquierdo: Datos de Electro·nic */}
                     <div className="space-y-0.5 pr-4 border-r border-dashed border-gray-400">
                       <h1 className="text-2xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
-                      <p className="font-bold text-[9px] text-gray-500 uppercase tracking-widest">Tecnologia en General Y Servicio Tecnico Especializado</p>
+                      <p className="font-bold text-[9px] text-gray-500 uppercase tracking-widest">Tecnologia en General Y Servicio Técnico Especializado</p>
                       <p className="pt-2 font-semibold">Florida Sur 24, Local 2</p>
                       <p className="text-gray-600">Yerba Buena - Tucumán</p>
                       <p className="text-[10px] font-bold text-gray-700 pt-1">Condición IVA: Responsable Monotributo</p>
@@ -263,7 +273,7 @@ export function DashboardModals(props: any) {
                   {/* RESUMEN FINAL EN PESOS */}
                   <div className="flex justify-between items-start pt-1">
                     <p className="text-[9px] text-gray-400 font-bold uppercase italic tracking-wide">
-                      Comprobante oficial CAEA emitido mediante conexión Web Service AFIP
+                      Comprobante oficial emitido mediante conexión Web Service AFIP
                     </p>
                     <div className="w-60 border border-black p-3.5 space-y-1 bg-gray-50/50">
                       {invoiceDiscountAmount > 0 && (
@@ -303,7 +313,6 @@ export function DashboardModals(props: any) {
                 
                 /* 💵 CASO B: REMITO INTERNO INTELIGENTE (PESOS POR DEFECTO, USD SI SON SOLO IPHONES) */
                 (() => {
-                  // Lógica: Si TODOS los items del carrito están en Dólares, imprimimos el remito en Dólares. Si hay aunque sea uno en pesos, unificamos en Pesos.
                   const isDolarInvoice = invoiceItems.length > 0 && invoiceItems.every((i: any) => i.producto.moneda === "USD");
                   const currencySymbol = isDolarInvoice ? "USD" : "$";
 
