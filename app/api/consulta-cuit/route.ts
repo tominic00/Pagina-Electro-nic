@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "El CUIT debe tener exactamente 11 dígitos numéricos." }, { status: 400 })
     }
 
-    // 1. Lectura de tus certificados comerciales
+    // 1. Lectura de tus llaves comerciales
     const rootCertsDir = path.join(process.cwd(), "afip_certs")
     const keyPath = path.join(rootCertsDir, "privada.key")
     const certPath = path.join(rootCertsDir, "certificado.crt")
@@ -30,24 +30,27 @@ export async function POST(req: Request) {
       res_folder: "/tmp"
     })
 
-    // 🚀 EL FIX: No pases ni token ni sign. El SDK los genera e inyecta de forma automática en el fondo.
-    const datosAfip = await afip.WebService('ws_sr_padron_a5').executeRequest('getPersona', {
-      cuitRepresentada: 27232392628, // Tu CUIT emisor
-      idPersona: Number(cuit)        // El CUIT del cliente que estás buscando
-    })
+    // 🚀 LA SOLUCIÓN INICIAL CORREGIDA: En la librería de JS, el método es plano y directo.
+    // No lleva ".Register", se ejecuta directo sobre "afip"
+    const datosAfip = await afip.getTaxpayerDetails(Number(cuit))
 
-    if (!datosAfip || !datosAfip.personaReturn) {
+    if (!datosAfip) {
       return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT en el padrón." })
     }
 
-    const persona = datosAfip.personaReturn.persona
+    // Estructura de respuesta blindada (dependiendo de cómo responda el proxy de la librería)
+    const persona = datosAfip.personaReturn?.persona || datosAfip.persona || datosAfip
     
     if (!persona) {
-      return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona o empresa activa." })
+      return NextResponse.json({ success: false, error: "El CUIT fue rechazado o no se encuentra activo." })
     }
 
-    // Extraemos la Razón Social limpia (o Nombre y Apellido si es monotributista/persona física)
+    // Extraemos la Razón Social o el nombre completo de la persona física
     const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
+
+    if (!razonSocial) {
+      return NextResponse.json({ success: false, error: "El CUIT no devolvió una Razón Social válida." })
+    }
 
     return NextResponse.json({
       success: true,
