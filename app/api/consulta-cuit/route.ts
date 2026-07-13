@@ -18,7 +18,6 @@ export async function POST(req: Request) {
     const certContenido = fs.readFileSync(certPath, "utf-8")
     const keyContenido = fs.readFileSync(keyPath, "utf-8")
 
-    // 2. 🚀 EL FIX: Usamos require para evitar que Vercel rompa el constructor al minificar
     const Afip = require("@afipsdk/afip.js")
     
     const afip = new Afip({
@@ -26,19 +25,33 @@ export async function POST(req: Request) {
       cert: certContenido,
       key: keyContenido,
       production: true,
-      access_token: "t2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX", // 👈 ⚠️ ¡PEGÁ TU TOKEN REAL ACÁ!
+      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX", // 👈 Tu token real
       ta_folder: "/tmp",
       res_folder: "/tmp"
     })
 
-    // 3. Consulta al padrón ws_sr_padron_a5
-    const datosAfip = await afip.Register.getTaxpayerDetails(Number(cuit))
+    // 🚀 2. SOLUCIÓN UNIVERSAL: Pedimos el Ticket de Acceso (TA) para el padrón A5
+    const ta = await afip.GetServiceTA('ws_sr_padron_a5')
+    
+    // 🚀 3. Ejecutamos la consulta directa al método oficial de AFIP
+    const datosAfip = await afip.WebService('ws_sr_padron_a5').execute('getPersona', {
+      token: ta.token,
+      sign: ta.sign,
+      cuitRepresentada: 27232392628, // Tu CUIT emisor
+      idPersona: Number(cuit)        // El CUIT del cliente que consultás
+    })
 
     if (!datosAfip || !datosAfip.personaReturn) {
-      return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT." })
+      return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT en AFIP." })
     }
 
     const persona = datosAfip.personaReturn.persona
+    
+    if (!persona) {
+      return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona activa en el padrón." })
+    }
+
+    // Extraemos la Razón Social o armamos el nombre completo si es persona física
     const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
 
     return NextResponse.json({
@@ -50,7 +63,7 @@ export async function POST(req: Request) {
     console.error("Error en Padrón AFIP:", error)
     return NextResponse.json({ 
       success: false, 
-      error: error.message || "Error inesperado en la conexión con el padrón." 
+      error: error.message || "Error inesperado en la conexión con el padrón de AFIP." 
     }, { status: 500 })
   }
 }
