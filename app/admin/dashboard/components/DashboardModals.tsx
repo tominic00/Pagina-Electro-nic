@@ -142,70 +142,59 @@ export function DashboardModals(props: any) {
 
       {/* 🚀 🖨️ MODAL: COMPROBANTE ADAPTATIVO (REMITO INTELIGENTE O FACTURA C) */}
       {showInvoice && (
-        <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:absolute print:inset-0 print:block print:bg-white print:p-0">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           
-          {/* 🧙‍♂️ CSS MÁGICO DEFINITIVO: Destruye Flexbox y previene bloqueos del Dashboard */}
+          {/* ☢️ CSS MÁGICO NUCLEAR: Arranca la factura del modal y la teletransporta a la hoja */}
           <style type="text/css" media="print">{`
             @page { 
               margin: 1cm; 
               size: portrait; 
             }
-            body { 
-              background-color: white !important; 
-              color: black !important; 
-            }
-            /* 1. 🛑 DETONA LAS ANIMACIONES */
-            *, *::before, *::after {
-              animation: none !important;
-              transform: none !important;
-              transition: none !important;
-              opacity: 1 !important;
-            }
-            /* 2. Oculta todo el panel de administración de fondo */
+            /* 1. Apaga TODO el sitio web (Dashboard, menú, fondo oscuro) */
             body * { 
               visibility: hidden !important; 
             }
-            /* 3. Resucita únicamente el modal de la factura */
-            #invoice-modal-root, #invoice-modal-root * { 
+            /* 2. Resucita ÚNICAMENTE el ticket y todo su contenido interno */
+            #printable-invoice, #printable-invoice * { 
               visibility: visible !important; 
             }
-            /* 4. 🚀 SOLUCIÓN AL DESBORDAMIENTO: Evita que los divs contenedores del dashboard corten el papel */
-            div, main, section {
-              overflow: visible !important;
-              max-height: none !important;
-            }
-            /* 5. 🚀 ANULACIÓN TOTAL DE FLEXBOX: Fuerza formato bloque puro */
-            #invoice-modal-root { 
+            /* 3. 🚀 EL TRUCO MAESTRO: Desclava el ticket del flexbox/scroll y lo tira suelto en la hoja */
+            #printable-invoice { 
               position: absolute !important; 
               left: 0 !important; 
               top: 0 !important; 
               width: 100% !important; 
-              height: auto !important; 
-              display: block !important;
-              background-color: white !important;
-            }
-            #invoice-modal-root > div, #printable-invoice {
-              display: block !important; /* 👈 CLAVE: Esto rompe el flex-1 de Tailwind que te rompía la hoja */
-              max-height: none !important;
               height: auto !important;
+              max-height: none !important;
+              display: block !important; 
               overflow: visible !important;
-              box-shadow: none !important;
-              border: none !important;
-              border-radius: 0 !important;
-              background-color: white !important;
-              color: black !important;
               padding: 0 !important;
+              margin: 0 !important;
+              border: none !important;
+              background-color: white !important;
             }
-            /* 6. Contraste negro puro para la tinta de la impresora */
+            /* 4. Destruye las animaciones de Tailwind que clavan la pantalla en blanco */
+            *, *::before, *::after {
+              animation: none !important;
+              transition: none !important;
+              transform: none !important;
+              opacity: 1 !important;
+            }
+            /* 5. Fuerza que Chrome respete los fondos negros (ej: Cabecera de la tabla) */
+            * { 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+            }
             .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
             .border, .border-black { border-color: black !important; }
             .bg-black { background-color: black !important; color: white !important; }
             .bg-black * { color: white !important; }
           `}</style>
           
-          {/* Agregamos modificadores print:block y print:h-auto directos para blindar el HTML */}
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible print:block flex flex-col">
-            <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible print:h-auto print:block flex-1" id="printable-invoice">
+          {/* 🧹 LIMPIEZA: Quitamos las clases "print:" de Tailwind para que mande el CSS puro */}
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col">
+            <div className="p-8 text-black overflow-y-auto flex-1" id="printable-invoice">
+              
               
               {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
               {invoiceCAE ? (
