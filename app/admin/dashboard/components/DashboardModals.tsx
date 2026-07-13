@@ -142,59 +142,75 @@ export function DashboardModals(props: any) {
 
       {/* 🚀 🖨️ MODAL: COMPROBANTE ADAPTATIVO (REMITO INTELIGENTE O FACTURA C) */}
       {showInvoice && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           
-          {/* ☢️ CSS MÁGICO NUCLEAR: Arranca la factura del modal y la teletransporta a la hoja */}
+          {/* ☢️ CSS MÁGICO DEFINITIVO: Destruye la trampa de centrado de Chrome */}
           <style type="text/css" media="print">{`
-            @page { 
-              margin: 1cm; 
-              size: portrait; 
-            }
-            /* 1. Apaga TODO el sitio web (Dashboard, menú, fondo oscuro) */
-            body * { 
-              visibility: hidden !important; 
-            }
-            /* 2. Resucita ÚNICAMENTE el ticket y todo su contenido interno */
-            #printable-invoice, #printable-invoice * { 
+            /* 1. Resetear el documento a hoja de papel */
+            @page { margin: 1cm; size: portrait; }
+            body { background: white !important; }
+            
+            /* 2. Ocultar absolutamente todo en la web */
+            body * { visibility: hidden !important; }
+            
+            /* 3. Hacer visible solo la estructura de nuestra factura */
+            #invoice-modal-root, #invoice-modal-root * { 
               visibility: visible !important; 
             }
-            /* 3. 🚀 EL TRUCO MAESTRO: Desclava el ticket del flexbox/scroll y lo tira suelto en la hoja */
-            #printable-invoice { 
-              position: absolute !important; 
-              left: 0 !important; 
-              top: 0 !important; 
-              width: 100% !important; 
+            
+            /* 4. 🚀 EL FIX DEFINITIVO: Romper la trampa del Flexbox Centrado */
+            /* Esto arranca la factura del medio de la pantalla y la ancla arriba a la izquierda como un Word */
+            #invoice-modal-root {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              display: block !important; /* Mata el 'flex items-center' que te aplastaba la hoja */
+              width: 100% !important;
               height: auto !important;
-              max-height: none !important;
-              display: block !important; 
-              overflow: visible !important;
+              min-height: 100vh !important;
+              background-color: white !important;
               padding: 0 !important;
               margin: 0 !important;
+            }
+            
+            /* 5. Romper los límites de altura y scroll del cuadradito blanco */
+            #invoice-modal-container, #printable-invoice {
+              display: block !important; /* Mata el flex-col interno */
+              width: 100% !important;
+              max-width: none !important;
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important; /* Permite que el texto fluya a una 2da hoja si es muy largo */
+              box-shadow: none !important;
               border: none !important;
+              border-radius: 0 !important;
               background-color: white !important;
             }
-            /* 4. Destruye las animaciones de Tailwind que clavan la pantalla en blanco */
+            
+            #printable-invoice {
+              padding: 0 !important;
+            }
+            
+            /* 6. Desactivar animaciones de Tailwind que clavan la pantalla en opacidad 0 */
             *, *::before, *::after {
               animation: none !important;
               transition: none !important;
               transform: none !important;
               opacity: 1 !important;
             }
-            /* 5. Fuerza que Chrome respete los fondos negros (ej: Cabecera de la tabla) */
-            * { 
-              -webkit-print-color-adjust: exact !important; 
-              print-color-adjust: exact !important; 
-            }
-            .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
-            .border, .border-black { border-color: black !important; }
+            
+            /* 7. Forzar colores oscuros para la tinta (Bypass del ahorro de tinta de Chrome) */
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .text-black, h1, h2, h3, p, th, td, span, tr { color: black !important; }
+            .border, .border-black, .border-b-2 { border-color: black !important; }
             .bg-black { background-color: black !important; color: white !important; }
             .bg-black * { color: white !important; }
+            .bg-gray-50, .bg-gray-50\\/50 { background-color: #f9fafb !important; }
           `}</style>
-          
-          {/* 🧹 LIMPIEZA: Quitamos las clases "print:" de Tailwind para que mande el CSS puro */}
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col">
+
+          {/* 👇 ACÁ ESTÁ EL NUEVO ID: invoice-modal-container */}
+          <div id="invoice-modal-container" className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col">
             <div className="p-8 text-black overflow-y-auto flex-1" id="printable-invoice">
-              
               
               {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
               {invoiceCAE ? (
@@ -334,7 +350,7 @@ export function DashboardModals(props: any) {
                           <p className="text-[9px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
                         </div>
                         <div className="text-right">
-                          <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUESTO" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
+                          <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUEర్ణ" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
                           <p className="text-xs font-mono text-gray-500">#{invoiceId}</p>
                         </div>
                       </div>
