@@ -144,7 +144,7 @@ export function DashboardModals(props: any) {
       {showInvoice && (
         <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:absolute print:inset-0 print:block print:bg-white print:p-0">
           
-          {/* 🧙‍♂️ CSS MÁGICO: Obliga a la impresora a ignorar el modo oscuro y centrar la factura */}
+          {/* 🧙‍♂️ CSS MÁGICO AVANZADO: Mata animaciones de Tailwind y fuerza visibilidad */}
           <style type="text/css" media="print">{`
             @page { 
               margin: 1cm; 
@@ -154,46 +154,47 @@ export function DashboardModals(props: any) {
               background-color: white !important; 
               color: black !important; 
             }
-            /* 1. Oculta absolutamente todo el sitio web de fondo (sidebar, tablas oscuras, etc.) */
+            /* 1. 🛑 DETONA LAS ANIMACIONES: Evita que el fade-in deje la factura con opacidad 0 al imprimir */
+            *, *::before, *::after {
+              animation: none !important;
+              transform: none !important;
+              transition: none !important;
+              opacity: 1 !important;
+            }
+            /* 2. Oculta todo el panel de administración de fondo */
             body * { 
               visibility: hidden !important; 
             }
-            /* 2. Hace visible únicamente nuestro modal de facturación y lo que tenga adentro */
+            /* 3. Resucita únicamente el modal de la factura */
             #invoice-modal-root, #invoice-modal-root * { 
               visibility: visible !important; 
             }
-            /* 3. Desclava el modal de la pantalla y lo posiciona al principio de la hoja de papel */
+            /* 4. Rompe los límites de altura (max-h) y desborde (overflow) del Dashboard */
             #invoice-modal-root { 
               position: absolute !important; 
               left: 0 !important; 
               top: 0 !important; 
               width: 100% !important; 
               height: auto !important; 
-              background-color: white !important;
-              padding: 0 !important; 
-              margin: 0 !important; 
               display: block !important;
+              background-color: white !important;
+              overflow: visible !important;
             }
-            /* 4. Aplana los contenedores internos para que fluyan en múltiples páginas si es necesario */
-            #invoice-modal-root > div {
+            #invoice-modal-root > div, #printable-invoice {
               max-height: none !important;
               height: auto !important;
-              width: 100% !important;
+              overflow: visible !important;
               box-shadow: none !important;
               border: none !important;
               border-radius: 0 !important;
-              overflow: visible !important;
               background-color: white !important;
+              color: black !important;
             }
-            /* 5. Fuerza a Chrome/Safari a pintar las barras negras de los títulos y recuadros */
-            * { 
-              -webkit-print-color-adjust: exact !important; 
-              print-color-adjust: exact !important; 
-            }
+            /* 5. Fuerza el color negro en textos y tablas para que no salga gris claro o blanco */
+            .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
+            .border, .border-black { border-color: black !important; }
             .bg-black { background-color: black !important; color: white !important; }
             .bg-black * { color: white !important; }
-            .text-white { color: white !important; }
-            .bg-gray-50 { background-color: #f9fafb !important; }
           `}</style>
           
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible flex flex-col">
@@ -304,7 +305,7 @@ export function DashboardModals(props: any) {
                     <div className="text-left sm:text-right font-mono space-y-0.5">
                       <p className="font-bold text-sm text-black">CAE N°: <span className="font-black select-all text-black">{invoiceCAE}</span></p>
                       <p className="text-[11px] font-black text-gray-600">
-                        Vencimiento CAE: {invoiceCAEVto ? `${invoiceCAEVto.slice(6, 8)}/${invoiceCAEVto.slice(4, 6)}/${invoiceCAEVto.slice(0, 4)}` : ""}
+                        Vencimiento CAE: {invoiceCAEVto ? (invoiceCAEVto.includes("-") ? invoiceCAEVto.split("-").reverse().join("/") : `${invoiceCAEVto.slice(6, 8)}/${invoiceCAEVto.slice(4, 6)}/${invoiceCAEVto.slice(0, 4)}`) : ""}
                       </p>
                     </div>
                   </div>
