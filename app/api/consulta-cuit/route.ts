@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const keyContenido = fs.readFileSync(keyPath, "utf-8")
 
     // 2. 🚀 EL FIX: Usamos require para evitar que Vercel rompa el constructor al minificar
-    const Afip = require("@afipsdk/afipsdk")
+    const Afip = require("@afipsdk/afip.js")
     
     const afip = new Afip({
       CUIT: 27232392628,
