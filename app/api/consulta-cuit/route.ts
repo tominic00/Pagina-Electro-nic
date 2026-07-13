@@ -8,11 +8,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "El CUIT debe tener exactamente 11 dígitos numéricos." }, { status: 400 })
     }
 
-    // 🚀 BYPASS DEFINITIVO: Como AfipSDK cobra por usar el Padrón, los esquivamos.
-    // Usamos el proxy público, gratuito y ultra rápido de TangoFactura para resolver el CUIT.
+    // 🚀 BYPASS DEFINITIVO: Consulta al proxy de TangoFactura
     const res = await fetch(`https://afip.tangofactura.com/Rest/GetContribuyente?cuit=${cuit}`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' }
+      headers: { 
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0' // Por si nos bloquean por ser bot
+      }
     })
 
     if (!res.ok) {
@@ -21,13 +23,17 @@ export async function POST(req: Request) {
 
     const data = await res.json()
 
-    // Si el CUIT no existe o está dado de baja, Tango devuelve "error: true"
-    if (data.error || !data.Contribuyente) {
-      return NextResponse.json({ success: false, error: data.mensaje || "El CUIT no pertenece a un contribuyente activo." })
+    // 🚀 EL FIX: TangoFactura devuelve "errorFaltante: true" si el CUIT no existe
+    if (data.errorFaltante) {
+      return NextResponse.json({ success: false, error: "El CUIT no pertenece a un contribuyente activo." })
     }
 
-    // Extraemos la Razón Social limpia
-    const razonSocial = data.Contribuyente.nombre || data.Contribuyente.razonSocial
+    // 🚀 EL FIX 2: Los datos vienen directo en la raíz (data.nombre), no adentro de otra cosa
+    const razonSocial = data.nombre || data.razonSocial
+
+    if (!razonSocial) {
+      return NextResponse.json({ success: false, error: "AFIP no devolvió una Razón Social válida." })
+    }
 
     return NextResponse.json({
       success: true,
