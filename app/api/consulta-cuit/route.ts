@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       cert: certContenido,
       key: keyContenido,
       production: true,
-      access_token: "tu_token_real_de_afipsdk_aca_adentro", // 👈 Pegá tu token limpio acá
+      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX", // 👈 Pegá tu token limpio acá
       ta_folder: "/tmp",
       res_folder: "/tmp"
     })
@@ -55,6 +55,11 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Error en Padrón AFIP:", error)
-    return NextResponse.json({ success: false, error: "CUIT no alcanzado por el padrón o error de conexión." }, { status: 500 })
-  }
+    
+    // 🚀 2. MODIFICADO: Ahora te va a decir exactamente por qué falló en el cartelito
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || "Error inesperado en la conexión con el padrón." 
+    }, { status: 500 })
+}
 }
