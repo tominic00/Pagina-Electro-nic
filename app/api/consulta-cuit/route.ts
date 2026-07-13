@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "El CUIT debe tener exactamente 11 dígitos numéricos." }, { status: 400 })
     }
 
-    // 1. Lectura de tus llaves comerciales
+    // 1. Lectura de tus certificados comerciales
     const rootCertsDir = path.join(process.cwd(), "afip_certs")
     const keyPath = path.join(rootCertsDir, "privada.key")
     const certPath = path.join(rootCertsDir, "certificado.crt")
@@ -30,28 +30,23 @@ export async function POST(req: Request) {
       res_folder: "/tmp"
     })
 
-    // 🚀 2. SOLUCIÓN UNIVERSAL: Pedimos el Ticket de Acceso (TA) para el padrón A5
-    const ta = await afip.GetServiceTA('ws_sr_padron_a5')
-    
-    // 🚀 3. Ejecutamos la consulta directa al método oficial de AFIP
+    // 🚀 EL FIX: No pases ni token ni sign. El SDK los genera e inyecta de forma automática en el fondo.
     const datosAfip = await afip.WebService('ws_sr_padron_a5').execute('getPersona', {
-      token: ta.token,
-      sign: ta.sign,
       cuitRepresentada: 27232392628, // Tu CUIT emisor
-      idPersona: Number(cuit)        // El CUIT del cliente que consultás
+      idPersona: Number(cuit)        // El CUIT del cliente que estás buscando
     })
 
     if (!datosAfip || !datosAfip.personaReturn) {
-      return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT en AFIP." })
+      return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT en el padrón." })
     }
 
     const persona = datosAfip.personaReturn.persona
     
     if (!persona) {
-      return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona activa en el padrón." })
+      return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona o empresa activa." })
     }
 
-    // Extraemos la Razón Social o armamos el nombre completo si es persona física
+    // Extraemos la Razón Social limpia (o Nombre y Apellido si es monotributista/persona física)
     const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
 
     return NextResponse.json({
@@ -63,7 +58,7 @@ export async function POST(req: Request) {
     console.error("Error en Padrón AFIP:", error)
     return NextResponse.json({ 
       success: false, 
-      error: error.message || "Error inesperado en la conexión con el padrón de AFIP." 
+      error: error.message || "Error inesperado en la conexión con el padrón." 
     }, { status: 500 })
   }
 }
