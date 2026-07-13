@@ -445,6 +445,7 @@ export function useDashboard() {
 
   // 🚀 CORREGIDO: Filtro de impresión inteligente por CSS Media. Enmascara sidebars, headers negros y fondos al imprimir remitos
   // 🚀 AISLADOR TOTAL DE IMPRESIÓN: Borra sidebars, layouts negros y fuerza al PDF a renderizar solo el papel blanco
+  // 🚀 REPARADO EN EL NÚCLEO: Aislador total de impresión sin aplastar elementos hijos
   const handlePrintPDF = () => { 
     const originalTitle = document.title; 
     document.title = `Comprobante_${invoiceClientName}_${invoiceId}`; 
@@ -453,33 +454,73 @@ export function useDashboard() {
     style.id = 'print-layout-booster';
     style.innerHTML = `
       @media print {
-        /* 1. Apaga el fondo negro de la app completa */
+        /* 1. Limpieza total de fondos y alturas del Layout */
         html, body, main, #root, #__next { 
           background: white !important; 
           color: black !important; 
           margin: 0 !important; 
           padding: 0 !important; 
+          height: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
         }
-        /* 2. Oculta absolutamente CUALQUIER elemento administrativo del panel */
+        
+        /* 2. Oculta sidebars, menús nav, botones y todo el panel administrativo */
         aside, header, nav, footer, button, .no-print, [className*="sidebar"], [className*="navbar"], .fixed.inset-y-0 { 
           display: none !important; 
           visibility: hidden !important; 
         }
-        /* 3. Aísla el cuadro del diálogo flotante y lo expande a plano completo A4 */
-        div[role="dialog"], .fixed.inset-0, #printable-invoice, #printable-invoice * { 
+        
+        /* 3. Posiciona el contenedor del modal arriba a la izquierda de la hoja */
+        #invoice-modal-root { 
           display: block !important; 
           visibility: visible !important;
           position: absolute !important;
           left: 0 !important;
           top: 0 !important;
           width: 100% !important;
-          max-width: 100% !important;
+          height: auto !important;
           background: white !important;
-          color: black !important;
+        }
+
+        /* 4. Resetea la caja blanca para que fluya hacia abajo sin límites de pantalla */
+        #invoice-modal-container, #printable-invoice {
+          display: block !important;
+          visibility: visible !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
           box-shadow: none !important;
           border: none !important;
           margin: 0 !important;
+          padding: 10px !important;
+          background: white !important;
+          color: black !important;
         }
+
+        /* 5. ✅ CORREGIDO: Los textos e ítems internos vuelven a su posición relativa normal */
+        #printable-invoice * { 
+          visibility: visible !important;
+          position: relative !important; /* 👈 Devuelve el texto a su flujo natural */
+          display: cubic-bezier !important;
+          animation: none !important;
+          transition: none !important;
+          transform: none !important;
+          opacity: 1 !important;
+        }
+        
+        /* 6. Obliga a respetar los contrastes negros de tablas y textos */
+        * { 
+          -webkit-print-color-adjust: exact !important; 
+          print-color-adjust: exact !important; 
+        }
+        .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
+        .border, .border-black { border-color: black !important; }
+        .bg-black { background-color: black !important; color: white !important; }
+        .bg-black * { color: white !important; }
+        .bg-gray-50, .bg-gray-50\\/50 { background-color: #f9fafb !important; }
       }
     `;
     document.head.appendChild(style);
