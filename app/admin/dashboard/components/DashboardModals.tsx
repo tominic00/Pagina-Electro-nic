@@ -144,61 +144,80 @@ export function DashboardModals(props: any) {
       {showInvoice && (
         <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:absolute print:inset-0 print:block print:bg-white print:p-0">
           
-          {/* 🧙‍♂️ CSS MÁGICO AVANZADO: Mata animaciones de Tailwind y fuerza visibilidad */}
+          {/* 🧙‍♂️ CSS MÁGICO DEFINITIVO: Rompe el colapso de Flexbox y fuerza dimensiones reales */}
           <style type="text/css" media="print">{`
             @page { 
               margin: 1cm; 
-              size: auto; 
+              size: portrait; 
             }
-            body { 
-              background-color: white !important; 
-              color: black !important; 
+            /* 1. Desbloquea todas las restricciones de scroll y altura del panel oscuro de fondo */
+            html, body, main, #__next {
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              background-color: white !important;
+              color: black !important;
             }
-            /* 1. 🛑 DETONA LAS ANIMACIONES: Evita que el fade-in deje la factura con opacidad 0 al imprimir */
-            *, *::before, *::after {
-              animation: none !important;
-              transform: none !important;
-              transition: none !important;
-              opacity: 1 !important;
-            }
-            /* 2. Oculta todo el panel de administración de fondo */
+            /* 2. Oculta el fondo del Dashboard */
             body * { 
               visibility: hidden !important; 
             }
-            /* 3. Resucita únicamente el modal de la factura */
+            /* 3. Hace visible únicamente nuestro modal de facturación */
             #invoice-modal-root, #invoice-modal-root * { 
               visibility: visible !important; 
             }
-            /* 4. Rompe los límites de altura (max-h) y desborde (overflow) del Dashboard */
-            #invoice-modal-root { 
+            /* 4. 🚀 ANULACIÓN DE FLEXBOX: Convierte los contenedores en Bloques puros para que no se aplasten a 0px */
+            #invoice-modal-root,
+            #invoice-modal-root > div,
+            #printable-invoice { 
+              display: block !important;
               position: absolute !important; 
               left: 0 !important; 
               top: 0 !important; 
               width: 100% !important; 
               height: auto !important; 
-              display: block !important;
-              background-color: white !important;
-              overflow: visible !important;
-            }
-            #invoice-modal-root > div, #printable-invoice {
               max-height: none !important;
-              height: auto !important;
               overflow: visible !important;
+              margin: 0 !important; 
               box-shadow: none !important;
               border: none !important;
               border-radius: 0 !important;
               background-color: white !important;
               color: black !important;
             }
-            /* 5. Fuerza el color negro en textos y tablas para que no salga gris claro o blanco */
-            .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
-            .border, .border-black { border-color: black !important; }
-            .bg-black { background-color: black !important; color: white !important; }
-            .bg-black * { color: white !important; }
+            /* Le damos un margen interno limpio para que respire en la hoja */
+            #printable-invoice {
+              padding: 10px !important;
+            }
+            /* 5. Destruye cualquier animación latente de Tailwind (fade/zoom) que congele el renderizado con opacidad transparente */
+            *, *::before, *::after {
+              animation: none !important;
+              transform: none !important;
+              transition: none !important;
+              opacity: 1 !important;
+            }
+            /* 6. Asegura contraste negro puro en textos y bordes para la tinta de la impresora */
+            h1, h2, h3, p, span, th, td, table, tr { 
+              color: black !important; 
+            }
+            .border, .border-black, .border-b-2 { 
+              border-color: black !important; 
+            }
+            .bg-black { 
+              background-color: black !important; 
+              color: white !important; 
+            }
+            .bg-black * { 
+              color: white !important; 
+            }
+            .bg-gray-50, .bg-gray-50\/50 { 
+              background-color: #f9fafb !important; 
+            }
           `}</style>
           
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible flex flex-col">
-            <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible flex-1" id="printable-invoice">
+          {/* Agregamos modificadores print:block y print:h-auto directos para blindar el HTML */}
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 print:shadow-none print:rounded-none print:w-full print:max-h-none print:h-auto print:overflow-visible print:block flex flex-col">
+            <div className="p-8 print:p-4 text-black overflow-y-auto print:overflow-visible print:h-auto print:block flex-1" id="printable-invoice">
               
               {/* 🏛️ CASO A: SI LA VENTA TIENE CAE ASIGNADO => DIBUJA LA FACTURA C LEGAL EN PESOS ARS */}
               {invoiceCAE ? (
