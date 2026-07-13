@@ -397,12 +397,6 @@ export function DashboardModals(props: any) {
                             <span>Total Neto</span>
                             <span>{currencySymbol} {totalCalc.toLocaleString("es-AR", { maximumFractionDigits: isDolarInvoice ? 2 : 0 })}</span>
                           </div>
-                          {!isDolarInvoice && (
-                            <div className="flex justify-between text-[10px] font-bold text-gray-400 pt-1">
-                              <span>Ref. Sistema</span>
-                              <span>USD {(totalCalc / (tasaDolarBlue || 1510)).toFixed(2)}</span>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </>

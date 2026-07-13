@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Package, Tag, Trash2, DollarSign, Calculator, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard, RefreshCw } from "lucide-react"
+import supabase from "@/lib/supabase"
+import { Package, Tag, Trash2, DollarSign, Calculator, Loader2, Search, FileText, Receipt, Plus, UserPlus, CreditCard, RefreshCw, X, CheckCircle, ShieldAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabVentasProps {
@@ -32,7 +33,7 @@ interface TabVentasProps {
   clientes: any[]
   saldoFinalCalculado: number
   handleGenerarPresupuesto: () => void
-  handleRegistrarVentaManual: (tipo: "interno" | "afip") => void // 🚀 Sincronizado en interfaz
+  handleRegistrarVentaManual: (tipo: "interno" | "afip") => void
   setShowCuponModal: (show: boolean) => void
   setActiveTab: (tab: string) => void 
 }
@@ -78,6 +79,13 @@ export function TabVentas({
   const [convertidorUSD, setConvertidorUSD] = useState("")
   const [convertidorARS, setConvertidorARS] = useState("")
 
+  // 🚀 ESTADOS DE CONTROL: Padrón AFIP, Vueltos y Modal flotante
+  const [cuitBusqueda, setCuitBusqueda] = useState("")
+  const [isSearchingAFIP, setIsSearchingAFIP] = useState(false)
+  const [showQuickClientModal, setShowQuickClientModal] = useState(false)
+  const [isSavingQuickClient, setIsSavingQuickClient] = useState(false)
+  const [quickClientForm, setQuickClientForm] = useState({ nombre: "", cuit_dni: "", whatsapp: "", email: "" })
+
   useEffect(() => {
     const fetchDolar = async () => {
       try {
@@ -89,6 +97,43 @@ export function TabVentas({
     }
     fetchDolar()
   }, [])
+
+  // 🚀 CONSULTA EN VIVO AL PADRÓN OFICIAL DE AFIP
+  const handleConsultarPadrónAFIP = async () => {
+    const limpio = cuitBusqueda.replace(/\D/g, "")
+    if (limpio.length !== 11) return alert("Por favor, ingresá los 11 números del CUIT sin guiones.")
+    
+    setIsSearchingAFIP(true)
+    try {
+      // 1. Chequeo rápido por si ya existe localmente
+      const localMatch = clientes.find(c => c.notas?.includes(limpio) || c.nombre.toLowerCase().includes(limpio.toLowerCase()))
+      if (localMatch) {
+        setVentaData({ ...ventaData, clienteId: localMatch.id, clienteB2b: "" })
+        alert(`💡 Cliente local encontrado: ${localMatch.nombre}. Enlazado automáticamente.`);
+        setIsSearchingAFIP(false)
+        return
+      }
+
+      // 2. Si no es local, pegamos el tiro al Padrón de AFIP mediante tu nueva API
+      const res = await fetch("/api/consulta-cuit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cuit: limpio })
+      })
+      const data = await res.json()
+
+      if (data.success && data.nombre) {
+        setVentaData({ ...ventaData, clienteId: "", clienteB2b: data.nombre })
+        alert(`✨ Encontrado en AFIP:\n${data.nombre}\n\nLos datos se cargaron en la Referencia de la Factura.`);
+      } else {
+        alert("❌ " + (data.error || "No se pudo obtener la información de ese CUIT. Ingresá los datos manualmente."));
+      }
+    } catch (err) {
+      alert("Error al conectar con el servidor de consulta AFIP.")
+    } finally {
+      setIsSearchingAFIP(false)
+    }
+  }
 
   const handleCambioPesos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pesosStr = e.target.value
@@ -111,6 +156,38 @@ export function TabVentas({
     setConvertidorARS(val)
     if (val === "") setConvertidorUSD("")
     else setConvertidorUSD((Number(val) / tasaDolarBlue).toFixed(2))
+  }
+
+  // 🚀 GUARDADO RÁPIDO DESDE MODAL FLOTANTE EXPRESS
+  const handleGuardarClienteRapido = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickClientForm.nombre || !quickClientForm.whatsapp) return alert("Nombre y WhatsApp obligatorios")
+    setIsSavingQuickClient(true)
+    try {
+      const { data, error } = await supabase.from("clientes_b2b").insert([{
+        nombre: quickClientForm.nombre,
+        whatsapp: quickClientForm.whatsapp,
+        email: quickClientForm.email || null,
+        notas: quickClientForm.cuit_dni ? `CUIT/DNI: ${quickClientForm.cuit_dni}` : "Alta rápida desde POS",
+        saldo_usd: 0
+      }]).select().single()
+
+      if (error) throw error
+      alert("🎉 ¡Cliente registrado y asignado al mostrador!")
+      
+      setVentaData({ ...ventaData, clienteId: data.id, clienteB2b: "" })
+      if (quickClientForm.cuit_dni) setCuitBusqueda(quickClientForm.cuit_dni)
+      
+      setShowQuickClientModal(false)
+      setQuickClientForm({ nombre: "", cuit_dni: "", whatsapp: "", email: "" })
+      
+      // Simula recarga sutil de la data global
+      window.location.reload()
+    } catch (err: any) {
+      alert("Error en base de datos: " + err.message)
+    } finally {
+      setIsSavingQuickClient(false)
+    }
   }
 
   const productosFiltrados = productos.filter(p => 
@@ -136,9 +213,52 @@ export function TabVentas({
   const totalFinalMostradorARS = Math.max(0, totalTicketARS - valorDescuentoCalculadoARS)
   const esMonedaExtranjera = ventaData.metodoPago === "USD" || ventaData.metodoPago === "USDT"
 
+  // 🚀 CÁLCULO DE VUELTO DINÁMICO
+  const pagoRecibidoNum = Number(montoEnPesos) || 0
+  const vueltoCalculado = esMonedaExtranjera 
+    ? (pagoRecibidoNum - totalTratoCarritoNeto) 
+    : (pagoRecibidoNum - totalFinalMostradorARS)
+
   return (
-    <div className="mx-auto max-w-6xl text-left grid lg:grid-cols-12 gap-6 animate-in fade-in duration-500 w-full">
+    <div className="mx-auto max-w-6xl text-left grid lg:grid-cols-12 gap-6 animate-in fade-in duration-500 w-full relative">
       
+      {/* 🚀 VENTANA FLOTANTE (MODAL EXPRESS) NUEVO CLIENTE */}
+      {showQuickClientModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-3 mb-4">
+              <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <UserPlus className="size-5 text-purple-500" /> Alta Rápida de Cliente
+              </h3>
+              <button type="button" onClick={() => setShowQuickClientModal(false)} className="text-zinc-500 hover:text-white transition-colors"><X className="size-5"/></button>
+            </div>
+            <form onSubmit={handleGuardarClienteRapido} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Nombre Completo / Razón Social *</label>
+                <input required type="text" value={quickClientForm.nombre} onChange={e => setQuickClientForm({...quickClientForm, nombre: e.target.value})} className="mt-1 w-full text-sm bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3 outline-none focus:border-purple-500" placeholder="Ej: Importadora Tucumán" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">CUIT / DNI Oficial</label>
+                <input type="number" value={quickClientForm.cuit_dni} onChange={e => setQuickClientForm({...quickClientForm, cuit_dni: e.target.value})} className="mt-1 w-full text-sm bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3 outline-none focus:border-purple-500" placeholder="Ej: 30715556662" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">WhatsApp / Celular *</label>
+                  <input required type="text" value={quickClientForm.whatsapp} onChange={e => setQuickClientForm({...quickClientForm, whatsapp: e.target.value})} className="mt-1 w-full text-sm bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3 outline-none focus:border-purple-500" placeholder="381666777" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Email (Opcional)</label>
+                  <input type="email" value={quickClientForm.email} onChange={e => setQuickClientForm({...quickClientForm, email: e.target.value})} className="mt-1 w-full text-sm bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3 outline-none focus:border-purple-500" placeholder="cliente@electronic.com" />
+                </div>
+              </div>
+              <button type="submit" disabled={isSavingQuickClient} className="w-full bg-white text-black py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all hover:bg-zinc-200 flex justify-center items-center gap-2">
+                {isSavingQuickClient ? <Loader2 className="size-4 animate-spin"/> : "Guardar y Vincular"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* PANEL IZQUIERDO: ARMAR CARRITO / POS */}
       <div className="lg:col-span-7 rounded-2xl bg-[#161B22] border border-zinc-800 p-5 sm:p-6 shadow-xl space-y-5 self-start">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
@@ -287,22 +407,65 @@ export function TabVentas({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <div className="flex justify-between items-end mb-1">
-              <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Asignar Cliente</label>
-              <button onClick={() => setActiveTab("clientes")} className="flex items-center gap-1 text-[9px] font-bold text-purple-400 uppercase hover:text-purple-300 transition-colors">
-                <UserPlus className="size-3"/> Crear Nuevo
+          
+          {/* 🚀 NUEVO: CONSULTA EN VIVO AL PADRÓN OFICIAL DE AFIP */}
+          <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+              <Receipt className="size-3.5" /> Consultar Padrón AFIP (En vivo)
+            </label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={cuitBusqueda}
+                onChange={e => setCuitBusqueda(e.target.value.replace(/\D/g, ""))}
+                className="flex-1 text-xs bg-zinc-900 text-white rounded-lg border border-zinc-800 p-2.5 outline-none focus:border-purple-500 font-mono tracking-widest font-bold" 
+                placeholder="Ingresar CUIT (11 números)" 
+                maxLength={11}
+              />
+              <button 
+                type="button"
+                onClick={handleConsultarPadrónAFIP}
+                disabled={isSearchingAFIP || cuitBusqueda.length !== 11}
+                className="bg-purple-600 hover:bg-purple-500 disabled:opacity-30 text-white text-[10px] font-black uppercase tracking-widest px-4 rounded-lg transition-all flex items-center gap-1.5 shrink-0"
+              >
+                {isSearchingAFIP ? <Loader2 className="size-3.5 animate-spin"/> : "Consultar"}
               </button>
             </div>
-            <select value={ventaData.clienteId} onChange={e => { const idSel = e.target.value; setVentaData({...ventaData, clienteId: idSel, clienteB2b: idSel ? "" : ventaData.clienteB2b}); }} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all">
+          </div>
+
+          <div>
+            <div className="flex justify-between items-end mb-1">
+              <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Asignar Cliente Registrado</label>
+              {/* 🚀 MODIFICADO: Abre la ventana flotante Express en vez de sacarte de la página */}
+              <button type="button" onClick={() => setShowQuickClientModal(true)} className="flex items-center gap-1 text-[9px] font-bold text-purple-400 uppercase hover:text-purple-300 transition-colors">
+                <UserPlus className="size-3"/> Crear Express
+              </button>
+            </div>
+            <select 
+              value={ventaData.clienteId} 
+              onChange={e => { 
+                const idSel = e.target.value; 
+                setVentaData({...ventaData, clienteId: idSel, clienteB2b: idSel ? "" : ventaData.clienteB2b});
+                
+                // 🚀 AUTO-ENLACE: Si el cliente tiene un CUIT en sus notas, lo inyecta solo en la barra de búsqueda
+                const matchCl = clientes.find(c => c.id === idSel);
+                if (matchCl) {
+                  const numCuit = matchCl.notas?.disabled?.match(/\d+/)?.[0] || matchCl.notas?.match(/\d+/)?.[0] || "";
+                  setCuitBusqueda(numCuit);
+                } else {
+                  setCuitBusqueda("");
+                }
+              }} 
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none focus:border-purple-500 transition-all font-bold"
+            >
               <option value="">-- Consumidor Final (Mostrador) --</option>
               {clientes.map(c => (<option key={c.id} value={c.id}>{c.nombre} [CC: USD {c.saldo_usd || 0}]</option>))}
             </select>
           </div>
           
           <div>
-            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Observaciones / Referencia</label>
-            <input type="text" disabled={!!ventaData.clienteId} value={ventaData.clienteB2b} onChange={e => setVentaData({...ventaData, clienteB2b: e.target.value})} className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white disabled:opacity-30 outline-none focus:border-purple-500 transition-all" placeholder="Nota interna opcional..." />
+            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Razón Social / Referencia del Comprobante</label>
+            <input type="text" disabled={!!ventaData.clienteId} value={ventaData.clienteB2b} onChange={e => setVentaData({...ventaData, clienteB2b: e.target.value})} className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white disabled:opacity-30 outline-none focus:border-purple-500 transition-all font-bold" placeholder="Razón social o nota de factura..." />
           </div>
 
           {/* TIPO DE COMPROBANTE */}
@@ -339,7 +502,7 @@ export function TabVentas({
 
           <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
             <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center justify-between">
-              Monto Recibido
+              Monto Entregado por el Cliente
               <span className="text-[8px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400 border border-zinc-700">
                 {esMonedaExtranjera ? "EN DÓLARES" : "EN PESOS ARS"}
               </span>
@@ -356,6 +519,21 @@ export function TabVentas({
                 placeholder="0.00" 
               />
             </div>
+
+            {/* 🚀 NUEVO: CALCULADORA VISUAL DE VUELTO REAL EN TIEMPO REAL */}
+            {pagoRecibidoNum > 0 && (
+              <div className={cn("mt-3 p-3 rounded-xl border text-xs flex justify-between items-center animate-in fade-in duration-150", vueltoCalculado >= 0 ? "bg-purple-500/10 border-purple-500/20 text-purple-400" : "bg-red-500/10 border-red-500/20 text-red-400")}>
+                <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                  {vueltoCalculado >= 0 ? <CheckCircle className="size-3.5 text-purple-400"/> : <ShieldAlert className="size-3.5 text-red-400"/>}
+                  {vueltoCalculado >= 0 ? "Vuelto a entregar:" : "Falta dinero:"}
+                </span>
+                <span className="font-black text-sm font-mono">
+                  {esMonedaExtranjera ? "USD " : "$ "}
+                  {Math.abs(vueltoCalculado).toLocaleString("es-AR", { maximumFractionDigits: esMonedaExtranjera ? 2 : 0 })}
+                </span>
+              </div>
+            )}
+
             {!esMonedaExtranjera && montoEnPesos && (
               <p className="text-[9px] font-bold text-zinc-500 mt-1.5 text-right">
                 Equivale a USD {ventaData.montoPagado.toFixed(2)}
@@ -377,7 +555,7 @@ export function TabVentas({
                 <input type="number" value={convertidorARS} onChange={e => handleConversionDesdeARS(e.target.value)} className="w-full text-xs bg-zinc-900 text-amber-400 rounded-lg border border-zinc-800 p-2 pl-9 outline-none focus:border-amber-500 font-black" placeholder="0" />
               </div>
             </div>
-            <p className="text-[8px] font-bold text-zinc-600 text-center uppercase tracking-wider">Cálculo basado en la cotización del mostrador ($1510)</p>
+            <p className="text-[8px] font-bold text-zinc-600 text-center uppercase tracking-wider">Cálculo basado en la cotización del mostrador (${tasaDolarBlue})</p>
           </div>
 
           {ventaData.clienteId && carritoAdmin.length > 0 && (
@@ -403,8 +581,7 @@ export function TabVentas({
             </button>
           </div>
 
-          {/* 🚀 CORREGIDO: Ahora sí le pasa el parámetro tipoFacturacion en vivo al cerebro */}
-          <button onClick={() => { handleRegistrarVentaManual(tipoFacturacion); setMontoEnPesos(""); }} disabled={isSaving || carritoAdmin.length === 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none">
+          <button onClick={() => { handleRegistrarVentaManual(tipoFacturacion); setMontoEnPesos(""); setCuitBusqueda(""); }} disabled={isSaving || carritoAdmin.length === 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-500 py-4 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition-all active:scale-95 disabled:opacity-30 disabled:shadow-none">
             {isSaving ? <Loader2 className="size-5 animate-spin" /> : (
               <>
                 <Receipt className="size-5" /> 
