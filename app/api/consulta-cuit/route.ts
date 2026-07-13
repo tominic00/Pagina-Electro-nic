@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     })
 
     // 🚀 EL FIX: No pases ni token ni sign. El SDK los genera e inyecta de forma automática en el fondo.
-    const datosAfip = await afip.WebService('ws_sr_padron_a5').execute('getPersona', {
+    const datosAfip = await afip.WebService('ws_sr_padron_a5').executeRequest('getPersona', {
       cuitRepresentada: 27232392628, // Tu CUIT emisor
       idPersona: Number(cuit)        // El CUIT del cliente que estás buscando
     })
