@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "El CUIT debe tener exactamente 11 dígitos numéricos." }, { status: 400 })
     }
 
-    // 1. Lectura de tus certificados
+    // 1. Lectura de tus certificados oficiales
     const rootCertsDir = path.join(process.cwd(), "afip_certs")
     const keyPath = path.join(rootCertsDir, "privada.key")
     const certPath = path.join(rootCertsDir, "certificado.crt")
@@ -20,36 +20,30 @@ export async function POST(req: Request) {
 
     const Afip = require("@afipsdk/afip.js")
     
+    // 🚀 EL FIX MAESTRO: Borramos el access_token. 
+    // Al no tenerlo, la librería ignora el proxy pago y pega directo en los servidores de AFIP
     const afip = new Afip({
       CUIT: 27232392628,
       cert: certContenido,
       key: keyContenido,
       production: true,
-      access_token: "2q0yDV8TBzUPXHthmUr3tPexR79X13ro71ZjVZkrIpRaXlWLVoiU1CdMxZReA6jX", // 👈 Tu token real
       ta_folder: "/tmp",
       res_folder: "/tmp"
     })
 
-    // 🚀 AHORA SÍ: El nombre exacto de la clase para el Padrón A5 en afip.js
     const datosAfip = await afip.RegisterScopeFive.getTaxpayerDetails(Number(cuit))
 
     if (!datosAfip) {
       return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT." })
     }
 
-    // El SDK de JS suele devolver la estructura cruda, nos atajamos de las posibles formas:
     const persona = datosAfip.personaReturn?.persona || datosAfip.persona || datosAfip
     
     if (!persona) {
       return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona activa." })
     }
 
-    // Extraemos la Razón Social o el Nombre/Apellido
     const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
-
-    if (!razonSocial) {
-      return NextResponse.json({ success: false, error: "AFIP no devolvió una Razón Social válida." })
-    }
 
     return NextResponse.json({
       success: true,
@@ -57,17 +51,10 @@ export async function POST(req: Request) {
     })
 
   } catch (error: any) {
-    // 🚀 EL FIX EXPLORADOR: Extraemos el error profundo que nos manda Axios/AFIP
-    const errorProfundo = error.response?.data?.message 
-                       || error.response?.data?.error 
-                       || error.response?.data?.faultstring 
-                       || error.message;
-
-    console.error("Error REAL en Padrón AFIP:", error.response?.data || error.message);
-    
+    console.error("Error en Padrón AFIP:", error)
     return NextResponse.json({ 
       success: false, 
-      error: `MOTIVO DEL RECHAZO: ${typeof errorProfundo === 'string' ? errorProfundo : JSON.stringify(errorProfundo)}` 
+      error: error.message || "Error al conectar directo con AFIP." 
     }, { status: 500 })
   }
 }
