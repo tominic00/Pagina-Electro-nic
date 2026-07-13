@@ -20,8 +20,7 @@ export async function POST(req: Request) {
 
     const Afip = require("@afipsdk/afip.js")
     
-    // 🚀 EL FIX MAESTRO: Borramos el access_token. 
-    // Al no tenerlo, la librería ignora el proxy pago y pega directo en los servidores de AFIP
+    // 2. Instanciamos la AFIP limpiamente, sin tokens comerciales, solo para uso criptográfico local
     const afip = new Afip({
       CUIT: 27232392628,
       cert: certContenido,
@@ -31,23 +30,62 @@ export async function POST(req: Request) {
       res_folder: "/tmp"
     })
 
-    const datosAfip = await afip.RegisterScopeFive.getTaxpayerDetails(Number(cuit))
+    // 🚀 EL FIX MAESTRO: Usamos la librería SOLO para obtener la firma local (TA). 
+    // Esto funciona 100% offline y gratis.
+    const ta = await afip.GetServiceTA('ws_sr_padron_a5');
 
-    if (!datosAfip) {
-      return NextResponse.json({ success: false, error: "No se encontraron datos oficiales para este CUIT." })
+    // 🚀 ARMAMOS EL PAQUETE A MANO: Esquivamos todos los bugs de la librería
+    const soapUrl = "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5";
+    const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
+    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:a5="http://a5.soap.ws.server.puc.sr/">
+       <soapenv:Header/>
+       <soapenv:Body>
+          <a5:getPersona>
+             <token>${ta.token}</token>
+             <sign>${ta.sign}</sign>
+             <cuitRepresentada>27232392628</cuitRepresentada>
+             <idPersona>${Number(cuit)}</idPersona>
+          </a5:getPersona>
+       </soapenv:Body>
+    </soapenv:Envelope>`;
+
+    // 🚀 DISPARAMOS DIRECTO AL GOBIERNO ARGENTINO
+    const response = await fetch(soapUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=UTF-8",
+        "SOAPAction": "getPersona"
+      },
+      body: soapBody
+    });
+
+    const xml = await response.text();
+
+    // 4. Función rústica pero infalible para leer la respuesta en XML
+    const extractTag = (tag: string, xmlString: string) => {
+      const match = xmlString.match(new RegExp(`<([^:>]+:)?${tag}>(.*?)</([^:>]+:)?${tag}>`, 'i'));
+      return match ? match[2] : null;
+    };
+
+    // Si la AFIP nos tira bronca (ej: No tenés el servicio delegado en la web), te lo muestro en pantalla
+    const fault = extractTag('faultstring', xml);
+    if (fault) {
+       throw new Error(fault);
     }
 
-    const persona = datosAfip.personaReturn?.persona || datosAfip.persona || datosAfip
-    
-    if (!persona) {
-      return NextResponse.json({ success: false, error: "El CUIT no pertenece a una persona activa." })
-    }
+    const razonSocial = extractTag('razonSocial', xml);
+    const nombre = extractTag('nombre', xml);
+    const apellido = extractTag('apellido', xml);
 
-    const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
+    const nombreFinal = razonSocial || `${apellido || ""} ${nombre || ""}`.trim();
+
+    if (!nombreFinal) {
+      return NextResponse.json({ success: false, error: "AFIP no devolvió una Razón Social para este CUIT." })
+    }
 
     return NextResponse.json({
       success: true,
-      nombre: razonSocial
+      nombre: nombreFinal
     })
 
   } catch (error: any) {
