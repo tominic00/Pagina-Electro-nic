@@ -144,75 +144,63 @@ export function DashboardModals(props: any) {
       {showInvoice && (
         <div id="invoice-modal-root" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:absolute print:inset-0 print:block print:bg-white print:p-0">
           
-          {/* 🧙‍♂️ CSS MÁGICO DEFINITIVO: Rompe el colapso de Flexbox y fuerza dimensiones reales */}
+          {/* 🧙‍♂️ CSS MÁGICO DEFINITIVO: Destruye Flexbox y previene bloqueos del Dashboard */}
           <style type="text/css" media="print">{`
             @page { 
               margin: 1cm; 
               size: portrait; 
             }
-            /* 1. Desbloquea todas las restricciones de scroll y altura del panel oscuro de fondo */
-            html, body, main, #__next {
-              height: auto !important;
-              max-height: none !important;
-              overflow: visible !important;
-              background-color: white !important;
-              color: black !important;
+            body { 
+              background-color: white !important; 
+              color: black !important; 
             }
-            /* 2. Oculta el fondo del Dashboard */
-            body * { 
-              visibility: hidden !important; 
-            }
-            /* 3. Hace visible únicamente nuestro modal de facturación */
-            #invoice-modal-root, #invoice-modal-root * { 
-              visibility: visible !important; 
-            }
-            /* 4. 🚀 ANULACIÓN DE FLEXBOX: Convierte los contenedores en Bloques puros para que no se aplasten a 0px */
-            #invoice-modal-root,
-            #invoice-modal-root > div,
-            #printable-invoice { 
-              display: block !important;
-              position: absolute !important; 
-              left: 0 !important; 
-              top: 0 !important; 
-              width: 100% !important; 
-              height: auto !important; 
-              max-height: none !important;
-              overflow: visible !important;
-              margin: 0 !important; 
-              box-shadow: none !important;
-              border: none !important;
-              border-radius: 0 !important;
-              background-color: white !important;
-              color: black !important;
-            }
-            /* Le damos un margen interno limpio para que respire en la hoja */
-            #printable-invoice {
-              padding: 10px !important;
-            }
-            /* 5. Destruye cualquier animación latente de Tailwind (fade/zoom) que congele el renderizado con opacidad transparente */
+            /* 1. 🛑 DETONA LAS ANIMACIONES */
             *, *::before, *::after {
               animation: none !important;
               transform: none !important;
               transition: none !important;
               opacity: 1 !important;
             }
-            /* 6. Asegura contraste negro puro en textos y bordes para la tinta de la impresora */
-            h1, h2, h3, p, span, th, td, table, tr { 
-              color: black !important; 
+            /* 2. Oculta todo el panel de administración de fondo */
+            body * { 
+              visibility: hidden !important; 
             }
-            .border, .border-black, .border-b-2 { 
-              border-color: black !important; 
+            /* 3. Resucita únicamente el modal de la factura */
+            #invoice-modal-root, #invoice-modal-root * { 
+              visibility: visible !important; 
             }
-            .bg-black { 
-              background-color: black !important; 
-              color: white !important; 
+            /* 4. 🚀 SOLUCIÓN AL DESBORDAMIENTO: Evita que los divs contenedores del dashboard corten el papel */
+            div, main, section {
+              overflow: visible !important;
+              max-height: none !important;
             }
-            .bg-black * { 
-              color: white !important; 
+            /* 5. 🚀 ANULACIÓN TOTAL DE FLEXBOX: Fuerza formato bloque puro */
+            #invoice-modal-root { 
+              position: absolute !important; 
+              left: 0 !important; 
+              top: 0 !important; 
+              width: 100% !important; 
+              height: auto !important; 
+              display: block !important;
+              background-color: white !important;
             }
-            .bg-gray-50, .bg-gray-50\/50 { 
-              background-color: #f9fafb !important; 
+            #invoice-modal-root > div, #printable-invoice {
+              display: block !important; /* 👈 CLAVE: Esto rompe el flex-1 de Tailwind que te rompía la hoja */
+              max-height: none !important;
+              height: auto !important;
+              overflow: visible !important;
+              box-shadow: none !important;
+              border: none !important;
+              border-radius: 0 !important;
+              background-color: white !important;
+              color: black !important;
+              padding: 0 !important;
             }
+            /* 6. Contraste negro puro para la tinta de la impresora */
+            .text-black, h1, h2, p, th, td, span, tr { color: black !important; }
+            .border, .border-black { border-color: black !important; }
+            .bg-black { background-color: black !important; color: white !important; }
+            .bg-black * { color: white !important; }
           `}</style>
           
           {/* Agregamos modificadores print:block y print:h-auto directos para blindar el HTML */}
