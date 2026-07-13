@@ -57,10 +57,17 @@ export async function POST(req: Request) {
     })
 
   } catch (error: any) {
-    console.error("Error en Padrón AFIP:", error)
+    // 🚀 EL FIX EXPLORADOR: Extraemos el error profundo que nos manda Axios/AFIP
+    const errorProfundo = error.response?.data?.message 
+                       || error.response?.data?.error 
+                       || error.response?.data?.faultstring 
+                       || error.message;
+
+    console.error("Error REAL en Padrón AFIP:", error.response?.data || error.message);
+    
     return NextResponse.json({ 
       success: false, 
-      error: error.message || "Error al conectar con AFIP." 
+      error: `MOTIVO DEL RECHAZO: ${typeof errorProfundo === 'string' ? errorProfundo : JSON.stringify(errorProfundo)}` 
     }, { status: 500 })
   }
 }
