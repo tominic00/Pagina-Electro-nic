@@ -192,32 +192,83 @@ export function useDashboard() {
     } catch (error: any) { alert("Error de Supabase: " + error.message); } finally { setIsUploadingCoa(false) }
   }
 
+  // Buscá tu función de guardado de productos y reemplazala por esta:
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSaving(true);
-    const stockNumerico = parseInt(formData.stock.toString(), 10) || 0
-    const payload = { 
-      nombre: formData.nombre, precio: formData.precio_minorista ?? formData.precio, costo: formData.costo, descripcion: formData.descripcion, stock: stockNumerico, categoria: formData.categoria, imagen_url: formData.imagen_url, moneda: formData.moneda || "ARS", visible_web: formData.visible_web !== false, precio_minorista: formData.precio_minorista ?? formData.precio, precio_mayorista: formData.precio_mayorista ?? formData.precio
-    }
+    if (e && e.preventDefault) e.preventDefault();
+    setIsSaving(true);
+    
+    try {
+      // 1. Armamos las categorías de forma súper segura para que no rompa si están vacías
+      const categoriasArray = formData.categorias?.length > 0 
+        ? formData.categorias 
+        : (formData.categoria ? [formData.categoria] : []);
+        
+      const categoriaPrincipal = categoriasArray.length > 0 ? categoriasArray[0] : "Otros";
 
-    if (editingId) {
-      const { error } = await supabase.from("productos").update(payload).eq("id", editingId)
-      if (!error) {
-        const prodAntiguo = productos.find(p => p.id === editingId)
-        if (prodAntiguo && prodAntiguo.stock !== stockNumerico) {
-          const diff = stockNumerico - prodAntiguo.stock
-          await supabase.from("movimientos_stock").insert([{ producto_id: editingId, nombre_producto: payload.nombre, cantidad: diff, motivo: "Ajuste desde Edición de Ficha" }])
-        }
-        setEditingId(null)
-      } else { alert("Error al actualizar: " + error.message) }
-    } else {
-      const { data: newProd, error } = await supabase.from("productos").insert([payload]).select().single()
-      if (!error && newProd && stockNumerico > 0) {
-        await supabase.from("movimientos_stock").insert([{ producto_id: newProd.id, nombre_producto: newProd.nombre, cantidad: stockNumerico, motivo: "Stock Inicial (Alta de Producto)" }])
-      } else if (error) { alert("Error Supabase. Validá que tengas la tabla actualizada: " + error.message) }
+      // 2. Preparamos el paquete de datos blindado
+      const payload = {
+        nombre: formData.nombre,
+        descripcion: formData.descripcion || "",
+        costo: Number(formData.costo) || 0,
+        stock: Number(formData.stock) || 0,
+        moneda: formData.moneda || "ARS",
+        visible_web: formData.visible_web !== false,
+        precio: Number(formData.precio_minorista ?? (formData.precio || 0)),
+        precio_minorista: Number(formData.precio_minorista ?? (formData.precio || 0)),
+        precio_mayorista: Number(formData.precio_mayorista ?? (formData.precio || 0)),
+        imagen_url: formData.imagen_url || (formData.galeria?.[0] ?? ""),
+        
+        // 🚀 ESTO EVITA EL CRASH: Garantizamos que SIEMPRE se envíe un Array, aunque el cliente no ponga nada
+        categoria: categoriaPrincipal,
+        categorias: categoriasArray,
+        subcategorias: formData.subcategorias || [],
+        galeria: formData.galeria || []
+      };
+
+      // 3. Enviamos a Supabase
+      if (editingId) {
+        const { error } = await supabase.from("productos").update(payload).eq("id", editingId);
+        if (error) throw error;
+        alert("✅ ¡Ficha del producto actualizada con éxito!");
+      } else {
+        const { error } = await supabase.from("productos").insert([payload]);
+        if (error) throw error;
+        alert("✅ ¡Nuevo producto guardado con éxito!");
+      }
+
+      // 4. Limpiamos todo si salió bien
+      setEditingId(null);
+      setFormData({
+        nombre: "",
+        precio: 0,
+        costo: 0,
+        descripcion: "",
+        informacion_tecnica: "",
+        stock: 0,
+        imagen_url: "",
+        researchOverview: "",
+        applicationsRaw: "",
+        coa_url: "",
+        moneda: "ARS",
+        visible_web: true,
+        precio_minorista: undefined,
+        precio_mayorista: undefined,
+        precio_volumen: undefined,
+        cantidad_volumen: undefined,
+        categoria: "",
+        categorias: [],
+        subcategorias: [],
+        galeria: []
+      });
+      fetchData(); // Recarga la tabla para mostrar los cambios
+
+    } catch (error: any) {
+      console.error("Error en base de datos:", error);
+      alert("Error al guardar: " + error.message);
+    } finally {
+      setIsSaving(false);
     }
-    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", categorias: [], imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined, subcategorias: [], galeria: [] })
-    fetchData(); setIsSaving(false);
-  }
+  };
 
   const handleUpdateInline = async (id: string, campo: string, valor: any) => {
     setProductos(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p))
