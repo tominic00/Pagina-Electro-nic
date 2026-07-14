@@ -324,21 +324,23 @@ export function useDashboard() {
   }
 
   const handleImprimirOrden = (rep: any, tipo: "etiqueta" | "ingreso") => {
-  // Le inyectamos todos los datos del equipo al sistema de impresión
-  setInvoiceItems([{
-    producto: { nombre: rep.nombre_producto?.replace("Servicio: ", "") || "Reparación General" },
-    cantidad: 1,
-    precio: rep.total_trato,
-    reparacion: rep // 🚀 HACK: Le pasamos la ficha técnica entera adentro del item
-  } as any]);
-  
-  setInvoiceClientName(rep.cliente_referencia);
-  setInvoiceDate(new Date(rep.created_at).toLocaleDateString());
-  setInvoiceId(rep.id.slice(0, 8).toUpperCase());
-  setInvoiceType(tipo === "etiqueta" ? "ETIQUETA" : "REMITO REPARACION");
-  setInvoiceCAE(null); // Aseguramos que no se active la vista de AFIP
-  setShowInvoice(true);
-}
+    // 🚀 NUEVO: Generamos el link de seguimiento del cliente
+    const trackingUrl = `${window.location.origin}/seguimiento/${rep.id}`;
+    
+    setInvoiceItems([{
+      producto: { nombre: rep.nombre_producto?.replace("Servicio: ", "") || "Reparación General" },
+      cantidad: 1,
+      precio: rep.total_trato,
+      reparacion: { ...rep, tracking_url: trackingUrl } // 🚀 Acá inyectamos la URL
+    } as any]);
+    
+    setInvoiceClientName(rep.cliente_referencia);
+    setInvoiceDate(new Date(rep.created_at).toLocaleDateString());
+    setInvoiceId(rep.id.slice(0, 8).toUpperCase());
+    setInvoiceType(tipo === "etiqueta" ? "ETIQUETA" : "REMITO REPARACION");
+    setInvoiceCAE(null); 
+    setShowInvoice(true);
+  }
 
   // 🚀 CORREGIDO Y CONECTADO CON AFIP: Guardado final impactando Supabase nativamente en PESOS ($) y obteniendo CAE
   // 🚀 BLINDADO: Evita rebotes de ENUM en la base de datos y muestra errores exactos

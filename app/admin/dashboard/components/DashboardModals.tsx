@@ -268,65 +268,77 @@ export function DashboardModals(props: any) {
               ) : invoiceType === "REMITO REPARACION" ? (
                 
                 /* 📜 CASO 3: REMITO OFICIAL DEL TALLER PARA EL CLIENTE */
-                <div className="max-w-2xl mx-auto bg-white text-black h-full flex flex-col">
-                  <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-6">
-                    <div>
-                      <h1 className="text-4xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
-                      <p className="text-[10px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
-                    </div>
-                    <div className="text-right">
-                      <h2 className="text-2xl font-black uppercase text-black">ORDEN DE SERVICIO</h2>
-                      <p className="text-sm font-mono text-gray-500 font-bold mt-1">TICKET #{invoiceId}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mb-6 border border-gray-300 p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cliente:</p>
-                      <p className="font-black text-lg text-black">{invoiceClientName}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fecha de Ingreso:</p>
-                      <p className="font-bold text-black text-lg">{invoiceDate}</p>
-                    </div>
-                  </div>
-            
-                  <div className="mb-6 border border-black rounded-lg overflow-hidden">
-                    <h3 className="text-xs font-black bg-black text-white p-2.5 uppercase tracking-widest text-center">Datos del Equipo a Reparar</h3>
-                    <div className="grid grid-cols-2 gap-4 p-4 text-sm bg-white">
-                      <p><span className="text-gray-500 font-bold">Equipo:</span> <span className="font-black">{invoiceItems[0]?.producto?.nombre}</span></p>
-                      <p><span className="text-gray-500 font-bold">IMEI/Serie:</span> <span className="font-black font-mono">{invoiceItems[0]?.reparacion?.imei || "No declarado"}</span></p>
-                      <p><span className="text-gray-500 font-bold">Seguridad:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.tipo_contrasena !== "Ninguna" ? `${invoiceItems[0]?.reparacion?.tipo_contrasena} (${invoiceItems[0]?.reparacion?.contrasena_equipo})` : "Sin Clave"}</span></p>
-                      <p><span className="text-gray-500 font-bold">Estética/Color:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.color || "---"}</span></p>
-                    </div>
-                    <div className="p-4 border-t border-gray-200 text-sm bg-gray-50">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Falla Reportada por el Cliente:</p>
-                      <p className="font-bold">{invoiceItems[0]?.reparacion?.diagnostico_falla}</p>
-                    </div>
-                  </div>
-            
-                  <div className="flex justify-end mb-8">
-                    <div className="w-80 space-y-2 border-2 border-black p-4 bg-white rounded-xl">
-                      <div className="flex justify-between text-sm font-bold text-gray-500">
-                        <span>Presupuesto Estimado:</span>
-                        <span>$ {Number(invoiceItems[0]?.reparacion?.total_trato || 0).toLocaleString("es-AR")}</span>
-                      </div>
-                      <div className="flex justify-between text-sm font-black text-emerald-600">
-                        <span>Seña Anticipada:</span>
-                        <span>- $ {Number(invoiceItems[0]?.reparacion?.monto_pagado || 0).toLocaleString("es-AR")}</span>
-                      </div>
-                      <div className="flex justify-between text-xl font-black text-black border-t-2 border-black pt-3 mt-3">
-                        <span>Saldo a Pagar:</span>
-                        <span>$ {Number((invoiceItems[0]?.reparacion?.total_trato || 0) - (invoiceItems[0]?.reparacion?.monto_pagado || 0)).toLocaleString("es-AR")}</span>
-                      </div>
-                    </div>
-                  </div>
-            
-                  <div className="mt-auto pt-6 border-t border-gray-300 text-[10px] text-gray-500 text-justify leading-relaxed">
-                    <p className="mb-2"><strong className="text-black uppercase">Términos y Condiciones:</strong> Pasados los 90 (noventa) días de notificada la reparación del equipo, si el mismo no es retirado, la empresa lo considerará abandonado y podrá disponer del mismo para cubrir los costos de reparación y almacenaje, perdiendo el cliente todo derecho a reclamo.</p>
-                    <p>El presupuesto inicial emitido en este documento está sujeto a modificaciones. En caso de detectarse daños ocultos, componentes sulfatados o problemas en la placa base (motherboard) no declarados o indetectables al momento de la recepción, se le informará al cliente el nuevo costo antes de proceder.</p>
-                  </div>
-                </div>
+               <div className="max-w-2xl mx-auto bg-white text-black h-full flex flex-col relative">
+  
+                 {/* 🚀 ACÁ ESTÁ EL QR MÁGICO IMPRESO EN EL PAPEL */}
+                 <div className="absolute top-0 right-0 text-center flex flex-col items-center">
+                   <img 
+                     src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(invoiceItems[0]?.reparacion?.tracking_url || "")}`} 
+                     alt="QR Seguimiento" 
+                     className="size-[2.5rem] sm:size-[4.5rem] mb-1 border border-gray-300 p-0.5" 
+                   />
+                   <p className="text-[7px] font-black uppercase text-center leading-tight">Escanear para<br/>Seguimiento</p>
+                 </div>
+               
+                 {/* Le agregué pr-24 acá abajo para que el texto no pise el QR */}
+                 <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-6 pr-24">
+                   <div>
+                     <h1 className="text-4xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
+                     <p className="text-[10px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
+                   </div>
+                   <div className="text-right">
+                     <h2 className="text-2xl font-black uppercase text-black">ORDEN DE SERVICIO</h2>
+                     <p className="text-sm font-mono text-gray-500 font-bold mt-1">TICKET #{invoiceId}</p>
+                   </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4 mb-6 border border-gray-300 p-4 bg-gray-50 rounded-lg">
+                   <div>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cliente:</p>
+                     <p className="font-black text-lg text-black">{invoiceClientName}</p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fecha de Ingreso:</p>
+                     <p className="font-bold text-black text-lg">{invoiceDate}</p>
+                   </div>
+                 </div>
+               
+                 <div className="mb-6 border border-black rounded-lg overflow-hidden">
+                   <h3 className="text-xs font-black bg-black text-white p-2.5 uppercase tracking-widest text-center">Datos del Equipo a Reparar</h3>
+                   <div className="grid grid-cols-2 gap-4 p-4 text-sm bg-white">
+                     <p><span className="text-gray-500 font-bold">Equipo:</span> <span className="font-black">{invoiceItems[0]?.producto?.nombre}</span></p>
+                     <p><span className="text-gray-500 font-bold">IMEI/Serie:</span> <span className="font-black font-mono">{invoiceItems[0]?.reparacion?.imei || "No declarado"}</span></p>
+                     <p><span className="text-gray-500 font-bold">Seguridad:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.tipo_contrasena !== "Ninguna" ? `${invoiceItems[0]?.reparacion?.tipo_contrasena} (${invoiceItems[0]?.reparacion?.contrasena_equipo})` : "Sin Clave"}</span></p>
+                     <p><span className="text-gray-500 font-bold">Estética/Color:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.color || "---"}</span></p>
+                   </div>
+                   <div className="p-4 border-t border-gray-200 text-sm bg-gray-50">
+                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Falla Reportada por el Cliente:</p>
+                     <p className="font-bold">{invoiceItems[0]?.reparacion?.diagnostico_falla}</p>
+                   </div>
+                 </div>
+               
+                 <div className="flex justify-end mb-8">
+                   <div className="w-80 space-y-2 border-2 border-black p-4 bg-white rounded-xl">
+                     <div className="flex justify-between text-sm font-bold text-gray-500">
+                       <span>Presupuesto Estimado:</span>
+                       <span>$ {Number(invoiceItems[0]?.reparacion?.total_trato || 0).toLocaleString("es-AR")}</span>
+                     </div>
+                     <div className="flex justify-between text-sm font-black text-emerald-600">
+                       <span>Seña Anticipada:</span>
+                       <span>- $ {Number(invoiceItems[0]?.reparacion?.monto_pagado || 0).toLocaleString("es-AR")}</span>
+                     </div>
+                     <div className="flex justify-between text-xl font-black text-black border-t-2 border-black pt-3 mt-3">
+                       <span>Saldo a Pagar:</span>
+                       <span>$ {Number((invoiceItems[0]?.reparacion?.total_trato || 0) - (invoiceItems[0]?.reparacion?.monto_pagado || 0)).toLocaleString("es-AR")}</span>
+                     </div>
+                   </div>
+                 </div>
+               
+                 <div className="mt-auto pt-6 border-t border-gray-300 text-[10px] text-gray-500 text-justify leading-relaxed">
+                   <p className="mb-2"><strong className="text-black uppercase">Términos y Condiciones:</strong> Pasados los 90 (noventa) días de notificada la reparación del equipo, si el mismo no es retirado, la empresa lo considerará abandonado y podrá disponer del mismo para cubrir los costos de reparación y almacenaje, perdiendo el cliente todo derecho a reclamo.</p>
+                   <p>El presupuesto inicial emitido en este documento está sujeto a modificaciones. En caso de detectarse daños ocultos, componentes sulfatados o problemas en la placa base (motherboard) no declarados o indetectables al momento de la recepción, se le informará al cliente el nuevo costo antes de proceder.</p>
+                 </div>
+               </div>
 
               ) : (
     
