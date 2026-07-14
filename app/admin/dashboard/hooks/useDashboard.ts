@@ -49,7 +49,7 @@ export function useDashboard() {
 
   const [reparacionForm, setReparacionForm] = useState({
     id: "",
-    cliente_referencia: "", producto_id: "", nombre_servicio_manual: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", ubicacion_fisica: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado", tipo_contrasena: "Ninguna", contrasena_equipo: ""
+    cliente_referencia: "", producto_id: "", nombre_servicio_manual: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", ubicacion_fisica: "", costo_tecnico: 0, costo_repuesto: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado", tipo_contrasena: "Ninguna", contrasena_equipo: ""
   })
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -624,9 +624,10 @@ export function useDashboard() {
         nombre_producto: nombreServicio, 
         cantidad: 1, 
         precio_unitario: Number(reparacionForm.total_trato), 
-        costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
+        // 🚀 SUMAMOS COSTO TÉCNICO + REPUESTO PARA QUE TU AUDITORÍA GLOBAL DÉ EXACTA
+        costo_unitario_historico: Number(reparacionForm.costo_tecnico || 0) + Number(reparacionForm.costo_repuesto || 0), 
         total_trato: Number(reparacionForm.total_trato), 
-        monto_pagado: Number(reparacionForm.monto_pagado), 
+        monto_pagado: Number(reparacionForm.monto_pagado || 0), 
         cliente_referencia: reparacionForm.cliente_referencia, 
         estado: reparacionForm.estado || "Ingresado", 
         metodo_pago: reparacionForm.metodo_pago || "Efectivo", 
@@ -635,7 +636,8 @@ export function useDashboard() {
         diagnostico_falla: reparacionForm.diagnostico_falla, 
         tecnico_id: reparacionForm.tecnico_id || null, 
         ubicacion_fisica: reparacionForm.ubicacion_fisica || "Local",
-        costo_tecnico: Number(reparacionForm.costo_tecnico), 
+        costo_tecnico: Number(reparacionForm.costo_tecnico || 0), 
+        costo_repuesto: Number(reparacionForm.costo_repuesto || 0), // 🚀 NUEVO
         pago_tecnico_estado: "Pendiente",
         tipo_contrasena: reparacionForm.tipo_contrasena || "Ninguna",
         contrasena_equipo: reparacionForm.contrasena_equipo || ""
@@ -656,49 +658,70 @@ export function useDashboard() {
     }
   }
 
-const handleEditarReparacion = async (e: React.FormEvent) => {
-  e.preventDefault(); 
-  setIsSaving(true);
-  
-  try {
-    let nombreServicio = "";
-    if (reparacionForm.producto_id === "manual") {
-      nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
-    } else {
-      const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
-      nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
-    }
+  const handleEditarReparacion = async (e: React.FormEvent) => {
+    e.preventDefault(); 
+    setIsSaving(true);
+    
+    try {
+      let nombreServicio = "";
+      if (reparacionForm.producto_id === "manual") {
+        nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
+      } else {
+        const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
+        nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+      }
 
-    const { error } = await supabase.from("ventas_b2b").update({
-      producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
-      nombre_producto: nombreServicio, 
-      precio_unitario: Number(reparacionForm.total_trato), 
-      costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
-      total_trato: Number(reparacionForm.total_trato), 
-      monto_pagado: Number(reparacionForm.monto_pagado), 
-      cliente_referencia: reparacionForm.cliente_referencia, 
-      estado: reparacionForm.estado, 
-      imei: reparacionForm.imei, 
-      color: reparacionForm.color, 
-      diagnostico_falla: reparacionForm.diagnostico_falla, 
-      tecnico_id: reparacionForm.tecnico_id || null, 
-      ubicacion_fisica: reparacionForm.ubicacion_fisica || "Local",
-      costo_tecnico: Number(reparacionForm.costo_tecnico),
-      tipo_contrasena: reparacionForm.tipo_contrasena,
-      contrasena_equipo: reparacionForm.contrasena_equipo
-    }).eq("id", reparacionForm.id); // Clave para actualizar y no crear uno nuevo
-    
-    if (error) throw error; 
-    
-    alert("¡Ficha actualizada correctamente!"); 
-    setShowNuevaReparacion(false); 
-    fetchData();
-  } catch (error: any) { 
-    alert("Error al editar: " + error.message) 
-  } finally { 
-    setIsSaving(false) 
+      // 🚀 MAGIA PARA EL LIBRO DIARIO: Detectamos si sumaste plata HOY
+      const ordenAntigua = ventas.find((v: any) => v.id === reparacionForm.id);
+      const diffPago = Number(reparacionForm.monto_pagado || 0) - Number(ordenAntigua?.monto_pagado || 0);
+
+      // Si le sumaste plata a la orden, creamos un registro individual con la fecha de HOY
+      if (diffPago > 0) {
+        await supabase.from("ventas_b2b").insert([{
+          nombre_producto: `💰 PAGO / SEÑA: Ticket #${reparacionForm.id.slice(0,8).toUpperCase()} - ${reparacionForm.cliente_referencia}`,
+          cantidad: 1,
+          precio_unitario: 0,
+          costo_unitario_historico: 0,
+          total_trato: 0,
+          monto_pagado: diffPago, // 👈 Esto entra exacto a tu Caja / Libro Diario de hoy
+          estado: "Ingreso Extra",
+          metodo_pago: reparacionForm.metodo_pago || "Efectivo",
+          cliente_referencia: reparacionForm.cliente_referencia
+        }]);
+      }
+
+      const { error } = await supabase.from("ventas_b2b").update({
+        producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
+        nombre_producto: nombreServicio, 
+        precio_unitario: Number(reparacionForm.total_trato), 
+        // 🚀 SUMAMOS COSTO TÉCNICO + REPUESTO PARA QUE TU AUDITORÍA GLOBAL DÉ EXACTA
+        costo_unitario_historico: Number(reparacionForm.costo_tecnico || 0) + Number(reparacionForm.costo_repuesto || 0), 
+        total_trato: Number(reparacionForm.total_trato), 
+        monto_pagado: Number(reparacionForm.monto_pagado || 0), 
+        cliente_referencia: reparacionForm.cliente_referencia, 
+        estado: reparacionForm.estado, 
+        imei: reparacionForm.imei, 
+        color: reparacionForm.color, 
+        diagnostico_falla: reparacionForm.diagnostico_falla, 
+        tecnico_id: reparacionForm.tecnico_id || null, 
+        ubicacion_fisica: reparacionForm.ubicacion_fisica || "Local",
+        costo_tecnico: Number(reparacionForm.costo_tecnico || 0),
+        costo_repuesto: Number(reparacionForm.costo_repuesto || 0), // 🚀 NUEVO
+        tipo_contrasena: reparacionForm.tipo_contrasena,
+        contrasena_equipo: reparacionForm.contrasena_equipo
+      }).eq("id", reparacionForm.id); // Clave para actualizar y no crear uno nuevo
+      
+      if (error) throw error; 
+      
+      alert("¡Ficha actualizada correctamente!"); 
+      setShowNuevaReparacion(false); 
+      fetchData();
+    } catch (error: any) { 
+      alert("Error al editar: " + error.message) 
+    } finally { 
+      setIsSaving(false) 
+    }
   }
-}
 
   const handleCobrarReparacion = async (reparacionId: string, montoTotal: number, metodoPago: string) => {
   try {
