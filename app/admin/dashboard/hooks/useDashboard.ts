@@ -724,6 +724,26 @@ const handleEditarReparacion = async (e: React.FormEvent) => {
   }
 }
 
+const handleLiquidarPagosTecnico = async (tecnicoId: string) => {
+    if (!confirm("¿Estás seguro de marcar TODAS las reparaciones pendientes de este técnico como PAGADAS? La deuda volverá a cero.")) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("ventas_b2b")
+        .update({ pago_tecnico_estado: "Pagado" })
+        .eq("tecnico_id", tecnicoId)
+        .neq("pago_tecnico_estado", "Pagado"); // Solo actualiza los que no estén pagados
+      
+      if (error) throw error;
+      alert("¡Liquidación registrada con éxito! El saldo del técnico volvió a $0.");
+      fetchData();
+    } catch (error: any) {
+      alert("Error al liquidar: " + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   const handleRegistrarTecnico = async (e: React.FormEvent) => { e.preventDefault(); setIsSaving(true); if (editingTecnicoId) { await supabase.from("tecnicos").update(tecnicoForm).eq("id", editingTecnicoId); setEditingTecnicoId(null); } else { await supabase.from("tecnicos").insert([tecnicoForm]) }; setTecnicoForm({ nombre: "", whatsapp: "", estado: "Activo" }); fetchData(); setIsSaving(false); }
   const handleEliminarTecnico = async (id: string) => { if (confirm("¿Eliminar este técnico de la base de datos?")) { await supabase.from("tecnicos").delete().eq("id", id); fetchData(); } }
 

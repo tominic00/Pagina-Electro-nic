@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Wrench, Users, Search, Plus, DollarSign, Smartphone, MessageCircle, Loader2, Trash2, Edit3, X, Lock, Banknote, Printer, Tag, FileClock, ShieldCheck, Star, Clock } from "lucide-react"
+import { Wrench, Users, Search, Plus, DollarSign, Smartphone, MessageCircle, Loader2, Trash2, Edit3, X, Lock, Banknote, Printer, Tag, FileClock, ShieldCheck, Star, Clock, Calendar, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function TabReparaciones({
@@ -23,7 +23,8 @@ export function TabReparaciones({
   isSaving,
   handleUpdateInline,
   handleCobrarReparacion,
-  handleImprimirOrden
+  handleImprimirOrden,
+  handleLiquidarPagosTecnico // 🚀 NUEVA PROP: Para pagarle al técnico
 }: any) {
   
   const [subTab, setSubTab] = useState<"equipos" | "tecnicos">("equipos")
@@ -37,7 +38,11 @@ export function TabReparaciones({
   const [metodoPagoCobro, setMetodoPagoCobro] = useState("Efectivo")
 
   const [patron, setPatron] = useState<number[]>([])
+  
+  // 🚀 ESTADOS PARA EL RENDIMIENTO DEL TÉCNICO
   const [tecnicoHistorialId, setTecnicoHistorialId] = useState<string | null>(null)
+  const [techFechaInicio, setTechFechaInicio] = useState("")
+  const [techFechaFin, setTechFechaFin] = useState("")
 
   const todasLasReparaciones = ventas.filter((v: any) => 
     v.nombre_producto?.toLowerCase().includes("servicio") || 
@@ -103,7 +108,6 @@ export function TabReparaciones({
       estado: rep.estado || "Ingresado",
       tipo_contrasena: rep.tipo_contrasena || "Ninguna",
       contrasena_equipo: rep.contrasena_equipo || "",
-      // Datos del portal
       presupuesto_aceptado: rep.presupuesto_aceptado,
       mensaje_cliente: rep.mensaje_cliente,
       rating_estrellas: rep.rating_estrellas,
@@ -112,9 +116,7 @@ export function TabReparaciones({
     });
     if (rep.tipo_contrasena === "Patron" && rep.contrasena_equipo) {
       setPatron(rep.contrasena_equipo.split('-').map(Number));
-    } else {
-      setPatron([]);
-    }
+    } else { setPatron([]); }
     setShowNuevaReparacion(true);
   }
 
@@ -124,12 +126,6 @@ export function TabReparaciones({
     setShowNuevaReparacion(true);
   }
 
-  const simularImpresion = (tipo: string) => {
-    if (handleImprimirOrden) return;
-    alert(`En el próximo paso conectamos el diseño PDF para: ${tipo}`);
-  }
-
-  // 🚀 Función para Guardar una Seña Nueva e Imprimir Recibo
   const guardarYImprimir = async (e: React.FormEvent) => {
     await handleEditarReparacion(e); 
     if (handleImprimirOrden) {
@@ -137,6 +133,21 @@ export function TabReparaciones({
       handleImprimirOrden(ordenActualizada, "ingreso");
     }
   }
+
+  // 🚀 LÓGICA DE FILTRADO PARA EL DASHBOARD DEL TÉCNICO
+  const repDelTecnico = todasLasReparaciones.filter((r: any) => r.tecnico_id === tecnicoHistorialId);
+  const repDelTecnicoFiltradas = repDelTecnico.filter((r: any) => {
+    if (!techFechaInicio && !techFechaFin) return true;
+    const dateV = new Date(r.created_at);
+    if (techFechaInicio && dateV < new Date(techFechaInicio + 'T00:00:00')) return false;
+    if (techFechaFin && dateV > new Date(techFechaFin + 'T23:59:59')) return false;
+    return true;
+  });
+
+  const tecEquiposActivos = repDelTecnico.filter((r:any) => r.estado === "Ingresado" || r.estado === "En Laboratorio").length;
+  const tecEquiposListos = repDelTecnicoFiltradas.filter((r:any) => r.estado === "Listo" || r.estado === "Entregado").length;
+  const tecFacturacionTotal = repDelTecnicoFiltradas.filter((r:any) => r.estado === "Listo" || r.estado === "Entregado").reduce((a:any, r:any) => a + Number(r.total_trato || 0), 0);
+  const tecDeudaManoObra = repDelTecnico.filter((r:any) => r.pago_tecnico_estado !== "Pagado").reduce((a:any, r:any) => a + Number(r.costo_tecnico || 0), 0);
 
   return (
     <div className="space-y-6 text-left w-full animate-in fade-in duration-500">
@@ -198,13 +209,7 @@ export function TabReparaciones({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
-                  <tr>
-                    <th className="p-4 pl-6">Cliente / IMEI</th>
-                    <th className="p-4">Servicio</th>
-                    <th className="p-4 text-right">Presupuesto</th>
-                    <th className="p-4 text-center">Estado de Taller</th>
-                    <th className="p-4 text-center">Imprimir / Avisos</th>
-                  </tr>
+                  <tr><th className="p-4 pl-6">Cliente / IMEI</th><th className="p-4">Servicio</th><th className="p-4 text-right">Presupuesto</th><th className="p-4 text-center">Estado de Taller</th><th className="p-4 text-center">Gestión & Avisos</th></tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/40">
                   {reparacionesFiltradas.map((rep: any) => {
@@ -225,22 +230,15 @@ export function TabReparaciones({
                         </td>
                         <td className="p-4 text-right">
                           <span className="font-black text-white text-sm block">{formatARS(rep.total_trato)}</span>
-                          <span className={cn("text-[9px] font-black uppercase tracking-widest", !debeSaldo ? "text-emerald-500" : "text-amber-500")}>
-                            {!debeSaldo ? "Saldado" : `Debe ${formatARS(rep.total_trato - rep.monto_pagado)}`}
-                          </span>
+                          <span className={cn("text-[9px] font-black uppercase tracking-widest", !debeSaldo ? "text-emerald-500" : "text-amber-500")}>{!debeSaldo ? "Saldado" : `Debe ${formatARS(rep.total_trato - rep.monto_pagado)}`}</span>
                         </td>
                         <td className="p-4" onClick={(e)=>e.stopPropagation()}>
                           <div className="flex flex-col gap-1.5 items-center">
                             {rep.estado === 'Listo' && debeSaldo ? (
-                              <button onClick={() => setReparacionACobrar(rep)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all">
-                                <Banknote className="size-3"/> Cobrar Hoy
-                              </button>
+                              <button onClick={() => setReparacionACobrar(rep)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all"><Banknote className="size-3"/> Cobrar Hoy</button>
                             ) : (
                               <select disabled={rep.estado === 'Entregado'} value={rep.estado} onChange={e => handleUpdateInline(rep.id, 'estado', e.target.value as any)} className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border outline-none cursor-pointer bg-zinc-950 transition-all w-full max-w-[140px]", rep.estado === 'Listo' && 'border-emerald-500/30 text-emerald-400', rep.estado === 'Entregado' && 'opacity-50 text-purple-400')}>
-                                <option value="Ingresado">📥 Ingresado</option>
-                                <option value="En Laboratorio">🔬 En Laboratorio</option>
-                                <option value="Listo">✅ Listo</option>
-                                <option value="Entregado">📦 Entregado</option>
+                                <option value="Ingresado">📥 Ingresado</option><option value="En Laboratorio">🔬 Laboratorio</option><option value="Listo">✅ Listo</option><option value="Entregado">📦 Entregado</option>
                               </select>
                             )}
                             <button onClick={() => abrirEdicion(rep)} className="text-[10px] font-bold text-amber-500 hover:text-amber-400 flex items-center justify-center gap-1 w-full max-w-[140px] bg-amber-500/10 hover:bg-amber-500/20 py-1.5 rounded-lg transition-all border border-amber-500/20">
@@ -248,41 +246,26 @@ export function TabReparaciones({
                             </button>
                           </div>
                         </td>
-                        
                         <td className="p-4" onClick={(e)=>e.stopPropagation()}>
                           <div className="flex flex-col gap-1.5 items-end">
                             <div className="flex gap-1 w-full max-w-[140px]">
-                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "etiqueta") : simularImpresion("Etiqueta para pegar")} title="Imprimir Etiqueta" className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-lg flex items-center justify-center transition-colors">
-                                <Tag className="size-3.5"/>
-                              </button>
-                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "ingreso") : simularImpresion("Remito Cliente")} title="Remito de Ingreso / Seña" className="flex-[2] bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 py-1.5 rounded-lg flex items-center justify-center gap-1 transition-colors text-[10px] font-bold uppercase tracking-wider">
-                                <Printer className="size-3.5"/> Recibo
-                              </button>
+                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "etiqueta") : null} title="Imprimir Etiqueta" className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-lg flex items-center justify-center transition-colors"><Tag className="size-3.5"/></button>
+                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "ingreso") : null} title="Remito Cliente" className="flex-[2] bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 py-1.5 rounded-lg flex items-center justify-center gap-1 transition-colors text-[10px] font-bold uppercase tracking-wider"><Printer className="size-3.5"/> Recibo</button>
                             </div>
-
                             <button onClick={() => {
                               const url = `${window.location.origin}/seguimiento/${rep.id}`;
-                              alert(`LINK DEL CLIENTE (Podés copiarlo):\n\n${url}\n\nO mostrale este código QR escaneable desde su cámara.`);
-                              navigator.clipboard.writeText(url);
-                              window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`, 'QR Code', 'width=350,height=350');
-                            }} className="bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500 hover:text-white text-blue-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all">
-                              <Smartphone className="size-3"/> Ver QR / Link
-                            </button>
-
+                              alert(`LINK PARA EL CLIENTE:\n${url}\n\nEscaneá este QR para ver su portal.`);
+                              navigator.clipboard.writeText(url); window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`, 'QR', 'width=350,height=350');
+                            }} className="bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500 hover:text-white text-blue-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all"><Smartphone className="size-3"/> Portal Cliente</button>
                             {rep.estado === 'Listo' && (
-                              <button onClick={() => enviarWhatsApp(rep.cliente_referencia)} className="bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366] hover:text-black text-[#25D366] px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all">
-                                <MessageCircle className="size-3"/> Avisar x WA
-                              </button>
+                              <button onClick={() => enviarWhatsApp(rep.cliente_referencia)} className="bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366] hover:text-black text-[#25D366] px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all"><MessageCircle className="size-3"/> Avisar x WA</button>
                             )}
                           </div>
                         </td>
-
                       </tr>
                     )
                   })}
-                  {reparacionesFiltradas.length === 0 && (
-                    <tr><td colSpan={5} className="p-16 text-center text-zinc-600 font-bold italic">No hay órdenes registradas bajo este filtro.</td></tr>
-                  )}
+                  {reparacionesFiltradas.length === 0 && (<tr><td colSpan={5} className="p-16 text-center text-zinc-600 font-bold italic">No hay órdenes registradas bajo este filtro.</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -293,44 +276,30 @@ export function TabReparaciones({
           <div className="xl:col-span-4 bg-[#161B22] border border-zinc-800 p-5 rounded-2xl space-y-4">
             <h3 className="text-base font-black text-white">{editingTecnicoId ? "Modificar Técnico" : "Alta de Técnico"}</h3>
             <form onSubmit={handleRegistrarTecnico} className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre Completo</label>
-                <input required type="text" value={tecnicoForm.nombre} onChange={e => setTecnicoForm({...tecnicoForm, nombre: e.target.value})} className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white outline-none focus:border-amber-500" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">WhatsApp</label>
-                <input type="text" value={tecnicoForm.whatsapp} onChange={e => setTecnicoForm({...tecnicoForm, whatsapp: e.target.value})} className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white outline-none focus:border-amber-500" />
-              </div>
-              <button type="submit" className="w-full bg-white text-black font-black text-xs uppercase tracking-widest py-3 rounded-xl hover:bg-amber-400 transition-colors shadow-md">
-                {editingTecnicoId ? "Actualizar Staff" : "Vincular Técnico"}
-              </button>
+              <div><label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre</label><input required type="text" value={tecnicoForm.nombre} onChange={e => setTecnicoForm({...tecnicoForm, nombre: e.target.value})} className="mt-1.5 w-full rounded-xl bg-zinc-950 border border-zinc-800 p-2.5 text-sm text-white" /></div>
+              <div><label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">WhatsApp</label><input type="text" value={tecnicoForm.whatsapp} onChange={e => setTecnicoForm({...tecnicoForm, whatsapp: e.target.value})} className="mt-1.5 w-full rounded-xl bg-zinc-950 border border-zinc-800 p-2.5 text-sm text-white" /></div>
+              <button type="submit" className="w-full bg-white text-black font-black text-xs uppercase tracking-widest py-3 rounded-xl hover:bg-amber-400">{editingTecnicoId ? "Actualizar Staff" : "Vincular Técnico"}</button>
             </form>
           </div>
           <div className="xl:col-span-8 bg-[#161B22] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
-                <tr>
-                  <th className="p-4 pl-6">Especialista</th>
-                  <th className="p-4 text-center">Equipos Activos</th>
-                  <th className="p-4 text-right">A Pagar (Mano de Obra)</th>
-                  <th className="p-4 text-center pr-6 w-32">Acciones</th>
-                </tr>
+              <thead className="bg-zinc-950 text-[9px] font-black uppercase text-zinc-500 border-b border-zinc-800">
+                <tr><th className="p-4 pl-6">Especialista</th><th className="p-4 text-center">Equipos</th><th className="p-4 text-right">A Pagar (Mano de Obra)</th><th className="p-4 text-center pr-6">Acciones</th></tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/40">
                 {tecnicos.map((t: any) => {
                   const equiposDelTecnico = todasLasReparaciones.filter((r: any) => r.tecnico_id === t.id && r.estado !== 'Entregado')
                   const manoDeObraPendiente = todasLasReparaciones.filter((r: any) => r.tecnico_id === t.id && r.pago_tecnico_estado !== 'Pagado').reduce((a: number, r: any) => a + Number(r.costo_tecnico || 0), 0)
-
                   return (
                     <tr key={t.id} className="hover:bg-zinc-800/10">
                       <td className="p-4 pl-6 font-bold text-white text-sm">{t.nombre}</td>
-                      <td className="p-4 text-center"><span className="bg-zinc-950 border border-zinc-800 text-zinc-300 font-bold px-2.5 py-1 rounded-xl text-xs">{equiposDelTecnico.length} celus</span></td>
+                      <td className="p-4 text-center"><span className="bg-zinc-950 border border-zinc-800 text-zinc-300 font-bold px-2.5 py-1 rounded-xl text-xs">{equiposDelTecnico.length} celus activos</span></td>
                       <td className="p-4 text-right font-black text-amber-500 text-sm">{formatARS(manoDeObraPendiente)}</td>
                       <td className="p-4 text-center pr-6">
                         <div className="flex justify-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity">
-                          <button onClick={() => setTecnicoHistorialId(t.id)} title="Ver Historial" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-white border border-zinc-800"><FileClock className="size-4"/></button>
-                          <button onClick={() => { setEditingTecnicoId(t.id); setTecnicoForm({ nombre: t.nombre, whatsapp: t.whatsapp, estado: t.estado }) }} title="Editar" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-amber-500 border border-zinc-800"><Edit3 className="size-4"/></button>
-                          <button onClick={() => handleEliminarTecnico(t.id)} title="Eliminar" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-red-500 border border-zinc-800"><Trash2 className="size-4"/></button>
+                          <button onClick={() => setTecnicoHistorialId(t.id)} title="Dashboard Rendimiento" className="p-2 bg-purple-600/20 rounded-lg text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30"><FileClock className="size-4"/></button>
+                          <button onClick={() => { setEditingTecnicoId(t.id); setTecnicoForm({ nombre: t.nombre, whatsapp: t.whatsapp, estado: t.estado }) }} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-amber-500 border border-zinc-800"><Edit3 className="size-4"/></button>
+                          <button onClick={() => handleEliminarTecnico(t.id)} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-red-500 border border-zinc-800"><Trash2 className="size-4"/></button>
                         </div>
                       </td>
                     </tr>
@@ -342,53 +311,107 @@ export function TabReparaciones({
         </div>
       )}
 
+      {/* 🚀 DASHBOARD GIGANTE DEL TÉCNICO (Historial, Rendimiento y Pagos) */}
       {tecnicoHistorialId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
-          <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh]">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-5xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            
             <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20"><FileClock className="size-5"/></div>
+                <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl border border-purple-500/20"><FileClock className="size-6"/></div>
                 <div>
-                  <h3 className="text-lg font-black text-white">Historial de Trabajos</h3>
-                  <p className="text-[10px] text-zinc-400 uppercase tracking-widest">{tecnicos.find((t:any)=>t.id === tecnicoHistorialId)?.nombre}</p>
+                  <h3 className="text-xl font-black text-white">Panel de Rendimiento</h3>
+                  <p className="text-xs text-zinc-400 uppercase tracking-widest font-bold mt-0.5">{tecnicos.find((t:any)=>t.id === tecnicoHistorialId)?.nombre}</p>
                 </div>
               </div>
-              <button onClick={() => setTecnicoHistorialId(null)} className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl"><X className="size-5"/></button>
+              <button onClick={() => setTecnicoHistorialId(null)} className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl"><X className="size-6"/></button>
             </div>
-            <div className="p-0 flex-1 overflow-y-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 sticky top-0">
-                  <tr>
-                    <th className="p-4 pl-6">Fecha y Cliente</th>
-                    <th className="p-4">Falla Reparada</th>
-                    <th className="p-4 text-center">Estado del Equipo</th>
-                    <th className="p-4 text-right pr-6">Mano de Obra (Téc)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/40">
-                  {todasLasReparaciones.filter((r:any) => r.tecnico_id === tecnicoHistorialId).map((rep:any) => (
-                    <tr key={rep.id} className="hover:bg-zinc-800/20">
-                      <td className="p-4 pl-6">
-                        <span className="font-bold text-white text-sm block">{rep.cliente_referencia}</span>
-                        <span className="text-[10px] text-zinc-500 font-bold block mt-0.5">{new Date(rep.created_at).toLocaleDateString()}</span>
-                      </td>
-                      <td className="p-4 text-zinc-300 font-medium text-xs">{rep.nombre_producto?.replace("Servicio: ", "")}</td>
-                      <td className="p-4 text-center">
-                        <span className={cn("px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest", rep.estado === 'Entregado' ? 'bg-purple-500/10 text-purple-400' : rep.estado === 'Listo' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500')}>{rep.estado}</span>
-                      </td>
-                      <td className="p-4 text-right pr-6 font-black text-white">{formatARS(rep.costo_tecnico)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+              
+              {/* Filtro de Fechas */}
+              <div className="flex gap-4 items-end bg-zinc-950 p-4 rounded-2xl border border-zinc-800">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Desde Fecha:</label>
+                  <div className="relative"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="date" value={techFechaInicio} onChange={e => setTechFechaInicio(e.target.value)} className="bg-zinc-900 border border-zinc-700 text-white text-sm rounded-xl pl-9 pr-3 py-2 outline-none" /></div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Hasta Fecha:</label>
+                  <div className="relative"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="date" value={techFechaFin} onChange={e => setTechFechaFin(e.target.value)} className="bg-zinc-900 border border-zinc-700 text-white text-sm rounded-xl pl-9 pr-3 py-2 outline-none" /></div>
+                </div>
+                <button onClick={()=>{setTechFechaInicio(""); setTechFechaFin("")}} className="text-xs font-bold text-zinc-500 hover:text-white ml-2 py-2">Borrar Filtro</button>
+              </div>
+
+              {/* Tarjetas de Métricas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Equipos Activos (En Taller)</span>
+                  <p className="text-3xl font-black text-white mt-1">{tecEquiposActivos}</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl">
+                  <span className="text-[10px] font-black uppercase text-emerald-500">Equipos Reparados (En Rango)</span>
+                  <p className="text-3xl font-black text-emerald-400 mt-1">{tecEquiposListos}</p>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-2xl">
+                  <span className="text-[10px] font-black uppercase text-blue-500">Facturación Generada (En Rango)</span>
+                  <p className="text-2xl font-black text-blue-400 mt-1">{formatARS(tecFacturacionTotal)}</p>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 p-5 rounded-2xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-amber-500">Mano de Obra a Pagar (Total Histórico)</span>
+                    <p className="text-2xl font-black text-amber-400 mt-1">{formatARS(tecDeudaManoObra)}</p>
+                  </div>
+                  {/* 🚀 EL BOTÓN MÁGICO DE LIQUIDACIÓN */}
+                  <button onClick={() => {
+                      if(handleLiquidarPagosTecnico) handleLiquidarPagosTecnico(tecnicoHistorialId);
+                      else alert("Falta implementar handleLiquidarPagosTecnico");
+                    }} 
+                    disabled={tecDeudaManoObra === 0 || isSaving}
+                    className="mt-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-black uppercase text-[10px] tracking-widest py-2 rounded-lg flex items-center justify-center gap-1 shadow-lg shadow-amber-500/20 transition-all">
+                    <CheckCircle2 className="size-3"/> Liquidar y Pagar
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabla de Trabajos Filtrada */}
+              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-zinc-900 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                    <tr><th className="p-4 pl-6">Fecha / Cliente</th><th className="p-4">Falla Reparada</th><th className="p-4 text-center">Estado Equipo</th><th className="p-4 text-center">Estado Pago</th><th className="p-4 text-right pr-6">A Pagar al Téc.</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/40">
+                    {repDelTecnicoFiltradas.map((rep:any) => (
+                      <tr key={rep.id} className="hover:bg-zinc-800/20">
+                        <td className="p-4 pl-6">
+                          <span className="font-bold text-white text-sm block">{rep.cliente_referencia}</span>
+                          <span className="text-[10px] text-zinc-500 font-bold block mt-0.5">{new Date(rep.created_at).toLocaleDateString()}</span>
+                        </td>
+                        <td className="p-4 text-zinc-300 font-medium text-xs">{rep.nombre_producto?.replace("Servicio: ", "")}</td>
+                        <td className="p-4 text-center">
+                          <span className={cn("px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest", rep.estado === 'Entregado' ? 'bg-purple-500/10 text-purple-400' : rep.estado === 'Listo' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500')}>{rep.estado}</span>
+                        </td>
+                        <td className="p-4 text-center">
+                          {rep.pago_tecnico_estado === "Pagado" ? (
+                            <span className="px-2 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest">✅ Abonado</span>
+                          ) : (
+                            <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest">⏳ Pendiente</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right pr-6 font-black text-white">{formatARS(rep.costo_tecnico)}</td>
+                      </tr>
+                    ))}
+                    {repDelTecnicoFiltradas.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-zinc-500 italic">No hay trabajos en estas fechas.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🚀 MODAL MAGISTRAL: CENTRO DE CONTROL DE ORDEN (Gigante si está editando) */}
+      {/* 🚀 CENTRO DE CONTROL DE ORDEN (Gigante si está editando) */}
       {showNuevaReparacion && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
           <div className={cn("bg-[#121212] border border-zinc-800 w-full rounded-3xl shadow-2xl overflow-hidden relative flex flex-col max-h-[95vh] transition-all", reparacionForm.id ? "max-w-6xl" : "max-w-2xl")}>
             
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/40">
@@ -406,7 +429,6 @@ export function TabReparaciones({
 
             <div className={cn("p-6 overflow-y-auto grid gap-8", reparacionForm.id ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
               
-              {/* COLUMNA 1: FICHA TÉCNICA (Siempre visible) */}
               <div className="space-y-6">
                 <div className="space-y-3">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-400 border-b border-zinc-800 pb-1">Información del Cliente</h4>
@@ -473,7 +495,6 @@ export function TabReparaciones({
                   </div>
                 </div>
 
-                {/* Si NO estamos editando, las finanzas se muestran acá abajo (como siempre) */}
                 {!reparacionForm.id && (
                   <div className="grid grid-cols-3 gap-4">
                     <div><label className="text-[10px] font-bold text-zinc-400 mb-1 block">Presupuesto (ARS)</label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="number" value={reparacionForm.total_trato || ""} onChange={e => setReparacionForm({...reparacionForm, total_trato: Number(e.target.value)})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 pl-9 text-sm font-black text-white outline-none focus:border-purple-500" placeholder="0" /></div></div>
@@ -483,11 +504,9 @@ export function TabReparaciones({
                 )}
               </div>
 
-              {/* 🚀 COLUMNA 2: PORTAL DEL CLIENTE Y FINANZAS (Solo visible si está editando) */}
               {reparacionForm.id && (
                 <div className="space-y-6 flex flex-col h-full">
                   
-                  {/* Widget: Estado del Cliente */}
                   <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-inner">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 border-b border-zinc-800 pb-2 mb-4 flex items-center gap-1.5"><Smartphone className="size-3"/> Portal del Cliente</h4>
                     
@@ -513,7 +532,6 @@ export function TabReparaciones({
                     </div>
                   </div>
 
-                  {/* Widget: Finanzas y Nuevos Pagos */}
                   <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg flex-1">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 mb-4 flex items-center gap-1.5"><Banknote className="size-3"/> Estado de Cuenta</h4>
                     
@@ -568,9 +586,8 @@ export function TabReparaciones({
         </div>
       )}
 
-      {/* MODALES DE CLIENTE RAPIDO Y COBRO (QUEDAN IGUAL) */}
       {showNuevoCliente && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl">
             <h4 className="text-white font-bold mb-4 flex items-center justify-between">Nuevo Cliente Rápido<button onClick={() => setShowNuevoCliente(false)} className="text-zinc-500 hover:text-white"><X className="size-4"/></button></h4>
             <div className="space-y-3">
