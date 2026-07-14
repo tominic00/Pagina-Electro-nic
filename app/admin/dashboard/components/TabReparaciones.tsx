@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Wrench, Users, Search, Plus, DollarSign, Smartphone, ShieldAlert, MessageCircle, CheckCircle2, Loader2, Trash2, Edit3, ClipboardList, X, Lock } from "lucide-react"
+import { Wrench, Users, Search, Plus, DollarSign, Smartphone, ShieldAlert, MessageCircle, CheckCircle2, Loader2, Trash2, Edit3, ClipboardList, X, Lock, Banknote } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function TabReparaciones({
@@ -20,7 +20,8 @@ export function TabReparaciones({
   setReparacionForm,
   handleRegistrarReparacion,
   isSaving,
-  handleUpdateInline
+  handleUpdateInline,
+  handleCobrarReparacion // 🚀 NUEVA PROP para manejar el pago al entregar
 }: any) {
   
   const [subTab, setSubTab] = useState<"equipos" | "tecnicos">("equipos")
@@ -30,6 +31,10 @@ export function TabReparaciones({
   // 🚀 ESTADO PARA EL MODAL DE CLIENTE RÁPIDO
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
   const [clienteRapido, setClienteRapido] = useState({ nombre: "", telefono: "" })
+
+  // 🚀 ESTADO PARA EL MODAL DE COBRO/ENTREGA
+  const [reparacionACobrar, setReparacionACobrar] = useState<any>(null)
+  const [metodoPagoCobro, setMetodoPagoCobro] = useState("Efectivo")
 
   const TASA_BLUE = 1250
 
@@ -51,7 +56,7 @@ export function TabReparaciones({
 
   const formatARS = (usd: number) => `$ ${(usd * TASA_BLUE).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
 
-  // Función para simular el guardado rápido del cliente en el formulario
+  // Función para guardar el cliente rápido en el input del formulario
   const handleGuardarClienteRapido = () => {
     setReparacionForm({ 
       ...reparacionForm, 
@@ -59,6 +64,14 @@ export function TabReparaciones({
     })
     setShowNuevoCliente(false)
     setClienteRapido({ nombre: "", telefono: "" })
+  }
+
+  // Procesar el cobro final y entrega
+  const confirmarCobro = () => {
+    if (handleCobrarReparacion) {
+      handleCobrarReparacion(reparacionACobrar.id, reparacionACobrar.total_trato, metodoPagoCobro)
+    }
+    setReparacionACobrar(null)
   }
 
   return (
@@ -120,19 +133,20 @@ export function TabReparaciones({
           <div className="bg-[#161B22] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                {/* ... (Tu tabla original queda igual) ... */}
                 <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
                   <tr>
                     <th className="p-4 pl-6">Cliente / IMEI</th>
                     <th className="p-4">Falla / Reparación</th>
                     <th className="p-4">Técnico Asignado</th>
                     <th className="p-4 text-right">Presupuesto</th>
-                    <th className="p-4 text-center">Estado Equipo</th>
+                    <th className="p-4 text-center">Estado y Cobro</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/40">
                   {reparacionesFiltradas.map((rep: any) => {
                     const tec = tecnicos.find((t: any) => t.id === rep.tecnico_id)
+                    const debeSaldo = rep.monto_pagado < rep.total_trato
+
                     return (
                       <tr key={rep.id} className="hover:bg-zinc-800/20 transition-colors group">
                         <td className="p-4 pl-6">
@@ -149,17 +163,24 @@ export function TabReparaciones({
                         </td>
                         <td className="p-4 text-right">
                           <span className="font-black text-white text-sm block">{formatARS(rep.total_trato)}</span>
-                          <span className={cn("text-[9px] font-black uppercase tracking-widest", rep.monto_pagado >= rep.total_trato ? "text-emerald-500" : "text-amber-500")}>
-                            {rep.monto_pagado >= rep.total_trato ? "Saldado" : "Debe retiro"}
+                          <span className={cn("text-[9px] font-black uppercase tracking-widest", !debeSaldo ? "text-emerald-500" : "text-amber-500")}>
+                            {!debeSaldo ? "Saldado" : `Debe USD ${rep.total_trato - rep.monto_pagado}`}
                           </span>
                         </td>
                         <td className="p-4 text-center">
-                          <select value={rep.estado} onChange={e => handleUpdateInline(rep.id, 'estado', e.target.value as any)} className={cn("text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border outline-none cursor-pointer bg-zinc-950 transition-all", rep.estado === 'Listo' && 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5', rep.estado === 'Ingresado' && 'border-zinc-700 text-zinc-400', rep.estado === 'En Laboratorio' && 'border-amber-500/30 text-amber-500 bg-amber-500/5', rep.estado === 'Entregado' && 'border-purple-500/30 text-purple-400 bg-purple-500/5')}>
-                            <option value="Ingresado">📥 Ingresado</option>
-                            <option value="En Laboratorio">🔬 En Laboratorio</option>
-                            <option value="Listo">✅ Listo / Terminado</option>
-                            <option value="Entregado">📦 Entregado al Cliente</option>
-                          </select>
+                          {/* 🚀 BOTÓN DE COBRO Y ENTREGA O SELECTOR NORMAL */}
+                          {rep.estado === 'Listo' && debeSaldo ? (
+                            <button onClick={() => setReparacionACobrar(rep)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full shadow-lg shadow-emerald-500/20 transition-all">
+                              <Banknote className="size-3"/> Cobrar y Entregar
+                            </button>
+                          ) : (
+                            <select disabled={rep.estado === 'Entregado'} value={rep.estado} onChange={e => handleUpdateInline(rep.id, 'estado', e.target.value as any)} className={cn("text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border outline-none cursor-pointer bg-zinc-950 transition-all w-full", rep.estado === 'Listo' && 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5', rep.estado === 'Ingresado' && 'border-zinc-700 text-zinc-400', rep.estado === 'En Laboratorio' && 'border-amber-500/30 text-amber-500 bg-amber-500/5', rep.estado === 'Entregado' && 'border-purple-500/30 text-purple-400 bg-purple-500/5', rep.estado === 'Entregado' && 'opacity-50')}>
+                              <option value="Ingresado">📥 Ingresado</option>
+                              <option value="En Laboratorio">🔬 En Laboratorio</option>
+                              <option value="Listo">✅ Listo / Terminado</option>
+                              <option value="Entregado">📦 Entregado al Cliente</option>
+                            </select>
+                          )}
                         </td>
                       </tr>
                     )
@@ -173,18 +194,75 @@ export function TabReparaciones({
           </div>
         </>
       ) : (
-        /* SUBPESTAÑA: GESTIÓN DE TÉCNICOS (Queda igual) */
+        /* 🚀 SUBPESTAÑA RESTAURADA: GESTIÓN DE TÉCNICOS */
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-           {/* ... Contenido de técnicos ... */}
+          {/* ABM TÉCNICOS */}
+          <div className="xl:col-span-4 bg-[#161B22] border border-zinc-800 p-5 rounded-2xl space-y-4">
+            <h3 className="text-base font-black text-white">{editingTecnicoId ? "Modificar Técnico" : "Alta de Técnico"}</h3>
+            <form onSubmit={handleRegistrarTecnico} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre Completo</label>
+                <input required type="text" value={tecnicoForm.nombre} onChange={e => setTecnicoForm({...tecnicoForm, nombre: e.target.value})} className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-amber-500" placeholder="Ej: Franco Electrónica" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">WhatsApp Contacto</label>
+                <input type="text" value={tecnicoForm.whatsapp} onChange={e => setTecnicoForm({...tecnicoForm, whatsapp: e.target.value})} className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-amber-500" placeholder="Ej: 3815556677" />
+              </div>
+              <button type="submit" className="w-full bg-white text-black font-black text-xs uppercase tracking-widest py-3 rounded-xl hover:bg-amber-400 transition-colors shadow-md">
+                {editingTecnicoId ? "Actualizar Staff" : "Vincular Técnico"}
+              </button>
+            </form>
+          </div>
+
+          {/* LISTA DEL STAFF Y SUS BALANCES */}
+          <div className="xl:col-span-8 bg-[#161B22] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
+                <tr>
+                  <th className="p-4 pl-6">Especialista</th>
+                  <th className="p-4 text-center">Equipos Asignados</th>
+                  <th className="p-4 text-right">Mano de Obra Pendiente</th>
+                  <th className="p-4 text-center pr-6 w-24">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/40">
+                {tecnicos.map((t: any) => {
+                  const equiposDelTecnico = todasLasReparaciones.filter((r: any) => r.tecnico_id === t.id && r.estado !== 'Entregado')
+                  const manoDeObraPendiente = todasLasReparaciones.filter((r: any) => r.tecnico_id === t.id && r.pago_tecnico_estado !== 'Pagado').reduce((a: number, r: any) => a + Number(r.costo_tecnico || 0), 0)
+
+                  return (
+                    <tr key={t.id} className="hover:bg-zinc-800/10 transition-colors group">
+                      <td className="p-4 pl-6">
+                        <span className="font-bold text-white text-sm block">{t.nombre}</span>
+                        <span className="text-[10px] text-zinc-500 font-medium block mt-0.5 flex items-center gap-1"><MessageCircle className="size-3 text-emerald-500"/> {t.whatsapp || "Sin Celular"}</span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="bg-zinc-950 border border-zinc-800 text-zinc-300 font-bold px-2.5 py-1 rounded-xl text-xs">{equiposDelTecnico.length} celus</span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <span className="font-black text-amber-500 text-sm block">{formatARS(manoDeObraPendiente)}</span>
+                        <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block mt-0.5">Ref: USD {manoDeObraPendiente}</span>
+                      </td>
+                      <td className="p-4 text-center pr-6">
+                        <div className="flex justify-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingTecnicoId(t.id); setTecnicoForm({ nombre: t.nombre, whatsapp: t.whatsapp, estado: t.estado }) }} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-amber-500 border border-zinc-800"><Edit3 className="size-4"/></button>
+                          <button onClick={() => handleEliminarTecnico(t.id)} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-red-500 border border-zinc-800"><Trash2 className="size-4"/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* 🚀 MODAL REDISEÑADO: INGRESO AL TALLER */}
+      {/* MODAL REDISEÑADO: INGRESO AL TALLER */}
       {showNuevaReparacion && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative flex flex-col max-h-[90vh]">
             
-            {/* Header del Modal */}
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/20">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-purple-600/10 rounded-xl border border-purple-500/20">
@@ -200,7 +278,6 @@ export function TabReparaciones({
               </button>
             </div>
 
-            {/* Cuerpo Scrollable */}
             <div className="p-6 overflow-y-auto space-y-6">
               
               {/* Sección Cliente */}
@@ -217,7 +294,7 @@ export function TabReparaciones({
                 </div>
               </div>
 
-              {/* Sección Dispositivo */}
+              {/* Sección Dispositivo y SEGURIDAD (Contraseñas) */}
               <div className="space-y-3">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-400 border-b border-zinc-800 pb-1">Datos del Dispositivo y Seguridad</h4>
                 <div className="grid grid-cols-2 gap-4">
@@ -236,6 +313,7 @@ export function TabReparaciones({
                   </div>
                 </div>
 
+                {/* CONTRASEÑAS */}
                 <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50">
                   <div>
                     <label className="text-[10px] font-bold text-zinc-400 mb-1 flex items-center gap-1"><Lock className="size-3"/> Tipo de Seguridad</label>
@@ -287,7 +365,6 @@ export function TabReparaciones({
               </div>
             </div>
 
-            {/* Footer */}
             <div className="p-6 border-t border-zinc-800 bg-zinc-900/20 flex gap-4">
               <button type="button" onClick={() => setShowNuevaReparacion(false)} className="flex-1 py-3.5 rounded-xl font-bold text-sm text-zinc-400 bg-zinc-900 hover:bg-zinc-800 hover:text-white transition-colors">
                 CANCELAR
@@ -306,7 +383,7 @@ export function TabReparaciones({
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl">
             <h4 className="text-white font-bold mb-4 flex items-center justify-between">
-              Nuevo Cliente
+              Nuevo Cliente Rápido
               <button onClick={() => setShowNuevoCliente(false)} className="text-zinc-500 hover:text-white"><X className="size-4"/></button>
             </h4>
             <div className="space-y-3">
@@ -319,8 +396,56 @@ export function TabReparaciones({
                 <input type="text" value={clienteRapido.telefono} onChange={e => setClienteRapido({...clienteRapido, telefono: e.target.value})} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white outline-none" />
               </div>
               <button onClick={handleGuardarClienteRapido} disabled={!clienteRapido.nombre} className="w-full py-2.5 bg-white text-black font-bold rounded-xl text-sm disabled:opacity-50 mt-2">
-                Aceptar
+                Autocompletar en Orden
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 SUB-MODAL: COBRO Y ENTREGA DE EQUIPO AL LIBRO DIARIO */}
+      {reparacionACobrar && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#121212] border border-emerald-900/50 w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                <Banknote className="size-6"/>
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Cobrar y Entregar</h3>
+                <p className="text-xs text-zinc-400">El pago se registrará en el Libro Diario.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+                <span className="text-zinc-400 text-sm font-bold">Total del Presupuesto</span>
+                <span className="text-white font-black">USD {reparacionACobrar.total_trato}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+                <span className="text-zinc-400 text-sm font-bold">Seña Anticipada</span>
+                <span className="text-emerald-400 font-black">- USD {reparacionACobrar.monto_pagado}</span>
+              </div>
+              <div className="flex justify-between items-center py-3 bg-emerald-500/10 px-4 rounded-xl border border-emerald-500/20">
+                <span className="text-emerald-500 font-black uppercase tracking-widest text-xs">Saldo a Cobrar Hoy</span>
+                <span className="text-emerald-400 text-xl font-black">USD {reparacionACobrar.total_trato - reparacionACobrar.monto_pagado}</span>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 mb-2 block">Método de Pago Final</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {["Efectivo", "Transferencia", "USDT", "Tarjeta"].map(metodo => (
+                    <button key={metodo} onClick={() => setMetodoPagoCobro(metodo)} className={cn("py-2.5 rounded-xl text-xs font-bold border transition-all", metodoPagoCobro === metodo ? "bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600")}>
+                      {metodo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setReparacionACobrar(null)} className="flex-1 py-3 text-sm font-bold text-zinc-400 bg-zinc-900 hover:bg-zinc-800 rounded-xl">Cancelar</button>
+              <button onClick={confirmarCobro} className="flex-1 py-3 text-sm font-black text-white bg-emerald-500 hover:bg-emerald-400 rounded-xl shadow-lg">Confirmar Entrega</button>
             </div>
           </div>
         </div>
