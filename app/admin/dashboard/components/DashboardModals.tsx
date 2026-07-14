@@ -161,11 +161,10 @@ export function DashboardModals(props: any) {
 
           <div id="invoice-modal-container" className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[92vh] flex flex-col">
             <div className="p-8 text-black overflow-y-auto flex-1" id="printable-invoice">
-              
-              {/* COMPROBANTE... (mantiene tu código intacto) */}
+  
+              {/* 🏛️ CASO 1: FACTURA C LEGAL (AFIP) */}
               {invoiceCAE ? (
                 <div className="space-y-6">
-                  {/* ... Factura AFIP ... */}
                   <div className="relative border border-black p-4 grid grid-cols-2 gap-4 text-[11px] leading-tight font-medium">
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-black px-4 py-2 text-center z-10 shrink-0">
                       <span className="text-3xl font-black block leading-none">C</span>
@@ -185,20 +184,210 @@ export function DashboardModals(props: any) {
                       <p className="font-black pt-2 text-xs">CUIT: 27-232392628-8</p>
                     </div>
                   </div>
-                  {/* (Mantiene el resto de tu factura igual) */}
-                </div>
-              ) : (
-                <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
-                  <div>
-                    <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
-                    <p className="text-[9px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
+                  
+                  <div className="border border-black p-3.5 bg-gray-50/50 grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-0.5">Señor(es):</p>
+                      <p className="font-black text-gray-900 text-sm">{invoiceClientName}</p>
+                    </div>
+                    <div className="text-right space-y-0.5">
+                      <p className="text-[9px] font-black text-gray-400 uppercase">Condición de Venta:</p>
+                      <p className="font-bold text-gray-800 uppercase text-[10px] tracking-wider">Contado / Pago Único</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUESTO" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
-                    <p className="text-xs font-mono text-gray-500">#{invoiceId}</p>
+
+                  <table className="w-full text-left text-xs border border-black">
+                    <thead className="bg-black text-white text-[9px] font-black uppercase tracking-wider">
+                      <tr><th className="p-2.5 pl-4">Descripción</th><th className="p-2.5 text-center">Cant.</th><th className="p-2.5 text-right pr-4">Total</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {invoiceItems.map((item: any, idx: number) => {
+                        const precioOriginal = item.producto.precio_minorista ?? item.producto.precio;
+                        const precioARS = item.producto.moneda === "USD" ? (precioOriginal * (tasaDolarBlue || 1510)) : precioOriginal;
+                        return (
+                          <tr key={idx}>
+                            <td className="p-3 pl-4 font-bold">{item.producto.nombre}</td>
+                            <td className="p-3 text-center font-bold">{item.cantidad}</td>
+                            <td className="p-3 text-right font-black pr-4">$ {(precioARS * item.cantidad).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+            
+                  <div className="flex justify-between items-start pt-1">
+                    <p className="text-[9px] text-gray-400 font-bold uppercase italic tracking-wide">
+                      Comprobante oficial emitido mediante conexión Web Service AFIP
+                    </p>
+                    <div className="w-60 border border-black p-3.5 space-y-1 bg-gray-50/50">
+                      {invoiceDiscountAmount > 0 && (
+                        <div className="flex justify-between text-xs font-bold text-emerald-600">
+                          <span>Rebaja Aplicada</span><span>- $ {invoiceDiscountAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-black text-black border-t border-black pt-1.5">
+                        <span>TOTAL NETO</span>
+                        <span>$ {Math.max(0, invoiceItems.reduce((sum: number, item: any) => {
+                            const pOrig = item.producto.precio_minorista ?? item.producto.precio;
+                            const pARS = item.producto.moneda === "USD" ? (pOrig * (tasaDolarBlue || 1510)) : pOrig;
+                            return sum + (pARS * item.cantidad);
+                          }, 0) - invoiceDiscountAmount).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+            
+                  <div className="border border-black p-4 flex justify-between items-center bg-gray-50 text-xs">
+                    <div className="border-l-4 border-black pl-3 py-0.5">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Comprobante Fiscal Autorizado</p>
+                      <p className="text-[10px] font-mono font-black text-gray-900 mt-0.5">CAE - CONSTANCIA ELECTRÓNICA AFIP</p>
+                    </div>
+                    <div className="text-right font-mono space-y-0.5">
+                      <p className="font-bold text-sm text-black">CAE N°: <span className="font-black select-all text-black">{invoiceCAE}</span></p>
+                      <p className="text-[11px] font-black text-gray-600">Vto CAE: {invoiceCAEVto}</p>
+                    </div>
+                  </div>
+                </div>
+
+              ) : invoiceType === "ETIQUETA" ? (
+                
+                /* 🏷️ CASO 2: ETIQUETA PARA PEGAR EN EL CELULAR (6x4 cm aprox) */
+                <div className="w-[6cm] h-auto border-2 border-black p-2 flex flex-col text-[10px] font-mono leading-tight bg-white text-black mx-auto shadow-md">
+                  <div className="text-center border-b-2 border-black pb-1 mb-1 font-black text-xs uppercase tracking-widest">Electro·nic Taller</div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>#{invoiceId}</span><span>{invoiceDate}</span>
+                  </div>
+                  <div className="truncate font-black text-sm mb-1">{invoiceClientName}</div>
+                  <div className="truncate font-bold">Eq: {invoiceItems[0]?.producto?.nombre}</div>
+                  <div>IMEI: {invoiceItems[0]?.reparacion?.imei || "---"}</div>
+                  <div className="bg-gray-100 p-1 mt-1 border border-gray-300">
+                    <b>Clave:</b> {invoiceItems[0]?.reparacion?.tipo_contrasena !== "Ninguna" ? `${invoiceItems[0]?.reparacion?.tipo_contrasena} (${invoiceItems[0]?.reparacion?.contrasena_equipo})` : "Sin Clave"}
+                  </div>
+                </div>
+
+              ) : invoiceType === "REMITO REPARACION" ? (
+                
+                /* 📜 CASO 3: REMITO OFICIAL DEL TALLER PARA EL CLIENTE */
+                <div className="max-w-2xl mx-auto bg-white text-black h-full flex flex-col">
+                  <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-6">
+                    <div>
+                      <h1 className="text-4xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
+                      <p className="text-[10px] uppercase font-bold text-purple-600 tracking-widest">Servicio Técnico & Apple Specialist</p>
+                    </div>
+                    <div className="text-right">
+                      <h2 className="text-2xl font-black uppercase text-black">ORDEN DE SERVICIO</h2>
+                      <p className="text-sm font-mono text-gray-500 font-bold mt-1">TICKET #{invoiceId}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-6 border border-gray-300 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cliente:</p>
+                      <p className="font-black text-lg text-black">{invoiceClientName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fecha de Ingreso:</p>
+                      <p className="font-bold text-black text-lg">{invoiceDate}</p>
+                    </div>
+                  </div>
+            
+                  <div className="mb-6 border border-black rounded-lg overflow-hidden">
+                    <h3 className="text-xs font-black bg-black text-white p-2.5 uppercase tracking-widest text-center">Datos del Equipo a Reparar</h3>
+                    <div className="grid grid-cols-2 gap-4 p-4 text-sm bg-white">
+                      <p><span className="text-gray-500 font-bold">Equipo:</span> <span className="font-black">{invoiceItems[0]?.producto?.nombre}</span></p>
+                      <p><span className="text-gray-500 font-bold">IMEI/Serie:</span> <span className="font-black font-mono">{invoiceItems[0]?.reparacion?.imei || "No declarado"}</span></p>
+                      <p><span className="text-gray-500 font-bold">Seguridad:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.tipo_contrasena !== "Ninguna" ? `${invoiceItems[0]?.reparacion?.tipo_contrasena} (${invoiceItems[0]?.reparacion?.contrasena_equipo})` : "Sin Clave"}</span></p>
+                      <p><span className="text-gray-500 font-bold">Estética/Color:</span> <span className="font-black">{invoiceItems[0]?.reparacion?.color || "---"}</span></p>
+                    </div>
+                    <div className="p-4 border-t border-gray-200 text-sm bg-gray-50">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Falla Reportada por el Cliente:</p>
+                      <p className="font-bold">{invoiceItems[0]?.reparacion?.diagnostico_falla}</p>
+                    </div>
+                  </div>
+            
+                  <div className="flex justify-end mb-8">
+                    <div className="w-80 space-y-2 border-2 border-black p-4 bg-white rounded-xl">
+                      <div className="flex justify-between text-sm font-bold text-gray-500">
+                        <span>Presupuesto Estimado:</span>
+                        <span>$ {Number(invoiceItems[0]?.reparacion?.total_trato || 0).toLocaleString("es-AR")}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-black text-emerald-600">
+                        <span>Seña Anticipada:</span>
+                        <span>- $ {Number(invoiceItems[0]?.reparacion?.monto_pagado || 0).toLocaleString("es-AR")}</span>
+                      </div>
+                      <div className="flex justify-between text-xl font-black text-black border-t-2 border-black pt-3 mt-3">
+                        <span>Saldo a Pagar:</span>
+                        <span>$ {Number((invoiceItems[0]?.reparacion?.total_trato || 0) - (invoiceItems[0]?.reparacion?.monto_pagado || 0)).toLocaleString("es-AR")}</span>
+                      </div>
+                    </div>
+                  </div>
+            
+                  <div className="mt-auto pt-6 border-t border-gray-300 text-[10px] text-gray-500 text-justify leading-relaxed">
+                    <p className="mb-2"><strong className="text-black uppercase">Términos y Condiciones:</strong> Pasados los 90 (noventa) días de notificada la reparación del equipo, si el mismo no es retirado, la empresa lo considerará abandonado y podrá disponer del mismo para cubrir los costos de reparación y almacenaje, perdiendo el cliente todo derecho a reclamo.</p>
+                    <p>El presupuesto inicial emitido en este documento está sujeto a modificaciones. En caso de detectarse daños ocultos, componentes sulfatados o problemas en la placa base (motherboard) no declarados o indetectables al momento de la recepción, se le informará al cliente el nuevo costo antes de proceder.</p>
+                  </div>
+                </div>
+
+              ) : (
+    
+                /* 🛒 CASO 4: TICKET DE VENTA DE PRODUCTOS (Cables, Fundas, etc) */
+                <div>
+                  <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
+                    <div>
+                      <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">electro·nic</h1>
+                      <p className="text-[9px] uppercase font-bold text-purple-600 tracking-widest">Tech & Accesorios</p>
+                    </div>
+                    <div className="text-right">
+                      <h2 className={`text-xl font-bold uppercase ${invoiceType === "PRESUPUESTO" ? "text-amber-500" : "text-black"}`}>{invoiceType}</h2>
+                      <p className="text-xs font-mono text-gray-500">#{invoiceId}</p>
+                    </div>
+                  </div>
+            
+                  <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
+                    <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Cliente:</p><p className="font-bold text-black">{invoiceClientName}</p></div>
+                    <div className="text-right"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Fecha:</p><p className="font-bold text-black">{invoiceDate}</p></div>
+                  </div>
+            
+                  <table className="w-full text-left mb-10 text-sm border-b border-gray-300 pb-4">
+                    <thead className="bg-black text-white text-[10px] uppercase">
+                      <tr><th className="p-3">Descripción</th><th className="p-3 text-center">Cant.</th><th className="p-3 text-right">Unit.</th><th className="p-3 text-right">Total</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {invoiceItems.map((item: any, idx: number) => {
+                        const pOrig = item.producto.precio_minorista ?? item.producto.precio;
+                        const pRow = item.producto.moneda === "USD" ? (pOrig * (tasaDolarBlue || 1510)) : pOrig;
+                        return (
+                          <tr key={idx}>
+                            <td className="p-4 font-semibold">{item.producto.nombre}</td>
+                            <td className="p-4 text-center">{item.cantidad}</td>
+                            <td className="p-4 text-right text-gray-600">$ {pRow.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                            <td className="p-4 text-right font-black">$ {(pRow * item.cantidad).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+            
+                  <div className="flex justify-end mb-8">
+                    <div className="w-64 space-y-2">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Subtotal</span>
+                        <span>$ {Math.max(0, invoiceItems.reduce((s:number, i:any) => s + ((i.producto.moneda === "USD" ? (i.producto.precio_minorista ?? i.producto.precio) * (tasaDolarBlue || 1510) : (i.producto.precio_minorista ?? i.producto.precio)) * i.cantidad), 0)).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      {invoiceDiscountAmount > 0 && (
+                        <div className="flex justify-between text-xs font-bold text-emerald-600">
+                          <span>Descuento Aplicado</span><span>- $ {invoiceDiscountAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-lg font-black text-black border-t-2 border-black pt-2">
+                        <span>Total Final</span>
+                        <span>$ {Math.max(0, invoiceItems.reduce((s:number, i:any) => s + ((i.producto.moneda === "USD" ? (i.producto.precio_minorista ?? i.producto.precio) * (tasaDolarBlue || 1510) : (i.producto.precio_minorista ?? i.producto.precio)) * i.cantidad), 0) - invoiceDiscountAmount).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
+
             </div>
             
             <div className="bg-zinc-100 p-6 flex justify-end gap-3 print:hidden border-t border-zinc-200 shrink-0">

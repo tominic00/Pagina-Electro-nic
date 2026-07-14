@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Wrench, Users, Search, Plus, DollarSign, Smartphone, MessageCircle, Loader2, Trash2, Edit3, X, Lock, Banknote, PenTool, CheckCircle2 } from "lucide-react"
+import { Wrench, Users, Search, Plus, DollarSign, Smartphone, MessageCircle, Loader2, Trash2, Edit3, X, Lock, Banknote, Printer, Tag, FileClock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function TabReparaciones({
@@ -19,14 +19,16 @@ export function TabReparaciones({
   reparacionForm,
   setReparacionForm,
   handleRegistrarReparacion,
-  handleEditarReparacion, // 🚀 NUEVA PROP: Para guardar la edición
+  handleEditarReparacion,
   isSaving,
   handleUpdateInline,
-  handleCobrarReparacion
+  handleCobrarReparacion,
+  handleImprimirOrden // 🚀 NUEVA PROP: La vamos a crear después en tu page.tsx
 }: any) {
   
   const [subTab, setSubTab] = useState<"equipos" | "tecnicos">("equipos")
   const [filtroEstado, setFiltroFiltroEstado] = useState<"todos" | "Ingresado" | "En Laboratorio" | "Listo" | "Entregado">("todos")
+  const [filtroTecnico, setFiltroTecnico] = useState("todos") // 🚀 NUEVO ESTADO: Filtro por Técnico
   const [searchQuery, setSearchQuery] = useState("")
   
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
@@ -34,10 +36,11 @@ export function TabReparaciones({
   const [reparacionACobrar, setReparacionACobrar] = useState<any>(null)
   const [metodoPagoCobro, setMetodoPagoCobro] = useState("Efectivo")
 
-  // 🚀 ESTADOS PARA EL PATRÓN VISUAL
   const [patron, setPatron] = useState<number[]>([])
+  
+  // 🚀 ESTADO PARA EL HISTORIAL DEL TÉCNICO
+  const [tecnicoHistorialId, setTecnicoHistorialId] = useState<string | null>(null)
 
-  // 🚀 FILTRADO DE ÓRDENES
   const todasLasReparaciones = ventas.filter((v: any) => 
     v.nombre_producto?.toLowerCase().includes("servicio") || 
     v.nombre_producto?.toLowerCase().includes("reparaci") ||
@@ -45,20 +48,20 @@ export function TabReparaciones({
     v.diagnostico_falla
   )
 
+  // 🚀 APLICAMOS EL FILTRO DOBLE (ESTADO + TÉCNICO)
   const reparacionesFiltradas = todasLasReparaciones.filter((r: any) => {
     const matchesSearch = r.cliente_referencia?.toLowerCase().includes(searchQuery.toLowerCase()) || (r.imei && r.imei.includes(searchQuery))
     const matchesTab = filtroEstado === "todos" ? true : r.estado === filtroEstado
-    return matchesSearch && matchesTab
+    const matchesTecnico = filtroTecnico === "todos" ? true : r.tecnico_id === filtroTecnico
+    return matchesSearch && matchesTab && matchesTecnico
   })
 
-  // 🚀 MÉTRICAS EN PESOS (ARS)
   const totalCobradoTallerARS = todasLasReparaciones.reduce((acc: number, r: any) => acc + Number(r.monto_pagado || 0), 0)
   const totalManoObraTecnicosARS = todasLasReparaciones.reduce((acc: number, r: any) => acc + Number(r.costo_tecnico || 0), 0)
   const gananciaNetaTallerARS = totalCobradoTallerARS - totalManoObraTecnicosARS
 
   const formatARS = (monto: number) => `$ ${Number(monto || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
 
-  // Efecto para sincronizar el patrón visual con el texto de la clave
   useEffect(() => {
     if (reparacionForm.tipo_contrasena === "Patron") {
       setReparacionForm({ ...reparacionForm, contrasena_equipo: patron.join("-") })
@@ -77,7 +80,6 @@ export function TabReparaciones({
   }
 
   const enviarWhatsApp = (clienteStr: string) => {
-    // Extrae lo que esté entre paréntesis (ej: "(3815555555)")
     const match = clienteStr.match(/\(([^)]+)\)/);
     const telefono = match ? match[1].replace(/\D/g, '') : '';
     const nombre = clienteStr.split('(')[0].trim();
@@ -88,7 +90,6 @@ export function TabReparaciones({
   }
 
   const abrirEdicion = (rep: any) => {
-    // Carga los datos de la orden en el formulario y abre el modal
     setReparacionForm({
       id: rep.id,
       cliente_referencia: rep.cliente_referencia,
@@ -106,7 +107,6 @@ export function TabReparaciones({
       tipo_contrasena: rep.tipo_contrasena || "Ninguna",
       contrasena_equipo: rep.contrasena_equipo || ""
     });
-    // Si es patrón, dibujamos los puntitos de vuelta
     if (rep.tipo_contrasena === "Patron" && rep.contrasena_equipo) {
       setPatron(rep.contrasena_equipo.split('-').map(Number));
     } else {
@@ -121,10 +121,15 @@ export function TabReparaciones({
     setShowNuevaReparacion(true);
   }
 
+  // Fallback si todavía no programamos la impresión
+  const simularImpresion = (tipo: string) => {
+    if (handleImprimirOrden) return;
+    alert(`En el próximo paso conectamos el diseño PDF para: ${tipo}`);
+  }
+
   return (
     <div className="space-y-6 text-left w-full animate-in fade-in duration-500">
       
-      {/* BOTONERA */}
       <div className="flex gap-2 border-b border-zinc-800 pb-2">
         <button onClick={() => setSubTab("equipos")} className={cn("px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2", subTab === "equipos" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" : "text-zinc-500 hover:text-zinc-300")}>
           <Wrench className="size-4" /> Control del Taller
@@ -136,7 +141,6 @@ export function TabReparaciones({
 
       {subTab === "equipos" ? (
         <>
-          {/* RESUMEN ARS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#161B22] border border-zinc-800 p-5 rounded-2xl flex flex-col justify-center">
               <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Cobros del Taller</span>
@@ -152,12 +156,20 @@ export function TabReparaciones({
             </div>
           </div>
 
-          {/* BARRA BUSCADOR Y FILTROS */}
           <div className="flex flex-col xl:flex-row justify-between items-center gap-4 bg-[#161B22] border border-zinc-800 p-4 rounded-xl">
-            <div className="relative w-full xl:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-              <input type="text" placeholder="Buscar por cliente o IMEI..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-zinc-950 border border-zinc-800 py-2.5 pl-9 pr-4 text-sm text-white outline-none focus:border-purple-500" />
+            <div className="flex gap-2 w-full xl:w-auto">
+              <div className="relative flex-1 xl:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+                <input type="text" placeholder="Buscar por cliente o IMEI..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-zinc-950 border border-zinc-800 py-2.5 pl-9 pr-4 text-sm text-white outline-none focus:border-purple-500" />
+              </div>
+              {/* 🚀 NUEVO SELECTOR DE TÉCNICO */}
+              <select value={filtroTecnico} onChange={e => setFiltroTecnico(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-sm text-zinc-300 outline-none focus:border-purple-500 max-w-[150px]">
+                <option value="todos">Todos los Técnicos</option>
+                <option value="">Sin Asignar</option>
+                {tecnicos.map((t: any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
             </div>
+            
             <div className="flex gap-2 w-full xl:w-auto overflow-x-auto hide-scrollbar">
               <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shrink-0">
                 {["todos", "Ingresado", "En Laboratorio", "Listo", "Entregado"].map((est) => (
@@ -172,7 +184,6 @@ export function TabReparaciones({
             </div>
           </div>
 
-          {/* TABLA DE TRABAJOS */}
           <div className="bg-[#161B22] border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
@@ -180,9 +191,9 @@ export function TabReparaciones({
                   <tr>
                     <th className="p-4 pl-6">Cliente / IMEI</th>
                     <th className="p-4">Servicio</th>
-                    <th className="p-4">Técnico</th>
-                    <th className="p-4 text-right">Presupuesto</th>
-                    <th className="p-4 text-center">Estado y Gestión</th>
+                    <th className="p-4">Presupuesto</th>
+                    <th className="p-4 text-center">Estado de Taller</th>
+                    <th className="p-4 text-center">Imprimir / Avisos</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/40">
@@ -200,52 +211,61 @@ export function TabReparaciones({
                         <td className="p-4">
                           <span className="font-black text-purple-400 text-xs block uppercase tracking-wider">{rep.nombre_producto?.replace("Servicio: ", "")}</span>
                           <span className="text-zinc-400 text-xs mt-1 block max-w-[200px] truncate" title={rep.diagnostico_falla}>{rep.diagnostico_falla}</span>
+                          <span className="text-[9px] font-bold text-zinc-500 block mt-1">{tec ? `🛠️ Téc: ${tec.nombre}` : "❌ Sin Asignar"}</span>
                         </td>
                         <td className="p-4">
-                          <span className="font-bold text-zinc-300 text-sm">{tec ? `🛠️ ${tec.nombre}` : "❌ Sin Asignar"}</span>
-                        </td>
-                        <td className="p-4 text-right">
                           <span className="font-black text-white text-sm block">{formatARS(rep.total_trato)}</span>
                           <span className={cn("text-[9px] font-black uppercase tracking-widest", !debeSaldo ? "text-emerald-500" : "text-amber-500")}>
                             {!debeSaldo ? "Saldado" : `Debe ${formatARS(rep.total_trato - rep.monto_pagado)}`}
                           </span>
                         </td>
                         <td className="p-4">
-                          <div className="flex flex-col gap-1.5 items-end">
-                            
-                            {/* AVISO WHATSAPP SI ESTA LISTO */}
-                            {rep.estado === 'Listo' && (
-                              <button onClick={() => enviarWhatsApp(rep.cliente_referencia)} className="bg-[#25D366] hover:bg-[#1ebd5b] text-black px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 w-full transition-all">
-                                <MessageCircle className="size-3"/> Avisar al Cliente
-                              </button>
-                            )}
-
-                            {/* BOTON COBRAR O SELECTOR ESTADO */}
+                          <div className="flex flex-col gap-1.5 items-center">
                             {rep.estado === 'Listo' && debeSaldo ? (
-                              <button onClick={() => setReparacionACobrar(rep)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full transition-all">
-                                <Banknote className="size-3"/> Entregar / Cobrar
+                              <button onClick={() => setReparacionACobrar(rep)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all">
+                                <Banknote className="size-3"/> Entregar y Cobrar
                               </button>
                             ) : (
-                              <select disabled={rep.estado === 'Entregado'} value={rep.estado} onChange={e => handleUpdateInline(rep.id, 'estado', e.target.value as any)} className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border outline-none cursor-pointer bg-zinc-950 transition-all w-full", rep.estado === 'Listo' && 'border-emerald-500/30 text-emerald-400', rep.estado === 'Entregado' && 'opacity-50 text-purple-400')}>
+                              <select disabled={rep.estado === 'Entregado'} value={rep.estado} onChange={e => handleUpdateInline(rep.id, 'estado', e.target.value as any)} className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border outline-none cursor-pointer bg-zinc-950 transition-all w-full max-w-[140px]", rep.estado === 'Listo' && 'border-emerald-500/30 text-emerald-400', rep.estado === 'Entregado' && 'opacity-50 text-purple-400')}>
                                 <option value="Ingresado">📥 Ingresado</option>
                                 <option value="En Laboratorio">🔬 En Laboratorio</option>
                                 <option value="Listo">✅ Listo</option>
                                 <option value="Entregado">📦 Entregado</option>
                               </select>
                             )}
-
-                            {/* BOTÓN EDITAR ORDEN */}
-                            <button onClick={() => abrirEdicion(rep)} className="text-[10px] font-bold text-zinc-400 hover:text-white flex items-center justify-center gap-1 w-full bg-zinc-800 hover:bg-zinc-700 py-1.5 rounded-lg transition-all">
+                            <button onClick={() => abrirEdicion(rep)} className="text-[10px] font-bold text-zinc-400 hover:text-white flex items-center justify-center gap-1 w-full max-w-[140px] bg-zinc-800 hover:bg-zinc-700 py-1.5 rounded-lg transition-all">
                               <Edit3 className="size-3"/> Modificar Ficha
                             </button>
-
                           </div>
                         </td>
+                        
+                        {/* 🚀 NUEVA COLUMNA: IMPRESIÓN Y AVISOS */}
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1.5 items-end">
+                            {/* Botones de Impresión */}
+                            <div className="flex gap-1 w-full max-w-[140px]">
+                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "etiqueta") : simularImpresion("Etiqueta para pegar")} title="Imprimir Etiqueta" className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-lg flex items-center justify-center transition-colors">
+                                <Tag className="size-3.5"/>
+                              </button>
+                              <button onClick={() => handleImprimirOrden ? handleImprimirOrden(rep, "ingreso") : simularImpresion("Remito Cliente")} title="Remito de Ingreso / Seña" className="flex-[2] bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 py-1.5 rounded-lg flex items-center justify-center gap-1 transition-colors text-[10px] font-bold uppercase tracking-wider">
+                                <Printer className="size-3.5"/> Recibo
+                              </button>
+                            </div>
+
+                            {/* WhatsApp Condition */}
+                            {rep.estado === 'Listo' && (
+                              <button onClick={() => enviarWhatsApp(rep.cliente_referencia)} className="bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366] hover:text-black text-[#25D366] px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 w-full max-w-[140px] transition-all">
+                                <MessageCircle className="size-3"/> Avisar x WA
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
                       </tr>
                     )
                   })}
                   {reparacionesFiltradas.length === 0 && (
-                    <tr><td colSpan={5} className="p-16 text-center text-zinc-600 font-bold italic">No hay órdenes registradas.</td></tr>
+                    <tr><td colSpan={5} className="p-16 text-center text-zinc-600 font-bold italic">No hay órdenes registradas bajo este filtro.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -253,7 +273,6 @@ export function TabReparaciones({
           </div>
         </>
       ) : (
-        /* GESTIÓN DE TÉCNICOS (Queda igual, pasado a ARS) */
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
           <div className="xl:col-span-4 bg-[#161B22] border border-zinc-800 p-5 rounded-2xl space-y-4">
             <h3 className="text-base font-black text-white">{editingTecnicoId ? "Modificar Técnico" : "Alta de Técnico"}</h3>
@@ -276,9 +295,9 @@ export function TabReparaciones({
               <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
                 <tr>
                   <th className="p-4 pl-6">Especialista</th>
-                  <th className="p-4 text-center">Equipos</th>
+                  <th className="p-4 text-center">Equipos Activos</th>
                   <th className="p-4 text-right">A Pagar (Mano de Obra)</th>
-                  <th className="p-4 text-center pr-6 w-24">Acciones</th>
+                  <th className="p-4 text-center pr-6 w-32">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/40">
@@ -293,8 +312,10 @@ export function TabReparaciones({
                       <td className="p-4 text-right font-black text-amber-500 text-sm">{formatARS(manoDeObraPendiente)}</td>
                       <td className="p-4 text-center pr-6">
                         <div className="flex justify-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingTecnicoId(t.id); setTecnicoForm({ nombre: t.nombre, whatsapp: t.whatsapp, estado: t.estado }) }} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-amber-500 border border-zinc-800"><Edit3 className="size-4"/></button>
-                          <button onClick={() => handleEliminarTecnico(t.id)} className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-red-500 border border-zinc-800"><Trash2 className="size-4"/></button>
+                          {/* 🚀 BOTÓN HISTORIAL DE TÉCNICO */}
+                          <button onClick={() => setTecnicoHistorialId(t.id)} title="Ver Historial" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-white border border-zinc-800"><FileClock className="size-4"/></button>
+                          <button onClick={() => { setEditingTecnicoId(t.id); setTecnicoForm({ nombre: t.nombre, whatsapp: t.whatsapp, estado: t.estado }) }} title="Editar" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-amber-500 border border-zinc-800"><Edit3 className="size-4"/></button>
+                          <button onClick={() => handleEliminarTecnico(t.id)} title="Eliminar" className="p-2 bg-zinc-950 rounded-lg text-zinc-400 hover:text-red-500 border border-zinc-800"><Trash2 className="size-4"/></button>
                         </div>
                       </td>
                     </tr>
@@ -306,7 +327,52 @@ export function TabReparaciones({
         </div>
       )}
 
-      {/* 🚀 MODAL MAGISTRAL: NUEVA ORDEN / EDICIÓN */}
+      {/* 🚀 NUEVO MODAL: HISTORIAL DEL TÉCNICO */}
+      {tecnicoHistorialId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20"><FileClock className="size-5"/></div>
+                <div>
+                  <h3 className="text-lg font-black text-white">Historial de Trabajos</h3>
+                  <p className="text-[10px] text-zinc-400 uppercase tracking-widest">{tecnicos.find((t:any)=>t.id === tecnicoHistorialId)?.nombre}</p>
+                </div>
+              </div>
+              <button onClick={() => setTecnicoHistorialId(null)} className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl"><X className="size-5"/></button>
+            </div>
+            <div className="p-0 flex-1 overflow-y-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-zinc-950 text-[9px] font-black uppercase tracking-widest text-zinc-500 sticky top-0">
+                  <tr>
+                    <th className="p-4 pl-6">Fecha y Cliente</th>
+                    <th className="p-4">Falla Reparada</th>
+                    <th className="p-4 text-center">Estado del Equipo</th>
+                    <th className="p-4 text-right pr-6">Mano de Obra (Téc)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/40">
+                  {todasLasReparaciones.filter((r:any) => r.tecnico_id === tecnicoHistorialId).map((rep:any) => (
+                    <tr key={rep.id} className="hover:bg-zinc-800/20">
+                      <td className="p-4 pl-6">
+                        <span className="font-bold text-white text-sm block">{rep.cliente_referencia}</span>
+                        <span className="text-[10px] text-zinc-500 font-bold block mt-0.5">{new Date(rep.created_at).toLocaleDateString()}</span>
+                      </td>
+                      <td className="p-4 text-zinc-300 font-medium text-xs">{rep.nombre_producto?.replace("Servicio: ", "")}</td>
+                      <td className="p-4 text-center">
+                        <span className={cn("px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest", rep.estado === 'Entregado' ? 'bg-purple-500/10 text-purple-400' : rep.estado === 'Listo' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500')}>{rep.estado}</span>
+                      </td>
+                      <td className="p-4 text-right pr-6 font-black text-white">{formatARS(rep.costo_tecnico)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESTO DE LOS MODALES DE INGRESO (Iguales) */}
       {showNuevaReparacion && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative flex flex-col max-h-[90vh]">
@@ -354,7 +420,6 @@ export function TabReparaciones({
                       <option value="manual" className="font-bold text-amber-400">➕ Falla Manual / Otra...</option>
                       {productos.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
-                    {/* INPUT SI ELIGE FALLA MANUAL */}
                     {reparacionForm.producto_id === "manual" && (
                       <input type="text" autoFocus placeholder="Ej: Cambio de plaqueta de carga..." value={reparacionForm.nombre_servicio_manual || ""} onChange={e => setReparacionForm({...reparacionForm, nombre_servicio_manual: e.target.value})} className="w-full rounded-xl border border-amber-500/50 bg-amber-500/10 p-2.5 text-sm text-amber-100 outline-none focus:border-amber-500" />
                     )}
@@ -385,7 +450,6 @@ export function TabReparaciones({
                     </select>
                   </div>
                   
-                  {/* ZONA DE DIBUJO DE PATRÓN O TEXTO */}
                   <div className="flex flex-col items-center justify-center">
                     {reparacionForm.tipo_contrasena === "Patron" ? (
                       <div className="bg-[#161B22] border border-zinc-800 rounded-2xl p-4 w-full flex flex-col items-center shadow-inner relative">
@@ -459,7 +523,6 @@ export function TabReparaciones({
               <button type="button" onClick={() => setShowNuevaReparacion(false)} className="flex-1 py-3.5 rounded-xl font-bold text-sm text-zinc-400 bg-zinc-900 hover:bg-zinc-800 hover:text-white transition-colors">
                 CANCELAR
               </button>
-              {/* Dependiendo si hay ID, llama a editar o a registrar nuevo */}
               <button onClick={reparacionForm.id ? handleEditarReparacion : handleRegistrarReparacion} disabled={isSaving} className={cn("flex-[2] py-3.5 rounded-xl font-black text-sm text-white shadow-lg transition-all flex justify-center items-center gap-2 disabled:opacity-50", reparacionForm.id ? "bg-amber-600 hover:bg-amber-500 shadow-amber-600/20" : "bg-purple-600 hover:bg-purple-500 shadow-purple-600/20")}>
                 {isSaving ? <Loader2 className="size-5 animate-spin"/> : (reparacionForm.id ? "GUARDAR CAMBIOS" : "GENERAR ORDEN")}
               </button>
