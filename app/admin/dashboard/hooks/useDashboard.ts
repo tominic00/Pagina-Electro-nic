@@ -606,50 +606,54 @@ export function useDashboard() {
   const handleSaveHome = async (e: React.FormEvent) => { if (e) e.preventDefault(); setIsSavingHome(true); try { await supabase.from("home_settings").upsert({ id: "main", ticker_text: homeSettings.ticker_text, ticker_visible: homeSettings.ticker_visible, hero_title: homeSettings.hero_title, hero_subtitle: homeSettings.hero_subtitle, hero_image_url: homeSettings.hero_image_url, hero_cover_url: homeSettings.hero_cover_url, hero_visible: homeSettings.hero_visible, banners: homeSettings.banners, banners_visible: homeSettings.banners_visible, before_after: homeSettings.before_after, before_after_visible: homeSettings.before_after_visible, footer_whatsapp: homeSettings.footer_whatsapp, footer_email: homeSettings.footer_email, footer_address: homeSettings.footer_address, standards_text: homeSettings.standards_text, standards_visible: homeSettings.standards_visible, trust_badges: homeSettings.trust_badges, standards_items: homeSettings.standards_items, faqs: homeSettings.faqs, faq_blog_url: homeSettings.faq_blog_url }); alert("¡Home actualizada!"); } catch (error) {} finally { setIsSavingHome(false) } }
 
   const handleRegistrarReparacion = async (e: React.FormEvent) => {
-  e.preventDefault(); 
-  setIsSaving(true);
-  
-  try {
-    let nombreServicio = "";
-    if (reparacionForm.producto_id === "manual") {
-      nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
-    } else {
-      const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
-      nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+    e.preventDefault(); 
+    setIsSaving(true);
+    
+    try {
+      let nombreServicio = "";
+      if (reparacionForm.producto_id === "manual") {
+        nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
+      } else {
+        const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
+        nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+      }
+      
+      // 🚀 AGREGAMOS ".select().single()" PARA QUE SUPABASE NOS DEVUELVA LA ORDEN CON SU ID NUEVO
+      const { data: nuevaOrden, error } = await supabase.from("ventas_b2b").insert([{ 
+        producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
+        nombre_producto: nombreServicio, 
+        cantidad: 1, 
+        precio_unitario: Number(reparacionForm.total_trato), 
+        costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
+        total_trato: Number(reparacionForm.total_trato), 
+        monto_pagado: Number(reparacionForm.monto_pagado), 
+        cliente_referencia: reparacionForm.cliente_referencia, 
+        estado: reparacionForm.estado || "Ingresado", 
+        metodo_pago: reparacionForm.metodo_pago || "Efectivo", 
+        imei: reparacionForm.imei, 
+        color: reparacionForm.color, 
+        diagnostico_falla: reparacionForm.diagnostico_falla, 
+        tecnico_id: reparacionForm.tecnico_id || null, 
+        costo_tecnico: Number(reparacionForm.costo_tecnico), 
+        pago_tecnico_estado: "Pendiente",
+        tipo_contrasena: reparacionForm.tipo_contrasena || "Ninguna",
+        contrasena_equipo: reparacionForm.contrasena_equipo || ""
+      }]).select().single() 
+      
+      if (error) throw error; 
+      
+      setShowNuevaReparacion(false); 
+      fetchData();
+
+      // 🚀 ¡MAGIA AUTOMÁTICA! Disparamos la impresión al instante
+      handleImprimirOrden(nuevaOrden, "ingreso");
+
+    } catch (error: any) { 
+      alert("Error al guardar: " + error.message) 
+    } finally { 
+      setIsSaving(false) 
     }
-    
-    const { error } = await supabase.from("ventas_b2b").insert([{ 
-      producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
-      nombre_producto: nombreServicio, 
-      cantidad: 1, 
-      precio_unitario: Number(reparacionForm.total_trato), 
-      costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
-      total_trato: Number(reparacionForm.total_trato), 
-      monto_pagado: Number(reparacionForm.monto_pagado), 
-      cliente_referencia: reparacionForm.cliente_referencia, 
-      estado: reparacionForm.estado || "Ingresado", 
-      metodo_pago: reparacionForm.metodo_pago || "Efectivo", 
-      imei: reparacionForm.imei, 
-      color: reparacionForm.color, 
-      diagnostico_falla: reparacionForm.diagnostico_falla, 
-      tecnico_id: reparacionForm.tecnico_id || null, 
-      costo_tecnico: Number(reparacionForm.costo_tecnico), 
-      pago_tecnico_estado: "Pendiente",
-      tipo_contrasena: reparacionForm.tipo_contrasena || "Ninguna",
-      contrasena_equipo: reparacionForm.contrasena_equipo || ""
-    }])
-    
-    if (error) throw error; 
-    
-    alert("¡Equipo ingresado al taller!"); 
-    setShowNuevaReparacion(false); 
-    fetchData();
-  } catch (error: any) { 
-    alert("Error al guardar: " + error.message) 
-  } finally { 
-    setIsSaving(false) 
   }
-}
 
 const handleEditarReparacion = async (e: React.FormEvent) => {
   e.preventDefault(); 
