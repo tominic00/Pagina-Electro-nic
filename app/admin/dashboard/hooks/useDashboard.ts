@@ -48,7 +48,7 @@ export function useDashboard() {
   const [editingTecnicoId, setEditingTecnicoId] = useState<string | null>(null)
 
   const [reparacionForm, setReparacionForm] = useState({
-    cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" 
+    cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado", tipo_contrasena: "Ninguna", contrasena_equipo: ""
   })
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -586,14 +586,65 @@ export function useDashboard() {
   const handleSaveHome = async (e: React.FormEvent) => { if (e) e.preventDefault(); setIsSavingHome(true); try { await supabase.from("home_settings").upsert({ id: "main", ticker_text: homeSettings.ticker_text, ticker_visible: homeSettings.ticker_visible, hero_title: homeSettings.hero_title, hero_subtitle: homeSettings.hero_subtitle, hero_image_url: homeSettings.hero_image_url, hero_cover_url: homeSettings.hero_cover_url, hero_visible: homeSettings.hero_visible, banners: homeSettings.banners, banners_visible: homeSettings.banners_visible, before_after: homeSettings.before_after, before_after_visible: homeSettings.before_after_visible, footer_whatsapp: homeSettings.footer_whatsapp, footer_email: homeSettings.footer_email, footer_address: homeSettings.footer_address, standards_text: homeSettings.standards_text, standards_visible: homeSettings.standards_visible, trust_badges: homeSettings.trust_badges, standards_items: homeSettings.standards_items, faqs: homeSettings.faqs, faq_blog_url: homeSettings.faq_blog_url }); alert("¡Home actualizada!"); } catch (error) {} finally { setIsSavingHome(false) } }
 
   const handleRegistrarReparacion = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSaving(true);
-    try {
-      const servicioMatch = productos.find(p => p.id === reparacionForm.producto_id)
-      const nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
-      const { error } = await supabase.from("ventas_b2b").insert([{ producto_id: reparacionForm.producto_id || null, nombre_producto: nombreServicio, cantidad: 1, precio_unitario: Number(reparacionForm.total_trato), costo_unitario_historico: Number(reparacionForm.costo_tecnico), total_trato: Number(reparacionForm.total_trato), monto_pagado: Number(reparacionForm.monto_pagado), cliente_referencia: reparacionForm.cliente_referencia, estado: reparacionForm.estado, metodo_pago: reparacionForm.metodo_pago, imei: reparacionForm.imei, color: reparacionForm.color, diagnostico_falla: reparacionForm.diagnostico_falla, tecnico_id: reparacionForm.tecnico_id || null, costo_tecnico: Number(reparacionForm.costo_tecnico), pago_tecnico_estado: "Pendiente" }])
-      if (error) throw error; alert("¡Equipo ingresado al taller correctamente!"); setShowNuevaReparacion(false); setReparacionForm({ cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado" }); fetchData();
-    } catch (error: any) { alert("Error: " + error.message) } finally { setIsSaving(false) }
+  e.preventDefault(); 
+  setIsSaving(true);
+  
+  try {
+    const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
+    const nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+    
+    const { error } = await supabase.from("ventas_b2b").insert([{ 
+      producto_id: reparacionForm.producto_id || null, 
+      nombre_producto: nombreServicio, 
+      cantidad: 1, 
+      precio_unitario: Number(reparacionForm.total_trato), 
+      costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
+      total_trato: Number(reparacionForm.total_trato), 
+      monto_pagado: Number(reparacionForm.monto_pagado), 
+      cliente_referencia: reparacionForm.cliente_referencia, 
+      estado: reparacionForm.estado || "Ingresado", 
+      metodo_pago: reparacionForm.metodo_pago || "Efectivo", 
+      imei: reparacionForm.imei, 
+      color: reparacionForm.color, 
+      diagnostico_falla: reparacionForm.diagnostico_falla, 
+      tecnico_id: reparacionForm.tecnico_id || null, 
+      costo_tecnico: Number(reparacionForm.costo_tecnico), 
+      pago_tecnico_estado: "Pendiente",
+      // 🚀 AGREGAMOS LOS CAMPOS NUEVOS DE SEGURIDAD
+      tipo_contrasena: reparacionForm.tipo_contrasena || "Ninguna",
+      contrasena_equipo: reparacionForm.contrasena_equipo || ""
+    }])
+    
+    if (error) throw error; 
+    
+    alert("¡Equipo ingresado al taller correctamente!"); 
+    setShowNuevaReparacion(false); 
+    
+    // Reseteamos todo limpio
+    setReparacionForm({ 
+      cliente_referencia: "", 
+      producto_id: "", 
+      imei: "", 
+      color: "", 
+      diagnostico_falla: "", 
+      tecnico_id: "", 
+      costo_tecnico: 0, 
+      total_trato: 0, 
+      monto_pagado: 0, 
+      metodo_pago: "Efectivo", 
+      estado: "Ingresado",
+      tipo_contrasena: "Ninguna",
+      contrasena_equipo: ""
+    }); 
+    
+    fetchData();
+    
+  } catch (error: any) { 
+    alert("Error al guardar orden: " + error.message) 
+  } finally { 
+    setIsSaving(false) 
   }
+}
 
   const handleRegistrarTecnico = async (e: React.FormEvent) => { e.preventDefault(); setIsSaving(true); if (editingTecnicoId) { await supabase.from("tecnicos").update(tecnicoForm).eq("id", editingTecnicoId); setEditingTecnicoId(null); } else { await supabase.from("tecnicos").insert([tecnicoForm]) }; setTecnicoForm({ nombre: "", whatsapp: "", estado: "Activo" }); fetchData(); setIsSaving(false); }
   const handleEliminarTecnico = async (id: string) => { if (confirm("¿Eliminar este técnico de la base de datos?")) { await supabase.from("tecnicos").delete().eq("id", id); fetchData(); } }

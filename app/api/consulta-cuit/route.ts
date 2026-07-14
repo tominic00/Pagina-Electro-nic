@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import fs from "fs"
+import path from "path"
 
 export async function POST(req: Request) {
   try {
@@ -8,52 +10,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "El CUIT debe tener exactamente 11 dígitos numéricos." }, { status: 400 })
     }
 
-    const res = await fetch(`https://afip.tangofactura.com/Rest/GetContribuyente?cuit=${cuit}`, {
-      method: 'GET',
-      headers: { 
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0'
-      }
+    const rootCertsDir = path.join(process.cwd(), "afip_certs")
+    const keyPath = path.join(rootCertsDir, "privada.key")
+    const certPath = path.join(rootCertsDir, "certificado.crt")
+
+    const certContenido = fs.readFileSync(certPath, "utf-8")
+    const keyContenido = fs.readFileSync(keyPath, "utf-8")
+
+    const Afip = require("@afipsdk/afip.js")
+    
+    const afip = new Afip({
+      CUIT: 27232392628,
+      cert: certContenido,
+      key: keyContenido,
+      production: true,
+      ta_folder: "/tmp",
+      res_folder: "/tmp"
     })
 
-    if (!res.ok) {
-      return NextResponse.json({ success: false, error: "El servidor de padrón está temporalmente caído." })
+    // 🚀 EL FIX TRIUNFAL: Como AFIP te dio el Padrón A13, usamos la clase RegisterScopeThirteen
+    const datosAfip = await afip.RegisterScopeThirteen.getTaxpayerDetails(Number(cuit))
+
+    if (!datosAfip) {
+      return NextResponse.json({ success: false, error: "No se encontraron datos en AFIP." })
     }
 
-    const data = await res.json()
+    const persona = datosAfip.personaReturn?.persona || datosAfip.persona || datosAfip
+    if (!persona) return NextResponse.json({ success: false, error: "El CUIT no está activo." })
 
-    if (data.errorFaltante) {
-      return NextResponse.json({ success: false, error: "El CUIT no pertenece a un contribuyente inscripto." })
-    }
+    const razonSocial = persona.razonSocial || `${persona.apellido || ""} ${persona.nombre || ""}`.trim()
+    if (!razonSocial) return NextResponse.json({ success: false, error: "AFIP no devolvió un nombre." })
 
-    // 🚀 LA RED DE ARRASTRE: Buscamos el nombre en TODAS las combinaciones y mayúsculas/minúsculas posibles
-    const razonSocial = data?.Contribuyente?.nombre 
-                     || data?.Contribuyente?.Nombre 
-                     || data?.Contribuyente?.razonSocial 
-                     || data?.Contribuyente?.RazonSocial 
-                     || data?.nombre 
-                     || data?.Nombre 
-                     || data?.razonSocial 
-                     || data?.RazonSocial;
-
-    // 🚀 EL CHISMOSO: Si por alguna locura cósmica sigue fallando, te imprime la respuesta real en pantalla
-    if (!razonSocial) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `FORMATO DESCONOCIDO. AFIP Mandó esto: ${JSON.stringify(data).substring(0, 150)}` 
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      nombre: razonSocial
-    })
+    return NextResponse.json({ success: true, nombre: razonSocial })
 
   } catch (error: any) {
-    console.error("Error en Padrón Público:", error)
+    console.error("Error Oficial AFIP:", error.message || error)
+    
+    const esErrorPermisos = error.message?.includes('401') || error.response?.status === 401;
+    
     return NextResponse.json({ 
       success: false, 
-      error: "Error al conectarse a la base de datos de contribuyentes." 
+      error: esErrorPermisos 
+        ? "⚠️ Falta delegar el servicio 'Consulta Padrón A13' en AFIP. (Tarda unos 30 min en impactar)" 
+        : "AFIP rechazó la conexión. Intentá de nuevo." 
     }, { status: 500 })
   }
 }
