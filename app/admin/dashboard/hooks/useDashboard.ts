@@ -54,9 +54,11 @@ export function useDashboard() {
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ 
-    nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined as number | undefined, precio_mayorista: undefined as number | undefined, precio_volumen: undefined as number | undefined, cantidad_volumen: undefined as number | undefined,
-    subcategorias: [] as string[], // 🚀 NUEVO
-    galeria: [] as string[] // 🚀 NUEVO
+    nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined as number | undefined, precio_mayorista: undefined as number | undefined, precio_volumen: undefined as number | undefined, cantidad_volumen: undefined as number | undefined,
+    categoria: "", // Mantenemos este por compatibilidad vieja
+    categorias: [] as string[], // 🚀 NUEVO: Lista de múltiples categorías
+    subcategorias: [] as string[], 
+    galeria: [] as string[] 
   })
   
   const [showMassUpdateModal, setShowMassUpdateModal] = useState(false)
@@ -213,7 +215,7 @@ export function useDashboard() {
         await supabase.from("movimientos_stock").insert([{ producto_id: newProd.id, nombre_producto: newProd.nombre, cantidad: stockNumerico, motivo: "Stock Inicial (Alta de Producto)" }])
       } else if (error) { alert("Error Supabase. Validá que tengas la tabla actualizada: " + error.message) }
     }
-    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined, subcategorias: [], galeria: [] })
+    setFormData({ nombre: "", precio: 0, costo: 0, descripcion: "", informacion_tecnica: "", stock: 0, categoria: "Accesorios", categorias: [], imagen_url: "", researchOverview: "", applicationsRaw: "", coa_url: "", moneda: "ARS", visible_web: true, precio_minorista: undefined, precio_mayorista: undefined, precio_volumen: undefined, cantidad_volumen: undefined, subcategorias: [], galeria: [] })
     fetchData(); setIsSaving(false);
   }
 
