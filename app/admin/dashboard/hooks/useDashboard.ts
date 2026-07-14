@@ -48,7 +48,8 @@ export function useDashboard() {
   const [editingTecnicoId, setEditingTecnicoId] = useState<string | null>(null)
 
   const [reparacionForm, setReparacionForm] = useState({
-    cliente_referencia: "", producto_id: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado", tipo_contrasena: "Ninguna", contrasena_equipo: ""
+    id: "",
+    cliente_referencia: "", producto_id: "", nombre_servicio_manual: "", imei: "", color: "", diagnostico_falla: "", tecnico_id: "", costo_tecnico: 0, total_trato: 0, monto_pagado: 0, metodo_pago: "Efectivo", estado: "Ingresado", tipo_contrasena: "Ninguna", contrasena_equipo: ""
   })
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -590,11 +591,16 @@ export function useDashboard() {
   setIsSaving(true);
   
   try {
-    const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
-    const nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+    let nombreServicio = "";
+    if (reparacionForm.producto_id === "manual") {
+      nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
+    } else {
+      const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
+      nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+    }
     
     const { error } = await supabase.from("ventas_b2b").insert([{ 
-      producto_id: reparacionForm.producto_id || null, 
+      producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
       nombre_producto: nombreServicio, 
       cantidad: 1, 
       precio_unitario: Number(reparacionForm.total_trato), 
@@ -610,37 +616,60 @@ export function useDashboard() {
       tecnico_id: reparacionForm.tecnico_id || null, 
       costo_tecnico: Number(reparacionForm.costo_tecnico), 
       pago_tecnico_estado: "Pendiente",
-      // 🚀 AGREGAMOS LOS CAMPOS NUEVOS DE SEGURIDAD
       tipo_contrasena: reparacionForm.tipo_contrasena || "Ninguna",
       contrasena_equipo: reparacionForm.contrasena_equipo || ""
     }])
     
     if (error) throw error; 
     
-    alert("¡Equipo ingresado al taller correctamente!"); 
+    alert("¡Equipo ingresado al taller!"); 
     setShowNuevaReparacion(false); 
-    
-    // Reseteamos todo limpio
-    setReparacionForm({ 
-      cliente_referencia: "", 
-      producto_id: "", 
-      imei: "", 
-      color: "", 
-      diagnostico_falla: "", 
-      tecnico_id: "", 
-      costo_tecnico: 0, 
-      total_trato: 0, 
-      monto_pagado: 0, 
-      metodo_pago: "Efectivo", 
-      estado: "Ingresado",
-      tipo_contrasena: "Ninguna",
-      contrasena_equipo: ""
-    }); 
-    
     fetchData();
-    
   } catch (error: any) { 
-    alert("Error al guardar orden: " + error.message) 
+    alert("Error al guardar: " + error.message) 
+  } finally { 
+    setIsSaving(false) 
+  }
+}
+
+const handleEditarReparacion = async (e: React.FormEvent) => {
+  e.preventDefault(); 
+  setIsSaving(true);
+  
+  try {
+    let nombreServicio = "";
+    if (reparacionForm.producto_id === "manual") {
+      nombreServicio = `Servicio: ${reparacionForm.nombre_servicio_manual || "Reparación General"}`;
+    } else {
+      const servicioMatch = productos.find((p: any) => p.id === reparacionForm.producto_id)
+      nombreServicio = servicioMatch ? `Servicio: ${servicioMatch.nombre}` : "Reparación General"
+    }
+
+    const { error } = await supabase.from("ventas_b2b").update({
+      producto_id: reparacionForm.producto_id === "manual" ? null : reparacionForm.producto_id, 
+      nombre_producto: nombreServicio, 
+      precio_unitario: Number(reparacionForm.total_trato), 
+      costo_unitario_historico: Number(reparacionForm.costo_tecnico), 
+      total_trato: Number(reparacionForm.total_trato), 
+      monto_pagado: Number(reparacionForm.monto_pagado), 
+      cliente_referencia: reparacionForm.cliente_referencia, 
+      estado: reparacionForm.estado, 
+      imei: reparacionForm.imei, 
+      color: reparacionForm.color, 
+      diagnostico_falla: reparacionForm.diagnostico_falla, 
+      tecnico_id: reparacionForm.tecnico_id || null, 
+      costo_tecnico: Number(reparacionForm.costo_tecnico),
+      tipo_contrasena: reparacionForm.tipo_contrasena,
+      contrasena_equipo: reparacionForm.contrasena_equipo
+    }).eq("id", reparacionForm.id); // Clave para actualizar y no crear uno nuevo
+    
+    if (error) throw error; 
+    
+    alert("¡Ficha actualizada correctamente!"); 
+    setShowNuevaReparacion(false); 
+    fetchData();
+  } catch (error: any) { 
+    alert("Error al editar: " + error.message) 
   } finally { 
     setIsSaving(false) 
   }
@@ -678,6 +707,6 @@ export function useDashboard() {
   const itemIsDolar = carritoAdmin.some(item => item.producto.moneda === "USD")
 
   return {
-    activeTab, setActiveTab: (tab: string) => setActiveTab(tab as ActiveTab), isLoading, isSaving, isUploading, handleLogout, isUploadingCoa, handleCoaUpload, tasaDolarBlue, isFetchingDolar, productos, ventas, clientes, egresos, cupones, movimientosStock, eventosTelemetria, solicitudes, editingId, setEditingId, formData, setFormData, handleImageUpload, handleSave, handleUpdateInline, deleteProducto, showMassUpdateModal, setShowMassUpdateModal, massUpdateData, setMassUpdateData, handleMassUpdate, showStockAdjustModal, setShowStockAdjustModal, stockAdjustData, setStockAdjustData, handleAjusteStockManual, showStockHistoryModal, setShowStockHistoryModal, carritoAdmin, agregarAlCarritoAdmin, removerDelCarritoAdmin, productoSeleccionadoId, setProductoSeleccionadoId, cantidadSeleccionada, setCantidadSeleccionada, ventaData, setVentaData, descuentoData, inputCupon, setInputCupon, handleValidarCupon, manualDescTipo, setManualDescTipo, manualDescValor, setManualDescValor, handleAplicarDescuentoManual, removerDescuento, subtotalTratoCarrito, valorDelDescuentoApli, totalTratoCarritoNeto, saldoFinalCalculado, handleGenerarPresupuesto, handleRegistrarVentaManual, showCuponModal, setShowCuponModal, cuponForm, setCuponForm, handleCrearCupon, handleEliminarCupon, showInvoice, setShowInvoice, invoiceType, invoiceItems, invoiceClientName, invoiceDate, invoiceId, invoiceDiscountAmount, handlePrintPDF, verComprobanteHistorico, invoiceCAE, invoiceCAEVto, invoiceNroLegal, clienteForm, setClienteForm, editingClienteId, setEditingClienteId, handleRegistrarCliente, deleteCliente: handleEliminarCliente, searchTermClientes, setSearchTermClientes, filtroClientes, setFiltrowClientes: setFiltroClientes, filtroClientesValor: filtroClientes, showAbonoModal, setShowAbonoModal, abonoData, setAbonoData, procesarAbono, showDevolucionModal, setShowDevolucionModal, devolucionData, setDevolucionData, handleRegistrarDevolucion, showHistorialClienteId, setShowHistorialClienteId, filtroHistorialCliente, setFiltroHistorialCliente, historialVentasCliente, clienteDelHistorial, fechaInicio, setFechaInicio, fechaFin, setFechaFin, ventasFiltradas, egresosFiltrados, clientesNuevosFiltrados: clientes.filter(c => c.created_at ? filterByDate(c.created_at) : true), showEgresoModal, setShowEgresoModal, egresoData, setEgresoData, handleRegistrarEgreso, handleBorrarEgreso, showTrackingModal, setShowTrackingModal, trackingData, setTrackingData, handleActualizarTracking, handleAprobarUSDT, handleAnularVenta, handleAprobarSolicitud, handleRechazarSolicitud, totalFacturado, totalCajaReal, salidasCaja, totalCostosLotes, gananciaNetaReal, totalVialesVendidos, ticketPromedio, pRevenue, pCosts, pProfit, conicGradient, visitasLanding: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_landing").length, vistasFichas: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "ver_ficha_tecnica").length, clicsWP: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "click_whatsapp").length, visitasRealesPortal: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_portal").length, agregadosCarrito: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length, comprasReales: ventasFiltradas.filter(v => v.estado !== 'Abono').length, pctFichas, pctWP, pctPortal, pctCarritos, pctCompras, solicitudesPendientes: solicitudes.filter(s => s.estado === "Pendiente" || s.estado === "Pending").length, ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length, blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog, homeSettings, setHomeSettings, isSavingHome, handleSaveHome, showNuevaReparacion, setShowNuevaReparacion, tecnicos, tecnicoForm, setTecnicoForm, editingTecnicoId, setEditingTecnicoId, handleRegistrarTecnico, handleEliminarTecnico, reparacionForm, setReparacionForm, handleRegistrarReparacion, handleCobrarReparacion
+    activeTab, setActiveTab: (tab: string) => setActiveTab(tab as ActiveTab), isLoading, isSaving, isUploading, handleLogout, isUploadingCoa, handleCoaUpload, tasaDolarBlue, isFetchingDolar, productos, ventas, clientes, egresos, cupones, movimientosStock, eventosTelemetria, solicitudes, editingId, setEditingId, formData, setFormData, handleImageUpload, handleSave, handleUpdateInline, deleteProducto, showMassUpdateModal, setShowMassUpdateModal, massUpdateData, setMassUpdateData, handleMassUpdate, showStockAdjustModal, setShowStockAdjustModal, stockAdjustData, setStockAdjustData, handleAjusteStockManual, showStockHistoryModal, setShowStockHistoryModal, carritoAdmin, agregarAlCarritoAdmin, removerDelCarritoAdmin, productoSeleccionadoId, setProductoSeleccionadoId, cantidadSeleccionada, setCantidadSeleccionada, ventaData, setVentaData, descuentoData, inputCupon, setInputCupon, handleValidarCupon, manualDescTipo, setManualDescTipo, manualDescValor, setManualDescValor, handleAplicarDescuentoManual, removerDescuento, subtotalTratoCarrito, valorDelDescuentoApli, totalTratoCarritoNeto, saldoFinalCalculado, handleGenerarPresupuesto, handleRegistrarVentaManual, showCuponModal, setShowCuponModal, cuponForm, setCuponForm, handleCrearCupon, handleEliminarCupon, showInvoice, setShowInvoice, invoiceType, invoiceItems, invoiceClientName, invoiceDate, invoiceId, invoiceDiscountAmount, handlePrintPDF, verComprobanteHistorico, invoiceCAE, invoiceCAEVto, invoiceNroLegal, clienteForm, setClienteForm, editingClienteId, setEditingClienteId, handleRegistrarCliente, deleteCliente: handleEliminarCliente, searchTermClientes, setSearchTermClientes, filtroClientes, setFiltrowClientes: setFiltroClientes, filtroClientesValor: filtroClientes, showAbonoModal, setShowAbonoModal, abonoData, setAbonoData, procesarAbono, showDevolucionModal, setShowDevolucionModal, devolucionData, setDevolucionData, handleRegistrarDevolucion, showHistorialClienteId, setShowHistorialClienteId, filtroHistorialCliente, setFiltroHistorialCliente, historialVentasCliente, clienteDelHistorial, fechaInicio, setFechaInicio, fechaFin, setFechaFin, ventasFiltradas, egresosFiltrados, clientesNuevosFiltrados: clientes.filter(c => c.created_at ? filterByDate(c.created_at) : true), showEgresoModal, setShowEgresoModal, egresoData, setEgresoData, handleRegistrarEgreso, handleBorrarEgreso, showTrackingModal, setShowTrackingModal, trackingData, setTrackingData, handleActualizarTracking, handleAprobarUSDT, handleAnularVenta, handleAprobarSolicitud, handleRechazarSolicitud, totalFacturado, totalCajaReal, salidasCaja, totalCostosLotes, gananciaNetaReal, totalVialesVendidos, ticketPromedio, pRevenue, pCosts, pProfit, conicGradient, visitasLanding: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_landing").length, vistasFichas: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "ver_ficha_tecnica").length, clicsWP: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "click_whatsapp").length, visitasRealesPortal: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "visita_portal").length, agregadosCarrito: eventosTelemetria.filter(e => filterByDate(e.created_at)).filter(e => e.tipo_evento === "agrega_carrito").length, comprasReales: ventasFiltradas.filter(v => v.estado !== 'Abono').length, pctFichas, pctWP, pctPortal, pctCarritos, pctCompras, solicitudesPendientes: solicitudes.filter(s => s.estado === "Pendiente" || s.estado === "Pending").length, ordenesPendientesAccion: ventas.filter(v => v.estado === "Pendiente USDT").length, blogs, isSavingBlog, editingBlogId, setEditingBlogId, formDataBlog, setFormDataBlog, handleSaveBlog, deleteBlog, homeSettings, setHomeSettings, isSavingHome, handleSaveHome, showNuevaReparacion, setShowNuevaReparacion, tecnicos, tecnicoForm, setTecnicoForm, editingTecnicoId, setEditingTecnicoId, handleRegistrarTecnico, handleEliminarTecnico, reparacionForm, setReparacionForm, handleRegistrarReparacion, handleCobrarReparacion, handleEditarReparacion
   }
 }
