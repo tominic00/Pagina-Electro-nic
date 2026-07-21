@@ -43,6 +43,10 @@ export function TabInventario({
   
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"todos" | "celulares" | "otros" | "service">("todos")
+  
+  // 🚀 NUEVO ESTADO PARA EL FILTRO DE SUBCATEGORÍAS
+  const [filtroSubcategoria, setFiltroSubcategoria] = useState("todas")
+
   const [showImportModal, setShowImportModal] = useState(false)
   
   const [showFormModal, setShowFormModal] = useState(false)
@@ -50,7 +54,7 @@ export function TabInventario({
 
   // 🚀 RECOLECTORES INTELIGENTES
   const todasLasCategoriasExistentes = Array.from(new Set(productos.flatMap(p => p.categorias || (p.categoria ? [p.categoria] : [])))).filter(Boolean)
-  const todasLasSubcategoriasExistentes = Array.from(new Set(productos.flatMap(p => p.subcategorias || []))).filter(Boolean)
+  const todasLasSubcategoriasExistentes = Array.from(new Set(productos.flatMap(p => p.subcategorias || []))).filter(Boolean).sort()
 
   useEffect(() => {
     if (editingId) setShowFormModal(true)
@@ -62,21 +66,15 @@ export function TabInventario({
       editorRef.current.innerHTML = formData.descripcion || ""
       document.execCommand("styleWithCSS", false, "true")
     }
-  }, [showFormModal, editingId]) 
+  }, [showFormModal, editingId]) // Solo actualiza al abrir el modal o cambiar de producto
 
   const getCategoriaGeneral = (p: any) => {
     const cats = p.categorias || (p.categoria ? [p.categoria] : [])
-    const subs = p.subcategorias || []
-    const nombre = p.nombre || ""
+    if (cats.length === 0) return "otros"
+    const cadenaCompleta = cats.join(" ").toLowerCase()
     
-    const cadenaCompleta = `${nombre} ${cats.join(" ")} ${subs.join(" ")}`.toLowerCase()
-    
-    if (cadenaCompleta.includes("funda") || cadenaCompleta.includes("templado") || cadenaCompleta.includes("cable") || cadenaCompleta.includes("cargador") || cadenaCompleta.includes("auricular") || cadenaCompleta.includes("base") || cadenaCompleta.includes("magsafe") || cadenaCompleta.includes("vidrio")) return "otros"
-
-    if (cadenaCompleta.includes("repara") || cadenaCompleta.includes("service") || cadenaCompleta.includes("taller") || cadenaCompleta.includes("instalacion") || cadenaCompleta.includes("cambio") || cadenaCompleta.includes("pantalla") || cadenaCompleta.includes("bateria") || cadenaCompleta.includes("modulo") || cadenaCompleta.includes("pin de carga")) return "service"
-    
-    if (cadenaCompleta.includes("iphone") || cadenaCompleta.includes("celular") || cadenaCompleta.includes("smartphone") || cadenaCompleta.includes("ipad") || cadenaCompleta.includes("mac") || cadenaCompleta.includes("samsung") || cadenaCompleta.includes("motorola")) return "celulares"
-    
+    if (cadenaCompleta.includes("repara") || cadenaCompleta.includes("service") || cadenaCompleta.includes("taller") || cadenaCompleta.includes("instalacion")) return "service"
+    if (cadenaCompleta.includes("iphone") || cadenaCompleta.includes("celular") || cadenaCompleta.includes("smartphone") || cadenaCompleta.includes("ipad") || cadenaCompleta.includes("mac")) return "celulares"
     return "otros"
   }
 
@@ -94,7 +92,10 @@ export function TabInventario({
     if (filterTab === "otros") matchesTab = tipo === "otros"
     if (filterTab === "service") matchesTab = tipo === "service"
 
-    return matchesSearch && matchesTab
+    // 🚀 LÓGICA DEL NUEVO FILTRO DE SUBCATEGORÍA
+    const matchesSubcat = filtroSubcategoria === "todas" ? true : (producto.subcategorias || []).includes(filtroSubcategoria)
+
+    return matchesSearch && matchesTab && matchesSubcat
   })
 
   const ejecutarComando = (comando: string, valor: string = "") => {
@@ -152,7 +153,7 @@ export function TabInventario({
     }
   }, [formData.imagen_url])
 
-  // 🚀 EXPORTAR
+  // 🚀 EXPORTAR ACTUALIZADO
   const handleExportCSV = () => {
     if (productos.length === 0) return alert("No hay productos para exportar.")
     const headers = ["ID", "Nombre", "Categoria", "Subcategorias", "Moneda", "Costo", "Precio_Publico", "Precio_Gremio", "Stock"]
@@ -171,7 +172,7 @@ export function TabInventario({
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   }
 
-  // 🚀 PLANTILLA
+  // 🚀 PLANTILLA ACTUALIZADA
   const descargarPlantilla = () => {
     const headers = ["Nombre_Producto", "Categoria", "Subcategorias", "Moneda(ARS/USD)", "Costo", "Precio_Publico", "Precio_Gremio", "Stock"]
     const row = ["Funda MagSafe iPhone 13", "Accesorios | Apple", "Fundas | MagSafe", "ARS", "5000", "15000", "10000", "20"]
@@ -216,16 +217,33 @@ export function TabInventario({
   return (
     <div className="flex flex-col animate-in fade-in duration-500 text-left w-full h-full">
       
-      <div className="mb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <div className="mb-6 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Inventario y Catálogo</h2>
           <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Gestión Central de Productos y Servicios</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-            <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full rounded-xl border border-zinc-800 bg-[#161B22] pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-purple-500 shadow-inner transition-all"/>
+        <div className="flex flex-col lg:flex-row gap-3 w-full xl:w-auto">
+          
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full rounded-xl border border-zinc-800 bg-[#161B22] pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-purple-500 shadow-inner transition-all"/>
+            </div>
+
+            {/* 🚀 NUEVO DESPLEGABLE DE SUBCATEGORÍAS EN LA BARRA PRINCIPAL */}
+            {todasLasSubcategoriasExistentes.length > 0 && (
+              <select 
+                value={filtroSubcategoria} 
+                onChange={(e) => setFiltroSubcategoria(e.target.value)} 
+                className="w-full sm:w-48 rounded-xl border border-zinc-800 bg-[#161B22] px-3 py-2.5 text-sm text-zinc-300 outline-none focus:border-purple-500 shadow-inner transition-all cursor-pointer"
+              >
+                <option value="todas">Tags / Subcategorías...</option>
+                {todasLasSubcategoriasExistentes.map((sub: any) => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex gap-2 flex-wrap sm:flex-nowrap">
@@ -278,9 +296,12 @@ export function TabInventario({
                           {listaCategorias.filter(Boolean).map((c: string) => (
                             <span key={c} className={cn("text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border", esServicio ? "bg-sky-500/10 text-sky-400 border-sky-500/20" : "text-zinc-500 bg-zinc-900 border-zinc-800")}>{c}</span>
                           ))}
-                          {(producto.subcategorias || []).slice(0,2).map((s: string) => (
+                          
+                          {/* 🚀 ACÁ QUITAMOS EL LÍMITE: AHORA SE MUESTRAN TODAS LAS SUBCATEGORÍAS */}
+                          {(producto.subcategorias || []).map((s: string) => (
                             <span key={s} className="bg-purple-500/10 text-purple-400 text-[8px] font-bold border border-purple-500/20 px-1.5 py-0.5 rounded">{s}</span>
                           ))}
+
                           {isUSD && <span className="bg-emerald-500/10 text-emerald-500 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-emerald-500/20">Dólar</span>}
                           {producto.visible_web === false && <span className="bg-zinc-800 text-zinc-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-zinc-700">Oculto</span>}
                         </div>
@@ -382,57 +403,31 @@ export function TabInventario({
                     </div>
                   </div>
 
-                  {/* 🚀 CATEGORÍAS (CON DESPLEGABLE) */}
+                  {/* CATEGORÍAS (LISTA CON DATALIST) */}
                   <div>
-                    <div className="flex justify-between items-end mb-1">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Categorías (Múltiple)</label>
-                      {todasLasCategoriasExistentes.length > 0 && (
-                        <select onChange={(e) => {
-                          const val = e.target.value;
-                          if (val && !(formData.categorias || []).includes(val)) {
-                            setFormData((prev: any) => ({ ...prev, categorias: [...(prev.categorias || []), val] }));
-                          }
-                          e.target.value = "";
-                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer hover:bg-zinc-800">
-                          <option value="">Elegir del historial...</option>
-                          {todasLasCategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                      )}
-                    </div>
+                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1 mb-1"><Tag className="size-3"/> Categorías (Múltiple)</label>
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[44px] flex flex-wrap gap-2 items-center focus-within:border-purple-500 transition-colors">
                       {(formData.categorias || []).map((tag: string) => (
                         <span key={tag} className="bg-sky-500/10 text-sky-400 border border-sky-500/30 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
                           {tag} <button type="button" onClick={() => removeCategoriaTag(tag)} className="hover:text-white"><X className="size-3"/></button>
                         </span>
                       ))}
-                      <input type="text" onKeyDown={handleAddCategoriaTag} placeholder="O escribí una nueva y tocá Enter..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[150px]" />
+                      <input type="text" onKeyDown={handleAddCategoriaTag} list="cat-suggestions" placeholder="Añadir..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[80px]" />
+                      <datalist id="cat-suggestions">{todasLasCategoriasExistentes.map((c:any)=><option key={c} value={c}/>)}</datalist>
                     </div>
                   </div>
 
-                  {/* 🚀 SUBCATEGORÍAS (CON DESPLEGABLE) */}
+                  {/* SUBCATEGORÍAS (LISTA CON DATALIST) */}
                   <div>
-                    <div className="flex justify-between items-end mb-1">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Subcategorías / Etiquetas</label>
-                      {todasLasSubcategoriasExistentes.length > 0 && (
-                        <select onChange={(e) => {
-                          const val = e.target.value;
-                          if (val && !(formData.subcategorias || []).includes(val)) {
-                            setFormData((prev: any) => ({ ...prev, subcategorias: [...(prev.subcategorias || []), val] }));
-                          }
-                          e.target.value = "";
-                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer hover:bg-zinc-800">
-                          <option value="">Elegir del historial...</option>
-                          {todasLasSubcategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                      )}
-                    </div>
+                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1 mb-1"><Tag className="size-3"/> Subcategorías / Etiquetas</label>
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[44px] flex flex-wrap gap-2 items-center focus-within:border-purple-500 transition-colors">
                       {(formData.subcategorias || []).map((tag: string) => (
                         <span key={tag} className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
                           {tag} <button type="button" onClick={() => removeSubcategoriaTag(tag)} className="hover:text-white"><X className="size-3"/></button>
                         </span>
                       ))}
-                      <input type="text" onKeyDown={handleAddSubcategoriaTag} placeholder="O escribí una nueva y tocá Enter..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[150px]" />
+                      <input type="text" onKeyDown={handleAddSubcategoriaTag} list="subcat-suggestions" placeholder="Añadir..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[80px]" />
+                      <datalist id="subcat-suggestions">{todasLasSubcategoriasExistentes.map((c:any)=><option key={c} value={c}/>)}</datalist>
                     </div>
                   </div>
                 </div>
@@ -516,7 +511,7 @@ export function TabInventario({
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#a855f7"); }} className="size-5 rounded-full bg-purple-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Violeta"></button>
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#10b981"); }} className="size-5 rounded-full bg-emerald-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Verde"></button>
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#f59e0b"); }} className="size-5 rounded-full bg-amber-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Amarillo"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase">Limpiar Formato</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase">Limpiar</button>
                     </div>
                   </div>
                   
