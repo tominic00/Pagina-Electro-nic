@@ -64,13 +64,24 @@ export function TabInventario({
     }
   }, [showFormModal, editingId]) // Solo actualiza al abrir el modal o cambiar de producto
 
+  // 🚀 LÓGICA DE FILTRADO SÚPER INTELIGENTE (Lee nombre, cat y subcat)
   const getCategoriaGeneral = (p: any) => {
     const cats = p.categorias || (p.categoria ? [p.categoria] : [])
-    if (cats.length === 0) return "otros"
-    const cadenaCompleta = cats.join(" ").toLowerCase()
+    const subs = p.subcategorias || []
+    const nombre = p.nombre || ""
     
-    if (cadenaCompleta.includes("repara") || cadenaCompleta.includes("service") || cadenaCompleta.includes("taller") || cadenaCompleta.includes("instalacion")) return "service"
-    if (cadenaCompleta.includes("iphone") || cadenaCompleta.includes("celular") || cadenaCompleta.includes("smartphone") || cadenaCompleta.includes("ipad") || cadenaCompleta.includes("mac")) return "celulares"
+    // Unimos todo para buscar palabras clave
+    const cadenaCompleta = `${nombre} ${cats.join(" ")} ${subs.join(" ")}`.toLowerCase()
+    
+    // 1. Excepciones para Accesorios (Para que fundas/cables de iPhone no vayan a Celulares)
+    if (cadenaCompleta.includes("funda") || cadenaCompleta.includes("templado") || cadenaCompleta.includes("cable") || cadenaCompleta.includes("cargador") || cadenaCompleta.includes("auricular") || cadenaCompleta.includes("base") || cadenaCompleta.includes("magsafe") || cadenaCompleta.includes("vidrio")) return "otros"
+
+    // 2. Service y Reparaciones
+    if (cadenaCompleta.includes("repara") || cadenaCompleta.includes("service") || cadenaCompleta.includes("taller") || cadenaCompleta.includes("instalacion") || cadenaCompleta.includes("cambio") || cadenaCompleta.includes("pantalla") || cadenaCompleta.includes("bateria") || cadenaCompleta.includes("modulo") || cadenaCompleta.includes("pin de carga")) return "service"
+    
+    // 3. Equipos / Celulares
+    if (cadenaCompleta.includes("iphone") || cadenaCompleta.includes("celular") || cadenaCompleta.includes("smartphone") || cadenaCompleta.includes("ipad") || cadenaCompleta.includes("mac") || cadenaCompleta.includes("samsung") || cadenaCompleta.includes("motorola")) return "celulares"
+    
     return "otros"
   }
 
@@ -376,31 +387,57 @@ export function TabInventario({
                     </div>
                   </div>
 
-                  {/* 🚀 CATEGORÍAS (LISTA) */}
+                  {/* 🚀 CATEGORÍAS (LISTA CON SELECTOR) */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1 mb-1"><Tag className="size-3"/> Categorías (Múltiple)</label>
+                    <div className="flex justify-between items-end mb-1">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Categorías (Múltiple)</label>
+                      {todasLasCategoriasExistentes.length > 0 && (
+                        <select onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && !(formData.categorias || []).includes(val)) {
+                            setFormData((prev: any) => ({ ...prev, categorias: [...(prev.categorias || []), val] }));
+                          }
+                          e.target.value = "";
+                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer">
+                          <option value="">Elegir del historial...</option>
+                          {todasLasCategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      )}
+                    </div>
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[44px] flex flex-wrap gap-2 items-center focus-within:border-purple-500 transition-colors">
                       {(formData.categorias || []).map((tag: string) => (
                         <span key={tag} className="bg-sky-500/10 text-sky-400 border border-sky-500/30 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
                           {tag} <button type="button" onClick={() => removeCategoriaTag(tag)} className="hover:text-white"><X className="size-3"/></button>
                         </span>
                       ))}
-                      <input type="text" onKeyDown={handleAddCategoriaTag} list="cat-suggestions" placeholder="Añadir..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[80px]" />
-                      <datalist id="cat-suggestions">{todasLasCategoriasExistentes.map((c:any)=><option key={c} value={c}/>)}</datalist>
+                      <input type="text" onKeyDown={handleAddCategoriaTag} placeholder="O escribí una nueva y tocá Enter..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[150px]" />
                     </div>
                   </div>
 
-                  {/* 🚀 SUBCATEGORÍAS (LISTA) */}
+                  {/* 🚀 SUBCATEGORÍAS (LISTA CON SELECTOR) */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1 mb-1"><Tag className="size-3"/> Subcategorías / Etiquetas</label>
+                    <div className="flex justify-between items-end mb-1">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Subcategorías / Etiquetas</label>
+                      {todasLasSubcategoriasExistentes.length > 0 && (
+                        <select onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && !(formData.subcategorias || []).includes(val)) {
+                            setFormData((prev: any) => ({ ...prev, subcategorias: [...(prev.subcategorias || []), val] }));
+                          }
+                          e.target.value = "";
+                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer">
+                          <option value="">Elegir del historial...</option>
+                          {todasLasSubcategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      )}
+                    </div>
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[44px] flex flex-wrap gap-2 items-center focus-within:border-purple-500 transition-colors">
                       {(formData.subcategorias || []).map((tag: string) => (
                         <span key={tag} className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
                           {tag} <button type="button" onClick={() => removeSubcategoriaTag(tag)} className="hover:text-white"><X className="size-3"/></button>
                         </span>
                       ))}
-                      <input type="text" onKeyDown={handleAddSubcategoriaTag} list="subcat-suggestions" placeholder="Añadir..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[80px]" />
-                      <datalist id="subcat-suggestions">{todasLasSubcategoriasExistentes.map((c:any)=><option key={c} value={c}/>)}</datalist>
+                      <input type="text" onKeyDown={handleAddSubcategoriaTag} placeholder="O escribí una nueva y tocá Enter..." className="bg-transparent border-none outline-none text-sm text-white flex-1 min-w-[150px]" />
                     </div>
                   </div>
                 </div>
@@ -414,10 +451,12 @@ export function TabInventario({
 
               </div>
 
-              <div className="lg:col-span-8 flex flex-col gap-6 h-full">
+              {/* COLUMNA 2: Galería y Rich Text */}
+              <div className="lg:col-span-8 flex flex-col gap-6">
                 
                 <div className="space-y-3">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-sky-400 border-b border-zinc-800 pb-1 flex items-center gap-1.5"><ImageIcon className="size-3.5"/> Galería Multimedia</h4>
+                  
                   <div className="flex gap-2">
                     <label className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer transition-colors shadow-md">
                       {isUploading ? <Loader2 className="size-4 animate-spin"/> : <><UploadCloud className="size-4"/> Subir Archivo</>}
@@ -434,7 +473,10 @@ export function TabInventario({
                       {(formData.galeria || []).map((url: string, idx: number) => (
                         <div key={idx} className="relative aspect-square rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden group">
                           {isVideo(url) ? (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 bg-zinc-900 p-2 text-center"><Video className="size-6 mb-1 text-sky-400"/><span className="text-[8px] font-bold truncate w-full px-1">{url}</span></div>
+                            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 bg-zinc-900 p-2 text-center">
+                              <Video className="size-6 mb-1 text-sky-400"/>
+                              <span className="text-[8px] font-bold truncate w-full px-1">{url}</span>
+                            </div>
                           ) : (
                             <img src={url} alt={`Media ${idx}`} className="w-full h-full object-cover" />
                           )}
@@ -447,32 +489,39 @@ export function TabInventario({
 
                 {/* 🚀 EDITOR DE TEXTO AVANZADO */}
                 <div className="flex flex-col border border-zinc-800 rounded-xl bg-zinc-950 overflow-hidden flex-1 min-h-[300px] shadow-inner">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 p-3 bg-[#161B22] border-b border-zinc-800 flex items-center gap-1.5"><List className="size-3.5"/> Descripción Detallada (Rich Text)</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 p-3 bg-[#161B22] border-b border-zinc-800 flex items-center gap-1.5">
+                    <List className="size-3.5"/> Descripción Detallada (Rich Text)
+                  </span>
                   
                   <div className="flex flex-wrap items-center gap-1 p-2 bg-zinc-900/80 border-b border-zinc-800 select-none">
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("undo"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Undo className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("redo"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Redo className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("undo"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Deshacer"><Undo className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("redo"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Rehacer"><Redo className="size-4" /></button>
                     <div className="h-5 w-px bg-zinc-700 mx-1"></div>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("formatBlock", "H1"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Heading1 className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("formatBlock", "H2"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Heading2 className="size-4" /></button>
+                    
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("formatBlock", "H1"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Título Principal"><Heading1 className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("formatBlock", "H2"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Subtítulo"><Heading2 className="size-4" /></button>
                     <div className="h-5 w-px bg-zinc-700 mx-1"></div>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("bold"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Bold className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("italic"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Italic className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt("Ingresa el enlace:"); if(url) ejecutarComando("createLink", url); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><LinkIcon className="size-4" /></button>
+
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("bold"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Negrita"><Bold className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("italic"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Itálica"><Italic className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt("Ingresa el enlace:"); if(url) ejecutarComando("createLink", url); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Enlace"><LinkIcon className="size-4" /></button>
                     <div className="h-5 w-px bg-zinc-700 mx-1"></div>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyLeft"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><AlignLeft className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyCenter"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><AlignCenter className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyRight"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><AlignRight className="size-4" /></button>
+
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyLeft"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Izquierda"><AlignLeft className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyCenter"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Centro"><AlignCenter className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("justifyRight"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Derecha"><AlignRight className="size-4" /></button>
                     <div className="h-5 w-px bg-zinc-700 mx-1"></div>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("insertUnorderedList"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><List className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("indent"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Indent className="size-4" /></button>
-                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("outdent"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700"><Outdent className="size-4" /></button>
+
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("insertUnorderedList"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Viñetas"><List className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("indent"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Aumentar Sangría"><Indent className="size-4" /></button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("outdent"); }} className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700" title="Reducir Sangría"><Outdent className="size-4" /></button>
+                    
                     <div className="flex gap-1.5 items-center px-2 ml-auto">
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#ffffff"); }} className="size-5 rounded-full bg-white border border-zinc-500 hover:scale-110 shadow-sm"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#a855f7"); }} className="size-5 rounded-full bg-purple-500 border border-zinc-700 hover:scale-110 shadow-sm"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#10b981"); }} className="size-5 rounded-full bg-emerald-500 border border-zinc-700 hover:scale-110 shadow-sm"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#f59e0b"); }} className="size-5 rounded-full bg-amber-500 border border-zinc-700 hover:scale-110 shadow-sm"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase">Limpiar</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#ffffff"); }} className="size-5 rounded-full bg-white border border-zinc-500 hover:scale-110 shadow-sm" title="Blanco"></button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#a855f7"); }} className="size-5 rounded-full bg-purple-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Violeta"></button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#10b981"); }} className="size-5 rounded-full bg-emerald-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Verde"></button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#f59e0b"); }} className="size-5 rounded-full bg-amber-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Amarillo"></button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase" title="Limpiar Formato">Limpiar</button>
                     </div>
                   </div>
                   

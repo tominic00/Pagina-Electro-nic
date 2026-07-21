@@ -2,9 +2,9 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* Removed unsupported @custom-variant rule to avoid unknown at-rule warning */
 
-@theme inline {
+:root.inline {
   /* 💻 TIPOGRAFÍAS MODERNAS Y LIMPIAS */
   --font-heading: var(--font-geist-sans), 'San Francisco', 'Inter', sans-serif;
   --font-serif: var(--font-geist-sans), 'San Francisco', 'Inter', sans-serif;
@@ -160,13 +160,16 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--border);
+    outline-color: var(--ring);
+    outline-width: 50%;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--foreground);
   }
   html {
-    @apply font-sans;
+    font-family: var(--font-sans);
     scroll-behavior: smooth;
   }
 }
