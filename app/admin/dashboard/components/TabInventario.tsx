@@ -62,24 +62,19 @@ export function TabInventario({
       editorRef.current.innerHTML = formData.descripcion || ""
       document.execCommand("styleWithCSS", false, "true")
     }
-  }, [showFormModal, editingId]) // Solo actualiza al abrir el modal o cambiar de producto
+  }, [showFormModal, editingId]) 
 
-  // 🚀 LÓGICA DE FILTRADO SÚPER INTELIGENTE (Lee nombre, cat y subcat)
   const getCategoriaGeneral = (p: any) => {
     const cats = p.categorias || (p.categoria ? [p.categoria] : [])
     const subs = p.subcategorias || []
     const nombre = p.nombre || ""
     
-    // Unimos todo para buscar palabras clave
     const cadenaCompleta = `${nombre} ${cats.join(" ")} ${subs.join(" ")}`.toLowerCase()
     
-    // 1. Excepciones para Accesorios (Para que fundas/cables de iPhone no vayan a Celulares)
     if (cadenaCompleta.includes("funda") || cadenaCompleta.includes("templado") || cadenaCompleta.includes("cable") || cadenaCompleta.includes("cargador") || cadenaCompleta.includes("auricular") || cadenaCompleta.includes("base") || cadenaCompleta.includes("magsafe") || cadenaCompleta.includes("vidrio")) return "otros"
 
-    // 2. Service y Reparaciones
     if (cadenaCompleta.includes("repara") || cadenaCompleta.includes("service") || cadenaCompleta.includes("taller") || cadenaCompleta.includes("instalacion") || cadenaCompleta.includes("cambio") || cadenaCompleta.includes("pantalla") || cadenaCompleta.includes("bateria") || cadenaCompleta.includes("modulo") || cadenaCompleta.includes("pin de carga")) return "service"
     
-    // 3. Equipos / Celulares
     if (cadenaCompleta.includes("iphone") || cadenaCompleta.includes("celular") || cadenaCompleta.includes("smartphone") || cadenaCompleta.includes("ipad") || cadenaCompleta.includes("mac") || cadenaCompleta.includes("samsung") || cadenaCompleta.includes("motorola")) return "celulares"
     
     return "otros"
@@ -157,7 +152,7 @@ export function TabInventario({
     }
   }, [formData.imagen_url])
 
-  // 🚀 EXPORTAR ACTUALIZADO
+  // 🚀 EXPORTAR
   const handleExportCSV = () => {
     if (productos.length === 0) return alert("No hay productos para exportar.")
     const headers = ["ID", "Nombre", "Categoria", "Subcategorias", "Moneda", "Costo", "Precio_Publico", "Precio_Gremio", "Stock"]
@@ -176,7 +171,7 @@ export function TabInventario({
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   }
 
-  // 🚀 PLANTILLA ACTUALIZADA
+  // 🚀 PLANTILLA
   const descargarPlantilla = () => {
     const headers = ["Nombre_Producto", "Categoria", "Subcategorias", "Moneda(ARS/USD)", "Costo", "Precio_Publico", "Precio_Gremio", "Stock"]
     const row = ["Funda MagSafe iPhone 13", "Accesorios | Apple", "Fundas | MagSafe", "ARS", "5000", "15000", "10000", "20"]
@@ -387,7 +382,7 @@ export function TabInventario({
                     </div>
                   </div>
 
-                  {/* 🚀 CATEGORÍAS (LISTA CON SELECTOR) */}
+                  {/* 🚀 CATEGORÍAS (CON DESPLEGABLE) */}
                   <div>
                     <div className="flex justify-between items-end mb-1">
                       <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Categorías (Múltiple)</label>
@@ -398,7 +393,7 @@ export function TabInventario({
                             setFormData((prev: any) => ({ ...prev, categorias: [...(prev.categorias || []), val] }));
                           }
                           e.target.value = "";
-                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer">
+                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer hover:bg-zinc-800">
                           <option value="">Elegir del historial...</option>
                           {todasLasCategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
                         </select>
@@ -414,7 +409,7 @@ export function TabInventario({
                     </div>
                   </div>
 
-                  {/* 🚀 SUBCATEGORÍAS (LISTA CON SELECTOR) */}
+                  {/* 🚀 SUBCATEGORÍAS (CON DESPLEGABLE) */}
                   <div>
                     <div className="flex justify-between items-end mb-1">
                       <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1"><Tag className="size-3"/> Subcategorías / Etiquetas</label>
@@ -425,7 +420,7 @@ export function TabInventario({
                             setFormData((prev: any) => ({ ...prev, subcategorias: [...(prev.subcategorias || []), val] }));
                           }
                           e.target.value = "";
-                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer">
+                        }} className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] rounded-md px-2 py-0.5 outline-none cursor-pointer hover:bg-zinc-800">
                           <option value="">Elegir del historial...</option>
                           {todasLasSubcategoriasExistentes.map((c:any)=><option key={c} value={c}>{c}</option>)}
                         </select>
@@ -521,7 +516,7 @@ export function TabInventario({
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#a855f7"); }} className="size-5 rounded-full bg-purple-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Violeta"></button>
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#10b981"); }} className="size-5 rounded-full bg-emerald-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Verde"></button>
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("foreColor", "#f59e0b"); }} className="size-5 rounded-full bg-amber-500 border border-zinc-700 hover:scale-110 shadow-sm" title="Amarillo"></button>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase" title="Limpiar Formato">Limpiar</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); ejecutarComando("removeFormat"); }} className="px-2 py-1 rounded-md text-zinc-400 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-[10px] font-black uppercase">Limpiar Formato</button>
                     </div>
                   </div>
                   
