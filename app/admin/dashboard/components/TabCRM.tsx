@@ -11,7 +11,7 @@ interface TabCRMProps {
   setShowAbonoModal: (show: boolean) => void
   clientes: any[]
   ventas: any[]
-  productos?: any[] // 🚀 AGREGAMOS PRODUCTOS PARA PODER ELEGIR EN LOS CAMBIOS
+  productos?: any[]
   clienteForm: any
   setClienteForm: (data: any) => void
   editingClienteId: string | null
@@ -19,7 +19,7 @@ interface TabCRMProps {
   handleRegistrarCliente: (e: React.FormEvent) => void
   isSaving: boolean
   deleteCliente: (id: string) => void
-  handleRegistrarPostVenta?: (payload: any) => void // 🚀 FUNCIÓN NUEVA PARA PROCESAR LOS CAMBIOS
+  handleRegistrarPostVenta?: (payload: any) => void
 }
 
 export function TabCRM({
@@ -43,9 +43,7 @@ export function TabCRM({
   const [activeTab, setActiveTab] = useState<"todos" | "taller" | "equipos" | "accesorios">("todos")
   const [clienteHistorial, setClienteHistorial] = useState<any | null>(null)
   
-  // 🚀 ESTADO PARA EL GESTOR DE CAMBIOS Y DEVOLUCIONES
   const [postVenta, setPostVenta] = useState<any | null>(null)
-
   const [cotizacionDolar, setCotizacionDolar] = useState<number>(1400)
 
   useEffect(() => {
@@ -114,6 +112,33 @@ export function TabCRM({
     return { isRepair, isDevolucion, total, pagoReal, deuda, tieneSena, estadoLocal, colorEstado, icon }
   }
 
+  // 🚀 CALCULADORA DEL BALANCE REAL (Monedero + Deuda de Tickets)
+  const calcularBalanceReal = (clienteObj: any) => {
+    if (!clienteObj) return { saldoRealARS: 0, saldoRealUSD: 0, deudor: false };
+    
+    // Buscamos todas las actividades de este cliente
+    const acts = ventas.filter(v => {
+      const matchId = v.cliente_id === clienteObj.id;
+      const matchNombre = v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteObj.nombre.toLowerCase());
+      return matchId || matchNombre;
+    });
+
+    // Sumamos la deuda de cada ticket individual
+    const deudaTickets = acts.reduce((acc, act) => acc + analizarActividad(act).deuda, 0);
+    
+    // Su monedero base (convertido a pesos)
+    const saldoBaseARS = (clienteObj.saldo_usd || 0) * cotizacionDolar;
+    
+    // El balance definitivo: Monedero - Lo que debe en tickets
+    const saldoRealARS = saldoBaseARS - deudaTickets;
+    
+    return {
+      saldoRealARS,
+      saldoRealUSD: saldoRealARS / cotizacionDolar,
+      deudor: saldoRealARS < 0
+    };
+  };
+
   const clientesFiltrados = clientes.filter(c => {
     const matchText = c.nombre?.toLowerCase().includes(filtroClientes.toLowerCase()) || c.institucion_o_laboratorio?.toLowerCase().includes(filtroClientes.toLowerCase()) || c.whatsapp?.includes(filtroClientes)
     const tags = obtenerEtiquetasCliente(c.id)
@@ -130,7 +155,6 @@ export function TabCRM({
     return matchId || matchNombre;
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
 
-  // 🚀 LÓGICA DE CÁLCULO PARA EL MODAL POST-VENTA
   const prodNuevoSeleccionado = postVenta?.producto_nuevo_id ? productos.find(p => p.id === postVenta.producto_nuevo_id) : null;
   const precioProdNuevo = prodNuevoSeleccionado ? Number(prodNuevoSeleccionado.precio_minorista ?? prodNuevoSeleccionado.precio) : 0;
   const diferenciaCambio = precioProdNuevo - Number(postVenta?.pago_original || 0);
@@ -144,9 +168,12 @@ export function TabCRM({
       });
       setPostVenta(null);
     } else {
-      alert("⚠️ Falta implementar handleRegistrarPostVenta en useDashboard.tsx. Mirá las instrucciones del chat.");
+      alert("⚠️ Falta implementar handleRegistrarPostVenta en useDashboard.tsx.");
     }
   }
+
+  // Calculamos el balance real del cliente que está abierto en el Modal
+  const balanceModal = calcularBalanceReal(clienteHistorial);
 
   return (
     <div className="grid gap-6 sm:gap-8 grid-cols-1 xl:grid-cols-4 animate-in fade-in duration-500 text-left">
@@ -200,7 +227,10 @@ export function TabCRM({
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
                 {clientesFiltrados.map((cliente) => {
-                  const saldoUSD = Number(cliente.saldo_usd || 0); const saldoARS = saldoUSD * cotizacionDolar; const deudor = saldoUSD < 0;
+                  
+                  // 🚀 USAMOS LA CALCULADORA PARA MOSTRAR EL BALANCE REAL EN LA TABLA
+                  const { saldoRealARS, saldoRealUSD, deudor } = calcularBalanceReal(cliente);
+                  
                   const tags = obtenerEtiquetasCliente(cliente.id); const esProspecto = !tags.taller && !tags.equipos && !tags.accesorios;
                   return (
                     <tr key={cliente.id} className="hover:bg-zinc-800/30 transition-colors group">
@@ -216,8 +246,8 @@ export function TabCRM({
                       <td className="p-4"><p className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5"><span className="text-zinc-500">WA:</span> {cliente.whatsapp}</p><p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">DNI/REF: {cliente.institucion_o_laboratorio || "---"}</p></td>
                       <td className="p-4 text-center">
                         <div className={cn("w-full py-1.5 px-2 rounded-lg border flex flex-col items-center justify-center transition-all shadow-sm", deudor ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20')}>
-                          <span className="text-xs font-black">{deudor ? `Debe: $${Math.abs(saldoARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `Saldo: $${saldoARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}</span>
-                          <span className="text-[9px] opacity-70 font-bold mt-0.5">U$D {Math.abs(saldoUSD).toFixed(2)}</span>
+                          <span className="text-xs font-black">{deudor ? `Debe: $${Math.abs(saldoRealARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `A Favor: $${saldoRealARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}</span>
+                          <span className="text-[9px] opacity-70 font-bold mt-0.5">U$D {Math.abs(saldoRealUSD).toFixed(2)}</span>
                         </div>
                       </td>
                       <td className="p-4 text-center">
@@ -238,7 +268,7 @@ export function TabCRM({
         </div>
       </div>
 
-      {/* 🚀 MODAL MAGISTRAL: FICHA E HISTORIAL DEL CLIENTE */}
+      {/* MODAL MAGISTRAL: FICHA E HISTORIAL DEL CLIENTE */}
       {clienteHistorial && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200 text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -250,11 +280,12 @@ export function TabCRM({
               </div>
               
               <div className="flex items-start gap-4">
-                <div className={cn("px-4 py-3 rounded-xl border flex flex-col items-end w-full sm:w-auto", (clienteHistorial.saldo_usd || 0) < 0 ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
-                  <span className={cn("text-[10px] font-black uppercase tracking-widest", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-500" : "text-emerald-500")}>Cuenta Corriente</span>
-                  <span className={cn("text-lg font-black flex items-baseline gap-1.5", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-400" : "text-emerald-400")}>
-                    {(clienteHistorial.saldo_usd || 0) < 0 ? `Debe: $${(Math.abs(clienteHistorial.saldo_usd || 0) * cotizacionDolar).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `A Favor: $${((clienteHistorial.saldo_usd || 0) * cotizacionDolar).toLocaleString('es-AR', {maximumFractionDigits:0})}`}
-                    <span className="text-xs font-bold opacity-60">(U$D {Math.abs(clienteHistorial.saldo_usd || 0).toFixed(2)})</span>
+                {/* 🚀 ACÁ ESTÁ EL CAMBIO: USAMOS EL BALANCE REAL CALCULADO PARA ESTE CLIENTE */}
+                <div className={cn("px-4 py-3 rounded-xl border flex flex-col items-end w-full sm:w-auto", balanceModal.deudor ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
+                  <span className={cn("text-[10px] font-black uppercase tracking-widest", balanceModal.deudor ? "text-red-500" : "text-emerald-500")}>Balance Real Global</span>
+                  <span className={cn("text-lg font-black flex items-baseline gap-1.5", balanceModal.deudor ? "text-red-400" : "text-emerald-400")}>
+                    {balanceModal.deudor ? `Debe: $${Math.abs(balanceModal.saldoRealARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `A Favor: $${balanceModal.saldoRealARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}
+                    <span className="text-xs font-bold opacity-60">(U$D {Math.abs(balanceModal.saldoRealUSD).toFixed(2)})</span>
                   </span>
 
                   <div className="flex gap-2 mt-3 w-full justify-end border-t border-zinc-800/50 pt-3">
@@ -294,7 +325,6 @@ export function TabCRM({
                             <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{act.descripcion || "Sin detalles adicionales."}</p>
                           </div>
                           
-                          {/* 🚀 BOTÓN GESTOR DE POST-VENTA EN CADA ACTIVIDAD */}
                           {!datos.isDevolucion && datos.estadoLocal !== "En el Local (Taller)" && (
                             <div className="mt-auto pt-4 flex items-start">
                               <button onClick={() => setPostVenta({
@@ -359,7 +389,7 @@ export function TabCRM({
         </div>
       )}
 
-      {/* 🚀 MODAL DEFINITIVO DE POST-VENTA (Garantías, Cambios y Devoluciones) */}
+      {/* MODAL DEFINITIVO DE POST-VENTA */}
       {postVenta && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col">
@@ -374,25 +404,16 @@ export function TabCRM({
 
             <div className="p-6 bg-[#161B22] space-y-6">
               
-              {/* SELECTOR DE ACCIÓN */}
               <div>
                 <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 block">¿Qué acción querés realizar?</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <button onClick={() => setPostVenta({...postVenta, tipo: 'cambio'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'cambio' ? "bg-purple-600/10 border-purple-500 text-purple-400" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}>
-                    <ArrowRightLeft className="size-6"/> <span className="text-xs font-black uppercase">Cambio x Otro</span>
-                  </button>
-                  <button onClick={() => setPostVenta({...postVenta, tipo: 'garantia'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'garantia' ? "bg-amber-500/10 border-amber-500 text-amber-500" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}>
-                    <ShieldAlert className="size-6"/> <span className="text-xs font-black uppercase">Garantía Falla</span>
-                  </button>
-                  <button onClick={() => setPostVenta({...postVenta, tipo: 'devolucion'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'devolucion' ? "bg-red-500/10 border-red-500 text-red-500" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}>
-                    <RotateCcw className="size-6"/> <span className="text-xs font-black uppercase">Devolución Dinero</span>
-                  </button>
+                  <button onClick={() => setPostVenta({...postVenta, tipo: 'cambio'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'cambio' ? "bg-purple-600/10 border-purple-500 text-purple-400" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}><ArrowRightLeft className="size-6"/> <span className="text-xs font-black uppercase">Cambio x Otro</span></button>
+                  <button onClick={() => setPostVenta({...postVenta, tipo: 'garantia'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'garantia' ? "bg-amber-500/10 border-amber-500 text-amber-500" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}><ShieldAlert className="size-6"/> <span className="text-xs font-black uppercase">Garantía Falla</span></button>
+                  <button onClick={() => setPostVenta({...postVenta, tipo: 'devolucion'})} className={cn("p-4 rounded-2xl border-2 flex flex-col items-center justify-center text-center gap-2 transition-all", postVenta.tipo === 'devolucion' ? "bg-red-500/10 border-red-500 text-red-500" : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700")}><RotateCcw className="size-6"/> <span className="text-xs font-black uppercase">Devolución Dinero</span></button>
                 </div>
               </div>
 
-              {/* OPCIONES SEGÚN LA ACCIÓN */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-inner">
-                
                 {postVenta.tipo === 'cambio' && (
                   <div className="space-y-4 animate-in fade-in">
                     <div>
@@ -402,63 +423,41 @@ export function TabCRM({
                         {productos.map((p:any) => <option key={p.id} value={p.id}>{p.nombre} - ${Number(p.precio_minorista ?? p.precio).toLocaleString()}</option>)}
                       </select>
                     </div>
-                    
                     {postVenta.producto_nuevo_id && (
                       <div className="bg-black/50 p-4 rounded-xl border border-zinc-800 flex justify-between items-center">
                         <div className="text-xs font-bold text-zinc-400">Pagó Originalmente: <span className="text-white">${postVenta.pago_original.toLocaleString()}</span><br/>Precio Nuevo Eq.: <span className="text-white">${precioProdNuevo.toLocaleString()}</span></div>
-                        <div className="text-right">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Diferencia:</span>
-                          <span className={cn("text-xl font-black", diferenciaCambio > 0 ? "text-amber-500" : diferenciaCambio < 0 ? "text-emerald-500" : "text-white")}>
-                            {diferenciaCambio > 0 ? `Cliente paga: $${diferenciaCambio.toLocaleString()}` : diferenciaCambio < 0 ? `A favor cliente: $${Math.abs(diferenciaCambio).toLocaleString()}` : 'Cambio Directo ($0)'}
-                          </span>
-                        </div>
+                        <div className="text-right"><span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Diferencia:</span><span className={cn("text-xl font-black", diferenciaCambio > 0 ? "text-amber-500" : diferenciaCambio < 0 ? "text-emerald-500" : "text-white")}>{diferenciaCambio > 0 ? `Cliente paga: $${diferenciaCambio.toLocaleString()}` : diferenciaCambio < 0 ? `A favor cliente: $${Math.abs(diferenciaCambio).toLocaleString()}` : 'Cambio Directo ($0)'}</span></div>
                       </div>
                     )}
                   </div>
                 )}
-
                 {postVenta.tipo === 'garantia' && (
-                  <div className="space-y-4 animate-in fade-in text-center p-4">
-                    <ShieldAlert className="size-12 text-amber-500/50 mx-auto mb-2" />
-                    <p className="text-sm text-zinc-300 font-medium">Se descontará 1 unidad de <strong>"{postVenta.venta_original.nombre_producto}"</strong> del stock para entregárselo al cliente, y el costo de esta transacción será $0.</p>
-                  </div>
+                  <div className="space-y-4 animate-in fade-in text-center p-4"><ShieldAlert className="size-12 text-amber-500/50 mx-auto mb-2" /><p className="text-sm text-zinc-300 font-medium">Se descontará 1 unidad de <strong>"{postVenta.venta_original.nombre_producto}"</strong> del stock para entregárselo al cliente, y el costo de esta transacción será $0.</p></div>
                 )}
-
                 {postVenta.tipo === 'devolucion' && (
                   <div className="space-y-4 animate-in fade-in">
                     <div>
                       <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Dinero a reintegrar (o cargar como Saldo a Favor):</label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-red-500" />
-                        <input type="number" value={postVenta.pago_original} onChange={e => setPostVenta({...postVenta, pago_original: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-lg font-black text-red-400 outline-none focus:border-red-500" />
-                      </div>
+                      <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-red-500" /><input type="number" value={postVenta.pago_original} onChange={e => setPostVenta({...postVenta, pago_original: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-lg font-black text-red-400 outline-none focus:border-red-500" /></div>
                       <p className="text-[10px] text-zinc-500 mt-1.5 font-bold">Por defecto sugerimos lo que el cliente pagó realmente en su momento.</p>
                     </div>
                   </div>
                 )}
-
               </div>
 
-              {/* CONFIGURACIÓN COMPARTIDA */}
               <div className="space-y-4">
                 <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-800 transition-colors">
                   <input type="checkbox" checked={postVenta.reingresar_stock} onChange={e => setPostVenta({...postVenta, reingresar_stock: e.target.checked})} className="size-5 accent-purple-500 rounded bg-zinc-950 border-zinc-700" />
                   <div><span className="block text-sm font-bold text-white">Reingresar artículo al stock</span><span className="block text-xs text-zinc-400">Si está en buen estado, sumará +1 al inventario. Desmarcalo si está roto (Garantía).</span></div>
                 </label>
-                
-                <div>
-                  <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Motivo / Notas Internas</label>
-                  <textarea rows={2} value={postVenta.notas} onChange={e => setPostVenta({...postVenta, notas: e.target.value})} placeholder="Ej: El pin de carga vino fallado de fábrica..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white resize-none outline-none focus:border-purple-500" />
-                </div>
+                <div><label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Motivo / Notas Internas</label><textarea rows={2} value={postVenta.notas} onChange={e => setPostVenta({...postVenta, notas: e.target.value})} placeholder="Ej: El pin de carga vino fallado de fábrica..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white resize-none outline-none focus:border-purple-500" /></div>
               </div>
 
             </div>
 
             <div className="p-6 border-t border-zinc-800 bg-zinc-950 flex gap-4">
               <button onClick={() => setPostVenta(null)} className="flex-1 py-3.5 rounded-xl font-bold text-sm text-zinc-400 bg-zinc-900 hover:bg-zinc-800 transition-colors">CANCELAR</button>
-              <button onClick={confirmarPostVenta} disabled={postVenta.tipo === 'cambio' && !postVenta.producto_nuevo_id} className="flex-[2] py-3.5 rounded-xl font-black text-sm text-black shadow-lg transition-all flex justify-center items-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-50">
-                CONFIRMAR OPERACIÓN
-              </button>
+              <button onClick={confirmarPostVenta} disabled={postVenta.tipo === 'cambio' && !postVenta.producto_nuevo_id} className="flex-[2] py-3.5 rounded-xl font-black text-sm text-black shadow-lg transition-all flex justify-center items-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-50">CONFIRMAR OPERACIÓN</button>
             </div>
             
           </div>

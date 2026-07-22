@@ -270,6 +270,62 @@ export function useDashboard() {
     }
   };
 
+  // 🚀 FUNCIÓN MAESTRA DE GESTIÓN DE POST-VENTA (Cambios y Devoluciones)
+  const handleRegistrarPostVenta = async (payload: any) => {
+    try {
+      setIsSaving(true);
+      
+      // Si eligió que el producto vuelve al stock, le sumamos +1 a tu inventario
+      if (payload.reingresar_stock && payload.venta_original.producto_id) {
+        await supabase.rpc('incrementar_stock', { p_id: payload.venta_original.producto_id, cantidad: 1 });
+      }
+
+      // Si fue una Devolución o un Cambio, cargamos la plata a favor (o en contra) en la cuenta del cliente
+      if (payload.tipo === 'devolucion') {
+        const saldoAcreditado = payload.pago_original / (tasaDolarBlue || 1400); // Lo pasamos a USD para tu base
+        await supabase.rpc('actualizar_saldo_cliente', { p_cliente_id: payload.cliente_id, p_monto: saldoAcreditado });
+      }
+      
+      if (payload.tipo === 'cambio' && payload.diferencia_cambio !== 0) {
+        // Si diferencia es +, el cliente debe pagar (le restamos saldo). Si es -, queda a favor (le sumamos saldo).
+        const saldoDiferenciaUSD = (payload.diferencia_cambio * -1) / (tasaDolarBlue || 1400);
+        await supabase.rpc('actualizar_saldo_cliente', { p_cliente_id: payload.cliente_id, p_monto: saldoDiferenciaUSD });
+      }
+
+      // Dejamos registro en las ventas
+      const tituloAccion = payload.tipo === 'garantia' ? '🛡️ CAMBIO POR GARANTÍA' : payload.tipo === 'cambio' ? '🔁 CAMBIO DE PRODUCTO' : '🔄 DEVOLUCIÓN';
+      
+      const { error: errorVenta } = await supabase.from('ventas_b2b').insert([{
+        cliente_id: payload.cliente_id,
+        cliente_referencia: payload.venta_original.cliente_referencia,
+        producto_id: payload.producto_nuevo_id || null,
+        nombre_producto: `${tituloAccion}: Ticket de orig. #${payload.venta_original.id.slice(0,6)}`,
+        descripcion: payload.notas || "Gestión automática de post-venta.",
+        total: payload.tipo === 'cambio' ? payload.diferencia_cambio : (payload.tipo === 'devolucion' ? -payload.pago_original : 0),
+        monto_pagado: 0,
+        tipo: 'devolucion',
+        estado: 'Entregado'
+      }]);
+
+      if (errorVenta) throw errorVenta;
+
+      // Si fue un cambio por otro o garantía, descontamos 1 del producto nuevo
+      if ((payload.tipo === 'cambio' && payload.producto_nuevo_id) || payload.tipo === 'garantia') {
+        const idADescontar = payload.tipo === 'cambio' ? payload.producto_nuevo_id : payload.venta_original.producto_id;
+        await supabase.rpc('descontar_stock', { p_id: idADescontar, cantidad: 1 });
+      }
+
+      alert("✅ ¡Gestión de Post-Venta registrada con éxito!");
+      fetchData(); // Recarga la pantalla
+
+    } catch (error: any) {
+      console.error("Error en Post-Venta:", error);
+      alert("Error al registrar: " + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleUpdateInline = async (id: string, campo: string, valor: any) => {
     setProductos(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p))
     const { error = null } = await supabase.from("productos").update({ [campo]: valor }).eq("id", id)
