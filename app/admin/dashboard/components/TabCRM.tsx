@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Users, Search, Trash2, Edit3, Plus, Loader2, FileClock, RotateCcw, Wrench, Smartphone, Headphones, UserCheck } from "lucide-react"
+import { Users, Search, Trash2, Edit3, Plus, Loader2, FileClock, RotateCcw, Wrench, Smartphone, Headphones, UserCheck, X, ShoppingBag, Calendar, AlertCircle, CheckCircle2, Clock, DollarSign, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabCRMProps {
@@ -44,6 +44,9 @@ export function TabCRM({
 
   // 🚀 SUB-PESTAÑAS DE FILTRADO INTERNO
   const [activeTab, setActiveTab] = useState<"todos" | "taller" | "equipos" | "accesorios">("todos")
+  
+  // 🚀 ESTADO PARA EL NUEVO MODAL DE FICHA DE CLIENTE
+  const [clienteHistorial, setClienteHistorial] = useState<any | null>(null)
 
   // 🧠 FUNCIÓN INTELIGENTE: Detecta qué tipo de cliente es basándose en su historial
   const obtenerEtiquetasCliente = (clienteId: string) => {
@@ -52,21 +55,62 @@ export function TabCRM({
 
     comprasCliente.forEach(v => {
       const prod = (v.nombre_producto || "").toLowerCase()
-      // Lógica de detección (podés ajustarla según cómo escribas tus productos)
-      if (prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin de carga")) tags.taller = true
+      if (prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin de carga") || prod.includes("modulo")) tags.taller = true
       if (prod.includes("iphone") || prod.includes("mac") || prod.includes("ipad") || prod.includes("apple watch")) tags.equipos = true
-      if (prod.includes("cable") || prod.includes("funda") || prod.includes("cargador") || prod.includes("templado") || prod.includes("airpods")) tags.accesorios = true
+      if (prod.includes("cable") || prod.includes("funda") || prod.includes("cargador") || prod.includes("templado") || prod.includes("airpods") || prod.includes("auricular")) tags.accesorios = true
     })
 
-    // Si no tiene compras, por defecto es un prospecto (sin etiquetas)
     return tags
+  }
+
+  // 🧠 FUNCIÓN INTELIGENTE: Analiza cada actividad para la Ficha del Cliente
+  const analizarActividad = (v: any) => {
+    const prod = (v.nombre_producto || "").toLowerCase()
+    const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio"
+    const isDevolucion = v.tipo === "devolucion" || Number(v.total) < 0 || prod.includes("devolucion") || prod.includes("cambio")
+
+    const total = Number(v.total || v.precio || 0)
+    const abonado = Number(v.monto_abonado || v.abono || v.pagado || (v.monto_pagado) || 0)
+    
+    // Si no es reparación y no hay "monto_abonado" registrado, asumimos que pagó el total al comprar
+    const pagoReal = (abonado === 0 && !isRepair && !isDevolucion && v.estado !== "Pendiente") ? total : abonado
+    
+    const deuda = (total - pagoReal > 0) ? (total - pagoReal) : 0
+    const tieneSena = pagoReal > 0 && pagoReal < total
+
+    let estadoLocal = "Desconocido"
+    let colorEstado = "bg-zinc-800 text-zinc-400 border-zinc-700"
+    let icon = <ShoppingBag className="size-5" />
+
+    if (isDevolucion) {
+      estadoLocal = "Cambio / Devolución"
+      colorEstado = "bg-red-500/10 text-red-500 border-red-500/20"
+      icon = <RotateCcw className="size-5" />
+    } else if (isRepair) {
+      icon = <Wrench className="size-5" />
+      const est = (v.estado || "").toLowerCase()
+      // Detectamos si el equipo ya se fue o sigue en el local
+      if (est.includes("entregado") || est.includes("retirado") || est === "finalizado") {
+        estadoLocal = "Equipo Entregado"
+        colorEstado = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+      } else {
+        estadoLocal = "En el Local (Taller)"
+        colorEstado = "bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse"
+      }
+    } else {
+      estadoLocal = "Compra Completada"
+      colorEstado = "bg-blue-500/10 text-blue-400 border-blue-500/20"
+      icon = <Package className="size-5" />
+    }
+
+    return { isRepair, isDevolucion, total, pagoReal, deuda, tieneSena, estadoLocal, colorEstado, icon }
   }
 
   // 🚀 FILTRADO DOBLE: Por texto de búsqueda y por Sub-Pestaña activa
   const clientesFiltrados = clientes.filter(c => {
     const matchText = 
       c.nombre?.toLowerCase().includes(filtroClientes.toLowerCase()) ||
-      c.institucion_o_laboratorio?.toLowerCase().includes(filtroClientes.toLowerCase()) || // Usado como DNI/Referencia
+      c.institucion_o_laboratorio?.toLowerCase().includes(filtroClientes.toLowerCase()) || 
       c.whatsapp?.includes(filtroClientes)
 
     const tags = obtenerEtiquetasCliente(c.id)
@@ -78,6 +122,9 @@ export function TabCRM({
 
     return matchText && matchTab
   })
+
+  // Obtener actividades del cliente seleccionado para la Ficha
+  const actividadesCliente = clienteHistorial ? ventas.filter(v => v.cliente_id === clienteHistorial.id).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
 
   return (
     <div className="grid gap-6 sm:gap-8 grid-cols-1 xl:grid-cols-4 animate-in fade-in duration-500 text-left">
@@ -140,7 +187,6 @@ export function TabCRM({
       {/* 🚀 PANEL DERECHO: BASE DE DATOS */}
       <div className="xl:col-span-3 text-left flex flex-col">
         
-        {/* HEADER Y BUSCADOR */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6">
           <div>
             <h2 className="text-2xl font-black text-white tracking-tight">Base de Clientes</h2>
@@ -159,30 +205,17 @@ export function TabCRM({
           </div>
         </div>
 
-        {/* 🚀 SUB-PESTAÑAS DE SECCIONES (Filtros Inteligentes) */}
         <div className="flex gap-2 mb-4 border-b border-zinc-800 pb-px overflow-x-auto hide-scrollbar">
-          <button 
-            onClick={() => setActiveTab("todos")} 
-            className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "todos" ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-          >
+          <button onClick={() => setActiveTab("todos")} className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "todos" ? "border-white text-white" : "border-transparent text-zinc-500 hover:text-zinc-300")}>
             <Users className="size-3.5" /> Todos
           </button>
-          <button 
-            onClick={() => setActiveTab("taller")} 
-            className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "taller" ? "border-amber-500 text-amber-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-          >
+          <button onClick={() => setActiveTab("taller")} className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "taller" ? "border-amber-500 text-amber-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}>
             <Wrench className="size-3.5" /> Taller / Service
           </button>
-          <button 
-            onClick={() => setActiveTab("equipos")} 
-            className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "equipos" ? "border-purple-500 text-purple-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-          >
+          <button onClick={() => setActiveTab("equipos")} className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "equipos" ? "border-purple-500 text-purple-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}>
             <Smartphone className="size-3.5" /> Compra Equipos
           </button>
-          <button 
-            onClick={() => setActiveTab("accesorios")} 
-            className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "accesorios" ? "border-emerald-500 text-emerald-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}
-          >
+          <button onClick={() => setActiveTab("accesorios")} className={cn("px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5", activeTab === "accesorios" ? "border-emerald-500 text-emerald-500" : "border-transparent text-zinc-500 hover:text-zinc-300")}>
             <Headphones className="size-3.5" /> Accesorios
           </button>
         </div>
@@ -204,17 +237,12 @@ export function TabCRM({
                 {clientesFiltrados.map((cliente) => {
                   const deudor = (cliente.saldo_usd || 0) < 0
                   const tags = obtenerEtiquetasCliente(cliente.id)
-                  
-                  // Verificamos si es prospecto (nuevo sin compras)
                   const esProspecto = !tags.taller && !tags.equipos && !tags.accesorios
 
                   return (
                     <tr key={cliente.id} className="hover:bg-zinc-800/30 transition-colors group">
-                      
-                      {/* COLUMNA 1: INFO Y BADGES INTEGRADOs */}
                       <td className="p-4 pl-6">
                         <p className="font-bold text-sm text-white">{cliente.nombre}</p>
-                        
                         <div className="flex items-center gap-1.5 mt-1.5">
                           {tags.taller && <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider flex items-center gap-1"><Wrench className="size-2.5"/> Service</span>}
                           {tags.equipos && <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider flex items-center gap-1"><Smartphone className="size-2.5"/> Equipo</span>}
@@ -223,13 +251,11 @@ export function TabCRM({
                         </div>
                       </td>
 
-                      {/* COLUMNA 2: CONTACTO */}
                       <td className="p-4">
                         <p className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5"><span className="text-zinc-500">WA:</span> {cliente.whatsapp}</p>
                         <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">DNI/REF: {cliente.institucion_o_laboratorio || "---"}</p>
                       </td>
 
-                      {/* COLUMNA 3: SALDO */}
                       <td className="p-4 text-center">
                         <button 
                           onClick={() => { setAbonoData({ clienteId: cliente.id, monto: "", motivo: "Entrega de Efectivo / Cobro" }); setShowAbonoModal(true); }} 
@@ -239,13 +265,12 @@ export function TabCRM({
                         </button>
                       </td>
 
-                      {/* COLUMNA 4: FICHA Y DEVOLUCIÓN */}
                       <td className="p-4 text-center">
                         <div className="flex gap-2 justify-center">
                           <button 
-                            onClick={() => setShowHistorialClienteId(cliente.id)} 
-                            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 rounded-lg text-[9px] font-black uppercase transition-all"
-                            title="Ver Historial"
+                            onClick={() => { setShowHistorialClienteId(cliente.id); setClienteHistorial(cliente); }} 
+                            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm"
+                            title="Ver Ficha y Actividades"
                           >
                             <FileClock className="size-3.5"/> Ficha
                           </button>
@@ -259,7 +284,6 @@ export function TabCRM({
                         </div>
                       </td>
 
-                      {/* COLUMNA 5: ACCIONES EDICIÓN */}
                       <td className="p-4 text-center pr-6">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
@@ -287,6 +311,109 @@ export function TabCRM({
           </div>
         </div>
       </div>
+
+      {/* 🚀 MODAL MAGISTRAL: FICHA E HISTORIAL DEL CLIENTE */}
+      {clienteHistorial && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200 text-left">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Header del Modal */}
+            <div className="p-6 border-b border-zinc-800 bg-zinc-900/40 flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className="size-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                  <UserCheck className="size-7" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-white tracking-tight">{clienteHistorial.nombre}</h3>
+                  <div className="flex gap-3 text-xs font-bold text-zinc-500 mt-1">
+                    <span className="flex items-center gap-1"><Smartphone className="size-3"/> {clienteHistorial.whatsapp}</span>
+                    <span className="flex items-center gap-1"><FileClock className="size-3"/> DNI/REF: {clienteHistorial.institucion_o_laboratorio || "N/A"}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-4">
+                <div className={cn("px-4 py-2 rounded-xl border flex flex-col items-end", (clienteHistorial.saldo_usd || 0) < 0 ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
+                  <span className={cn("text-[10px] font-black uppercase tracking-widest", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-500" : "text-emerald-500")}>Cuenta Corriente</span>
+                  <span className={cn("text-lg font-black", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-400" : "text-emerald-400")}>
+                    {(clienteHistorial.saldo_usd || 0) < 0 ? `Debe: USD ${Math.abs(clienteHistorial.saldo_usd)}` : `A Favor: USD ${clienteHistorial.saldo_usd || 0}`}
+                  </span>
+                </div>
+                <button onClick={() => setClienteHistorial(null)} className="text-zinc-500 hover:text-white p-2 bg-zinc-900 rounded-xl transition-colors"><X className="size-5"/></button>
+              </div>
+            </div>
+
+            {/* Body: Línea de Tiempo de Actividades */}
+            <div className="p-6 overflow-y-auto flex-1 bg-[#161B22]">
+              <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-6 flex items-center gap-2"><Clock className="size-4"/> Historial de Actividades</h4>
+              
+              <div className="space-y-4">
+                {actividadesCliente.length === 0 ? (
+                  <div className="text-center py-10 bg-zinc-900/50 rounded-2xl border border-zinc-800 border-dashed">
+                    <AlertCircle className="size-10 text-zinc-600 mx-auto mb-3" />
+                    <p className="text-zinc-400 font-semibold text-sm">Este cliente no tiene reparaciones ni compras registradas aún.</p>
+                  </div>
+                ) : (
+                  actividadesCliente.map(act => {
+                    const datos = analizarActividad(act)
+
+                    return (
+                      <div key={act.id} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-5 hover:border-zinc-700 transition-colors relative overflow-hidden">
+                        
+                        {/* Decoración lateral de color */}
+                        <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", datos.colorEstado.split(" ")[0])} />
+
+                        {/* Info Principal */}
+                        <div className="flex-1 pl-2">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={cn("px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border", datos.colorEstado)}>
+                              {datos.icon} {datos.estadoLocal}
+                            </span>
+                            <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><Calendar className="size-3"/> {new Date(act.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <h5 className="text-base font-black text-white">{act.nombre_producto}</h5>
+                          <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{act.descripcion || "Sin detalles adicionales."}</p>
+                        </div>
+
+                        {/* Finanzas y Estado */}
+                        <div className="sm:w-48 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50 flex flex-col justify-center space-y-1.5">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="text-zinc-500">Valor Total:</span>
+                            <span className="text-white">${datos.total.toLocaleString()}</span>
+                          </div>
+                          
+                          {datos.tieneSena && (
+                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
+                              <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 className="size-3"/> Pagó/Seña:</span>
+                              <span className="text-emerald-400">${datos.pagoReal.toLocaleString()}</span>
+                            </div>
+                          )}
+
+                          {datos.deuda > 0 && (
+                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
+                              <span className="text-red-500 flex items-center gap-1"><AlertCircle className="size-3"/> Debe:</span>
+                              <span className="text-red-400">${datos.deuda.toLocaleString()}</span>
+                            </div>
+                          )}
+
+                          {datos.pagoReal >= datos.total && !datos.isDevolucion && (
+                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
+                              <span className="text-blue-400 flex items-center gap-1"><CheckCircle2 className="size-3"/> Estado:</span>
+                              <span className="text-blue-400">Cancelado</span>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   )
