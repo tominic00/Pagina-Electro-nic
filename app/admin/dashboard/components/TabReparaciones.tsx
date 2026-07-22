@@ -8,6 +8,7 @@ export function TabReparaciones({
   ventas = [],
   productos = [],
   tecnicos = [],
+  clientes = [], // 🚀 AÑADIMOS CLIENTES A LAS PROPIEDADES PARA EL AUTOCOMPLETADO
   tecnicoForm,
   setTecnicoForm,
   handleRegistrarTecnico,
@@ -38,14 +39,18 @@ export function TabReparaciones({
   const [metodoPagoCobro, setMetodoPagoCobro] = useState("Efectivo")
 
   const [patron, setPatron] = useState<number[]>([])
-  
-  // 🚀 ESTADO PARA EL NUEVO INPUT DE SEÑA LIBRE
   const [nuevoPagoMonto, setNuevoPagoMonto] = useState("")
 
   const [tecnicoHistorialId, setTecnicoHistorialId] = useState<string | null>(null)
   const [techFechaInicio, setTechFechaInicio] = useState("")
   const [techFechaFin, setTechFechaFin] = useState("")
   const [techFiltroUbicacion, setTechFiltroUbicacion] = useState("todos")
+
+  // 🚀 FILTRO INTELIGENTE PARA MOSTRAR SOLO SERVICIOS EN EL DESPLEGABLE
+  const serviciosParaElegir = productos.filter((p: any) => {
+    const cats = (p.categorias || (p.categoria ? [p.categoria] : [])).join(" ").toLowerCase();
+    return cats.includes("service") || cats.includes("servicio") || cats.includes("taller") || cats.includes("repara");
+  });
 
   const todasLasReparaciones = ventas.filter((v: any) => 
     v.nombre_producto?.toLowerCase().includes("servicio") || 
@@ -61,7 +66,6 @@ export function TabReparaciones({
     return matchesSearch && matchesTab && matchesTecnico
   })
 
-  // 🚀 FILTRAMOS LOS "Ingreso Extra" PARA QUE NO DUPLIQUEN LOS NUMEROS GLOBALES
   const totalCobradoTallerARS = todasLasReparaciones.filter((r:any) => r.estado !== "Ingreso Extra").reduce((acc: number, r: any) => acc + Number(r.monto_pagado || 0), 0)
   const totalManoObraTecnicosARS = todasLasReparaciones.filter((r:any) => r.estado !== "Ingreso Extra").reduce((acc: number, r: any) => acc + Number(r.costo_tecnico || 0), 0)
   const gananciaNetaTallerARS = totalCobradoTallerARS - totalManoObraTecnicosARS
@@ -104,7 +108,7 @@ export function TabReparaciones({
       diagnostico_falla: rep.diagnostico_falla || "",
       tecnico_id: rep.tecnico_id || "",
       costo_tecnico: rep.costo_tecnico || 0,
-      costo_repuesto: rep.costo_repuesto || 0, // 🚀 NUEVO
+      costo_repuesto: rep.costo_repuesto || 0,
       total_trato: rep.total_trato || 0,
       monto_pagado: rep.monto_pagado || 0,
       metodo_pago: rep.metodo_pago || "Efectivo",
@@ -118,7 +122,7 @@ export function TabReparaciones({
       ubicacion_fisica: rep.ubicacion_fisica || "Local",
       created_at: rep.created_at
     });
-    setNuevoPagoMonto(""); // 🚀 Reset del input de seña
+    setNuevoPagoMonto(""); 
     if (rep.tipo_contrasena === "Patron" && rep.contrasena_equipo) {
       setPatron(rep.contrasena_equipo.split('-').map(Number));
     } else { setPatron([]); }
@@ -359,7 +363,24 @@ export function TabReparaciones({
                 <div className="space-y-3">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-400 border-b border-zinc-800 pb-1">Información del Cliente</h4>
                   <div className="flex gap-2 items-end">
-                    <div className="flex-1"><input type="text" value={reparacionForm.cliente_referencia} onChange={e => setReparacionForm({...reparacionForm, cliente_referencia: e.target.value})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-purple-500 transition-colors" placeholder="Ej: Juan Pérez (3815555555)" /></div>
+                    
+                    {/* 🚀 AUTOCOMPLETADO DE CLIENTES */}
+                    <div className="flex-1">
+                      <input 
+                        type="text" 
+                        list="clientes-registrados"
+                        value={reparacionForm.cliente_referencia || ""} 
+                        onChange={e => setReparacionForm({...reparacionForm, cliente_referencia: e.target.value})} 
+                        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-purple-500 transition-colors" 
+                        placeholder="Ej: Juan Pérez (3815555555)" 
+                      />
+                      <datalist id="clientes-registrados">
+                        {clientes.map((c: any) => (
+                          <option key={c.id} value={`${c.nombre} ${c.whatsapp ? `(${c.whatsapp})` : ''}`.trim()} />
+                        ))}
+                      </datalist>
+                    </div>
+
                     {!reparacionForm.id && (<button onClick={() => setShowNuevoCliente(true)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-white border border-zinc-700 shrink-0 flex items-center gap-2 text-sm font-bold"><Plus className="size-4"/> Nuevo</button>)}
                   </div>
                 </div>
@@ -368,7 +389,12 @@ export function TabReparaciones({
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-400 border-b border-zinc-800 pb-1">Dispositivo y Seguridad</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <select required value={reparacionForm.producto_id} onChange={e => setReparacionForm({...reparacionForm, producto_id: e.target.value})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-purple-500 mb-2"><option value="">-- Seleccionar de Lista --</option><option value="manual" className="font-bold text-amber-400">➕ Falla Manual / Otra...</option>{productos.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
+                      {/* 🚀 FILTRO INTELIGENTE DE SERVICIOS */}
+                      <select required value={reparacionForm.producto_id} onChange={e => setReparacionForm({...reparacionForm, producto_id: e.target.value})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-purple-500 mb-2">
+                        <option value="">-- Seleccionar de Lista --</option>
+                        <option value="manual" className="font-bold text-amber-400">➕ Falla Manual / Otra...</option>
+                        {serviciosParaElegir.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
                       {reparacionForm.producto_id === "manual" && (<input type="text" autoFocus placeholder="Ej: Cambio de plaqueta..." value={reparacionForm.nombre_servicio_manual || ""} onChange={e => setReparacionForm({...reparacionForm, nombre_servicio_manual: e.target.value})} className="w-full rounded-xl border border-amber-500/50 bg-amber-500/10 p-2.5 text-sm text-amber-100 outline-none focus:border-amber-500" />)}
                     </div>
                     <div><input type="text" value={reparacionForm.imei} onChange={e => setReparacionForm({...reparacionForm, imei: e.target.value})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white font-mono outline-none focus:border-purple-500" placeholder="IMEI / Serie (Opcional)" /></div>
@@ -401,7 +427,6 @@ export function TabReparaciones({
                   </div>
                 </div>
 
-                {/* 🚀 FORMULARIO FINANCIERO AL CREAR ORDEN */}
                 {!reparacionForm.id && (
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="text-[10px] font-bold text-zinc-400 mb-1 block">Presupuesto al Cliente (ARS)</label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="number" value={reparacionForm.total_trato || ""} onChange={e => setReparacionForm({...reparacionForm, total_trato: Number(e.target.value)})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 pl-9 text-sm font-black text-white outline-none focus:border-purple-500" /></div></div>
@@ -430,7 +455,6 @@ export function TabReparaciones({
                   <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg flex-1">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 mb-4 flex items-center gap-1.5"><Calculator className="size-3"/> Balance y Costos</h4>
                     
-                    {/* 🚀 FORMULARIO DE COSTOS ACTUALIZADO EN VIVO */}
                     <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-zinc-800">
                       <div><label className="text-[10px] font-bold text-zinc-400 mb-1 block">Presupuesto Final</label><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="number" value={reparacionForm.total_trato || ""} onChange={e => setReparacionForm({...reparacionForm, total_trato: Number(e.target.value)})} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 pl-8 text-sm font-black text-white outline-none focus:border-purple-500" /></div></div>
                       <div>
@@ -449,7 +473,6 @@ export function TabReparaciones({
                         <span className="text-emerald-400 font-black text-lg">{formatARS(reparacionForm.monto_pagado)}</span>
                       </div>
                       
-                      {/* 🚀 NUEVO INPUT MAGISTRAL DE PAGO LIBRE */}
                       <div className="flex gap-2 items-end mb-4 bg-zinc-900 p-3 rounded-xl border border-zinc-700 shadow-inner">
                         <div className="flex-1">
                           <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Cargar Nuevo Pago/Seña</label>
