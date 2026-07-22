@@ -45,10 +45,8 @@ export function TabCRM({
   const [activeTab, setActiveTab] = useState<"todos" | "taller" | "equipos" | "accesorios">("todos")
   const [clienteHistorial, setClienteHistorial] = useState<any | null>(null)
   
-  // 🚀 ESTADO DE LA API DEL DÓLAR (Arranca en 1400 por si falla internet)
   const [cotizacionDolar, setCotizacionDolar] = useState<number>(1400)
 
-  // 🚀 CONEXIÓN EN VIVO A LA API DEL DÓLAR BLUE
   useEffect(() => {
     const fetchDolar = async () => {
       try {
@@ -62,13 +60,20 @@ export function TabCRM({
       }
     }
     fetchDolar()
-    // Se actualiza solo cada 5 minutos
     const interval = setInterval(fetchDolar, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
 
+  // 🚀 AHORA BUSCAMOS TANTO POR ID COMO POR REFERENCIA DE TEXTO (NOMBRE)
   const obtenerEtiquetasCliente = (clienteId: string) => {
-    const comprasCliente = ventas.filter(v => v.cliente_id === clienteId)
+    const clienteObj = clientes.find(c => c.id === clienteId)
+    
+    const comprasCliente = ventas.filter(v => {
+      const matchId = v.cliente_id === clienteId;
+      const matchNombre = clienteObj && v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteObj.nombre.toLowerCase());
+      return matchId || matchNombre;
+    })
+
     const tags = { taller: false, equipos: false, accesorios: false }
 
     comprasCliente.forEach(v => {
@@ -86,7 +91,6 @@ export function TabCRM({
     const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio"
     const isDevolucion = v.tipo === "devolucion" || Number(v.total) < 0 || prod.includes("devolucion") || prod.includes("cambio")
 
-    // Los totales de ventas los manejás en Pesos por defecto
     const total = Number(v.total || v.precio || 0)
     const abonado = Number(v.monto_abonado || v.abono || v.pagado || (v.monto_pagado) || 0)
     
@@ -137,7 +141,12 @@ export function TabCRM({
     return matchText && matchTab
   })
 
-  const actividadesCliente = clienteHistorial ? ventas.filter(v => v.cliente_id === clienteHistorial.id).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
+  // 🚀 MATCH PERFECTO: Unificamos búsqueda por ID y por Nombre de Referencia para el Historial
+  const actividadesCliente = clienteHistorial ? ventas.filter(v => {
+    const matchId = v.cliente_id === clienteHistorial.id;
+    const matchNombre = v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteHistorial.nombre.toLowerCase());
+    return matchId || matchNombre;
+  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
 
   return (
     <div className="grid gap-6 sm:gap-8 grid-cols-1 xl:grid-cols-4 animate-in fade-in duration-500 text-left">
