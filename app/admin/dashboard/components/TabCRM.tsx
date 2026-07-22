@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Users, Search, Trash2, Edit3, Plus, Loader2, FileClock, RotateCcw, Wrench, Smartphone, Headphones, UserCheck, X, ShoppingBag, Calendar, AlertCircle, CheckCircle2, Clock, DollarSign, Package } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Users, Search, Trash2, Edit3, Plus, Loader2, FileClock, RotateCcw, Wrench, Smartphone, Headphones, UserCheck, X, ShoppingBag, Calendar, AlertCircle, CheckCircle2, Clock, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TabCRMProps {
@@ -42,13 +42,31 @@ export function TabCRM({
   setShowHistorialClienteId
 }: TabCRMProps) {
 
-  // 🚀 SUB-PESTAÑAS DE FILTRADO INTERNO
   const [activeTab, setActiveTab] = useState<"todos" | "taller" | "equipos" | "accesorios">("todos")
-  
-  // 🚀 ESTADO PARA EL NUEVO MODAL DE FICHA DE CLIENTE
   const [clienteHistorial, setClienteHistorial] = useState<any | null>(null)
+  
+  // 🚀 ESTADO DE LA API DEL DÓLAR (Arranca en 1400 por si falla internet)
+  const [cotizacionDolar, setCotizacionDolar] = useState<number>(1400)
 
-  // 🧠 FUNCIÓN INTELIGENTE: Detecta qué tipo de cliente es basándose en su historial
+  // 🚀 CONEXIÓN EN VIVO A LA API DEL DÓLAR BLUE
+  useEffect(() => {
+    const fetchDolar = async () => {
+      try {
+        const res = await fetch("https://dolarapi.com/v1/dolares/blue")
+        const data = await res.json()
+        if (data && data.venta) {
+          setCotizacionDolar(data.venta)
+        }
+      } catch (error) {
+        console.error("Error al obtener la cotización del dólar API:", error)
+      }
+    }
+    fetchDolar()
+    // Se actualiza solo cada 5 minutos
+    const interval = setInterval(fetchDolar, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   const obtenerEtiquetasCliente = (clienteId: string) => {
     const comprasCliente = ventas.filter(v => v.cliente_id === clienteId)
     const tags = { taller: false, equipos: false, accesorios: false }
@@ -63,18 +81,16 @@ export function TabCRM({
     return tags
   }
 
-  // 🧠 FUNCIÓN INTELIGENTE: Analiza cada actividad para la Ficha del Cliente
   const analizarActividad = (v: any) => {
     const prod = (v.nombre_producto || "").toLowerCase()
     const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio"
     const isDevolucion = v.tipo === "devolucion" || Number(v.total) < 0 || prod.includes("devolucion") || prod.includes("cambio")
 
+    // Los totales de ventas los manejás en Pesos por defecto
     const total = Number(v.total || v.precio || 0)
     const abonado = Number(v.monto_abonado || v.abono || v.pagado || (v.monto_pagado) || 0)
     
-    // Si no es reparación y no hay "monto_abonado" registrado, asumimos que pagó el total al comprar
     const pagoReal = (abonado === 0 && !isRepair && !isDevolucion && v.estado !== "Pendiente") ? total : abonado
-    
     const deuda = (total - pagoReal > 0) ? (total - pagoReal) : 0
     const tieneSena = pagoReal > 0 && pagoReal < total
 
@@ -89,7 +105,6 @@ export function TabCRM({
     } else if (isRepair) {
       icon = <Wrench className="size-5" />
       const est = (v.estado || "").toLowerCase()
-      // Detectamos si el equipo ya se fue o sigue en el local
       if (est.includes("entregado") || est.includes("retirado") || est === "finalizado") {
         estadoLocal = "Equipo Entregado"
         colorEstado = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
@@ -106,7 +121,6 @@ export function TabCRM({
     return { isRepair, isDevolucion, total, pagoReal, deuda, tieneSena, estadoLocal, colorEstado, icon }
   }
 
-  // 🚀 FILTRADO DOBLE: Por texto de búsqueda y por Sub-Pestaña activa
   const clientesFiltrados = clientes.filter(c => {
     const matchText = 
       c.nombre?.toLowerCase().includes(filtroClientes.toLowerCase()) ||
@@ -123,7 +137,6 @@ export function TabCRM({
     return matchText && matchTab
   })
 
-  // Obtener actividades del cliente seleccionado para la Ficha
   const actividadesCliente = clienteHistorial ? ventas.filter(v => v.cliente_id === clienteHistorial.id).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
 
   return (
@@ -235,7 +248,12 @@ export function TabCRM({
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
                 {clientesFiltrados.map((cliente) => {
-                  const deudor = (cliente.saldo_usd || 0) < 0
+                  
+                  // Conversión a ARS según la API
+                  const saldoUSD = Number(cliente.saldo_usd || 0)
+                  const saldoARS = saldoUSD * cotizacionDolar
+                  const deudor = saldoUSD < 0
+                  
                   const tags = obtenerEtiquetasCliente(cliente.id)
                   const esProspecto = !tags.taller && !tags.equipos && !tags.accesorios
 
@@ -256,12 +274,14 @@ export function TabCRM({
                         <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">DNI/REF: {cliente.institucion_o_laboratorio || "---"}</p>
                       </td>
 
+                      {/* COLUMNA CUENTA CORRIENTE (Pesos + USD Chiquito) */}
                       <td className="p-4 text-center">
                         <button 
                           onClick={() => { setAbonoData({ clienteId: cliente.id, monto: "", motivo: "Entrega de Efectivo / Cobro" }); setShowAbonoModal(true); }} 
-                          className={cn("w-full py-1.5 px-2 rounded-lg border text-xs font-black transition-all hover:scale-105 shadow-sm", deudor ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20')}
+                          className={cn("w-full py-1.5 px-2 rounded-lg border flex flex-col items-center justify-center transition-all hover:scale-105 shadow-sm", deudor ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20')}
                         >
-                          {deudor ? `Debe: USD ${Math.abs(cliente.saldo_usd).toFixed(0)}` : `Saldo: USD ${Number(cliente.saldo_usd || 0).toFixed(0)}`}
+                          <span className="text-xs font-black">{deudor ? `Debe: $${Math.abs(saldoARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `Saldo: $${saldoARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}</span>
+                          <span className="text-[9px] opacity-70 font-bold mt-0.5">U$D {Math.abs(saldoUSD).toFixed(2)}</span>
                         </button>
                       </td>
 
@@ -335,9 +355,15 @@ export function TabCRM({
               <div className="flex items-start gap-4">
                 <div className={cn("px-4 py-2 rounded-xl border flex flex-col items-end", (clienteHistorial.saldo_usd || 0) < 0 ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
                   <span className={cn("text-[10px] font-black uppercase tracking-widest", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-500" : "text-emerald-500")}>Cuenta Corriente</span>
-                  <span className={cn("text-lg font-black", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-400" : "text-emerald-400")}>
-                    {(clienteHistorial.saldo_usd || 0) < 0 ? `Debe: USD ${Math.abs(clienteHistorial.saldo_usd)}` : `A Favor: USD ${clienteHistorial.saldo_usd || 0}`}
+                  
+                  {/* Saldo de la Ficha en ARS + USD */}
+                  <span className={cn("text-lg font-black flex items-baseline gap-1.5", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-400" : "text-emerald-400")}>
+                    {(clienteHistorial.saldo_usd || 0) < 0 
+                      ? `Debe: $${(Math.abs(clienteHistorial.saldo_usd || 0) * cotizacionDolar).toLocaleString('es-AR', {maximumFractionDigits:0})}` 
+                      : `A Favor: $${((clienteHistorial.saldo_usd || 0) * cotizacionDolar).toLocaleString('es-AR', {maximumFractionDigits:0})}`}
+                    <span className="text-xs font-bold opacity-60">(U$D {Math.abs(clienteHistorial.saldo_usd || 0).toFixed(2)})</span>
                   </span>
+
                 </div>
                 <button onClick={() => setClienteHistorial(null)} className="text-zinc-500 hover:text-white p-2 bg-zinc-900 rounded-xl transition-colors"><X className="size-5"/></button>
               </div>
@@ -345,7 +371,10 @@ export function TabCRM({
 
             {/* Body: Línea de Tiempo de Actividades */}
             <div className="p-6 overflow-y-auto flex-1 bg-[#161B22]">
-              <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-6 flex items-center gap-2"><Clock className="size-4"/> Historial de Actividades</h4>
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Clock className="size-4"/> Historial de Actividades</h4>
+                <div className="bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg text-[10px] font-bold text-emerald-500/70">Cotización API: $ {cotizacionDolar}</div>
+              </div>
               
               <div className="space-y-4">
                 {actividadesCliente.length === 0 ? (
@@ -375,29 +404,39 @@ export function TabCRM({
                           <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{act.descripcion || "Sin detalles adicionales."}</p>
                         </div>
 
-                        {/* Finanzas y Estado */}
-                        <div className="sm:w-48 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50 flex flex-col justify-center space-y-1.5">
-                          <div className="flex justify-between text-xs font-bold">
+                        {/* Finanzas y Estado (Adaptado a Pesos + USD chiquito) */}
+                        <div className="sm:w-56 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50 flex flex-col justify-center space-y-2.5">
+                          
+                          <div className="flex justify-between items-center text-xs font-bold">
                             <span className="text-zinc-500">Valor Total:</span>
-                            <span className="text-white">${datos.total.toLocaleString()}</span>
+                            <div className="text-right">
+                              <span className="text-white block">${datos.total.toLocaleString('es-AR', {maximumFractionDigits:0})}</span>
+                              <span className="text-[9px] text-zinc-500 block -mt-0.5">U$D {(datos.total / cotizacionDolar).toFixed(2)}</span>
+                            </div>
                           </div>
                           
                           {datos.tieneSena && (
-                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
-                              <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 className="size-3"/> Pagó/Seña:</span>
-                              <span className="text-emerald-400">${datos.pagoReal.toLocaleString()}</span>
+                            <div className="flex justify-between items-center text-xs font-bold border-t border-zinc-800 pt-2">
+                              <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 className="size-3"/> Pagó:</span>
+                              <div className="text-right">
+                                <span className="text-emerald-400 block">${datos.pagoReal.toLocaleString('es-AR', {maximumFractionDigits:0})}</span>
+                                <span className="text-[9px] text-emerald-500/50 block -mt-0.5">U$D {(datos.pagoReal / cotizacionDolar).toFixed(2)}</span>
+                              </div>
                             </div>
                           )}
 
                           {datos.deuda > 0 && (
-                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
+                            <div className="flex justify-between items-center text-xs font-bold border-t border-zinc-800 pt-2">
                               <span className="text-red-500 flex items-center gap-1"><AlertCircle className="size-3"/> Debe:</span>
-                              <span className="text-red-400">${datos.deuda.toLocaleString()}</span>
+                              <div className="text-right">
+                                <span className="text-red-400 block">${datos.deuda.toLocaleString('es-AR', {maximumFractionDigits:0})}</span>
+                                <span className="text-[9px] text-red-500/50 block -mt-0.5">U$D {(datos.deuda / cotizacionDolar).toFixed(2)}</span>
+                              </div>
                             </div>
                           )}
 
                           {datos.pagoReal >= datos.total && !datos.isDevolucion && (
-                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-1.5">
+                            <div className="flex justify-between text-xs font-bold border-t border-zinc-800 pt-2 items-center">
                               <span className="text-blue-400 flex items-center gap-1"><CheckCircle2 className="size-3"/> Estado:</span>
                               <span className="text-blue-400">Cancelado</span>
                             </div>
