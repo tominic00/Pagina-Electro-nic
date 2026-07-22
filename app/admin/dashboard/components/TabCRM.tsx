@@ -20,7 +20,7 @@ interface TabCRMProps {
   handleRegistrarCliente: (e: React.FormEvent) => void
   isSaving: boolean
   deleteCliente: (id: string) => void
-  setShowHistorialClienteId: (id: string | null) => void
+  setShowHistorialClienteId: (id: string | null) => void // Ya no lo usamos en el botón, pero lo dejamos por compatibilidad
 }
 
 export function TabCRM({
@@ -64,7 +64,6 @@ export function TabCRM({
     return () => clearInterval(interval)
   }, [])
 
-  // 🚀 AHORA BUSCAMOS TANTO POR ID COMO POR REFERENCIA DE TEXTO (NOMBRE)
   const obtenerEtiquetasCliente = (clienteId: string) => {
     const clienteObj = clientes.find(c => c.id === clienteId)
     
@@ -91,8 +90,9 @@ export function TabCRM({
     const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio"
     const isDevolucion = v.tipo === "devolucion" || Number(v.total) < 0 || prod.includes("devolucion") || prod.includes("cambio")
 
-    const total = Number(v.total || v.precio || 0)
-    const abonado = Number(v.monto_abonado || v.abono || v.pagado || (v.monto_pagado) || 0)
+    // 🚀 SOLUCIÓN A LOS VALORES EN $0: Leemos todas las posibles columnas de la BD
+    const total = Number(v.total_trato || v.total || v.precio || v.monto_total || 0)
+    const abonado = Number(v.monto_pagado || v.monto_abonado || v.abono || v.pagado || 0)
     
     const pagoReal = (abonado === 0 && !isRepair && !isDevolucion && v.estado !== "Pendiente") ? total : abonado
     const deuda = (total - pagoReal > 0) ? (total - pagoReal) : 0
@@ -141,7 +141,6 @@ export function TabCRM({
     return matchText && matchTab
   })
 
-  // 🚀 MATCH PERFECTO: Unificamos búsqueda por ID y por Nombre de Referencia para el Historial
   const actividadesCliente = clienteHistorial ? ventas.filter(v => {
     const matchId = v.cliente_id === clienteHistorial.id;
     const matchNombre = v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteHistorial.nombre.toLowerCase());
@@ -151,7 +150,7 @@ export function TabCRM({
   return (
     <div className="grid gap-6 sm:gap-8 grid-cols-1 xl:grid-cols-4 animate-in fade-in duration-500 text-left">
       
-      {/* 🚀 PANEL IZQUIERDO: FORMULARIO */}
+      {/* PANEL IZQUIERDO: FORMULARIO */}
       <div className="xl:col-span-1">
         <div className="xl:sticky xl:top-28 rounded-2xl bg-[#161B22] border border-zinc-800 p-5 sm:p-6 shadow-xl xl:max-h-[85vh] overflow-y-auto space-y-4 sm:space-y-6">
           <h2 className="mb-2 sm:mb-4 flex items-center gap-2 text-lg sm:text-xl font-bold text-white">
@@ -206,7 +205,7 @@ export function TabCRM({
         </div>
       </div>
 
-      {/* 🚀 PANEL DERECHO: BASE DE DATOS */}
+      {/* PANEL DERECHO: BASE DE DATOS */}
       <div className="xl:col-span-3 text-left flex flex-col">
         
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6">
@@ -242,7 +241,6 @@ export function TabCRM({
           </button>
         </div>
 
-        {/* TABLA PRINCIPAL */}
         <div className="rounded-2xl border border-zinc-800 bg-[#161B22] shadow-sm overflow-hidden flex-1">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -258,7 +256,6 @@ export function TabCRM({
               <tbody className="divide-y divide-zinc-800/50">
                 {clientesFiltrados.map((cliente) => {
                   
-                  // Conversión a ARS según la API
                   const saldoUSD = Number(cliente.saldo_usd || 0)
                   const saldoARS = saldoUSD * cotizacionDolar
                   const deudor = saldoUSD < 0
@@ -283,7 +280,6 @@ export function TabCRM({
                         <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">DNI/REF: {cliente.institucion_o_laboratorio || "---"}</p>
                       </td>
 
-                      {/* COLUMNA CUENTA CORRIENTE (Pesos + USD Chiquito) */}
                       <td className="p-4 text-center">
                         <button 
                           onClick={() => { setAbonoData({ clienteId: cliente.id, monto: "", motivo: "Entrega de Efectivo / Cobro" }); setShowAbonoModal(true); }} 
@@ -297,7 +293,8 @@ export function TabCRM({
                       <td className="p-4 text-center">
                         <div className="flex gap-2 justify-center">
                           <button 
-                            onClick={() => { setShowHistorialClienteId(cliente.id); setClienteHistorial(cliente); }} 
+                            // 🚀 SOLUCIÓN A LA DOBLE VENTANA: Sacamos el setShowHistorialClienteId que abría la ficha vieja
+                            onClick={() => { setClienteHistorial(cliente); }} 
                             className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm"
                             title="Ver Ficha y Actividades"
                           >
@@ -341,15 +338,15 @@ export function TabCRM({
         </div>
       </div>
 
-      {/* 🚀 MODAL MAGISTRAL: FICHA E HISTORIAL DEL CLIENTE */}
+      {/* MODAL MAGISTRAL: FICHA E HISTORIAL DEL CLIENTE */}
       {clienteHistorial && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200 text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             
             {/* Header del Modal */}
-            <div className="p-6 border-b border-zinc-800 bg-zinc-900/40 flex items-start justify-between">
+            <div className="p-6 border-b border-zinc-800 bg-zinc-900/40 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="size-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <div className="size-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
                   <UserCheck className="size-7" />
                 </div>
                 <div>
@@ -362,10 +359,8 @@ export function TabCRM({
               </div>
               
               <div className="flex items-start gap-4">
-                <div className={cn("px-4 py-2 rounded-xl border flex flex-col items-end", (clienteHistorial.saldo_usd || 0) < 0 ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
+                <div className={cn("px-4 py-3 rounded-xl border flex flex-col items-end w-full sm:w-auto", (clienteHistorial.saldo_usd || 0) < 0 ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
                   <span className={cn("text-[10px] font-black uppercase tracking-widest", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-500" : "text-emerald-500")}>Cuenta Corriente</span>
-                  
-                  {/* Saldo de la Ficha en ARS + USD */}
                   <span className={cn("text-lg font-black flex items-baseline gap-1.5", (clienteHistorial.saldo_usd || 0) < 0 ? "text-red-400" : "text-emerald-400")}>
                     {(clienteHistorial.saldo_usd || 0) < 0 
                       ? `Debe: $${(Math.abs(clienteHistorial.saldo_usd || 0) * cotizacionDolar).toLocaleString('es-AR', {maximumFractionDigits:0})}` 
@@ -373,8 +368,13 @@ export function TabCRM({
                     <span className="text-xs font-bold opacity-60">(U$D {Math.abs(clienteHistorial.saldo_usd || 0).toFixed(2)})</span>
                   </span>
 
+                  {/* 🚀 SOLUCIÓN A PAGOS Y DEUDAS: Botones integrados en la Ficha */}
+                  <div className="flex gap-2 mt-3 w-full justify-end border-t border-zinc-800/50 pt-3">
+                    <button onClick={() => { setAbonoData({ clienteId: clienteHistorial.id, monto: "", motivo: "Cobro de Deuda / Adelanto" }); setShowAbonoModal(true); }} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[9px] font-black uppercase tracking-widest rounded-lg shadow-sm transition-all">Ingresar Pago</button>
+                    <button onClick={() => { setAbonoData({ clienteId: clienteHistorial.id, monto: "", motivo: "Cargo manual / Nueva Deuda" }); setShowAbonoModal(true); }} className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/30 text-[9px] font-black uppercase tracking-widest rounded-lg shadow-sm transition-all">+ Sumar Deuda</button>
+                  </div>
                 </div>
-                <button onClick={() => setClienteHistorial(null)} className="text-zinc-500 hover:text-white p-2 bg-zinc-900 rounded-xl transition-colors"><X className="size-5"/></button>
+                <button onClick={() => setClienteHistorial(null)} className="text-zinc-500 hover:text-white p-2 bg-zinc-900 rounded-xl transition-colors shrink-0"><X className="size-5"/></button>
               </div>
             </div>
 
@@ -398,10 +398,8 @@ export function TabCRM({
                     return (
                       <div key={act.id} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-5 hover:border-zinc-700 transition-colors relative overflow-hidden">
                         
-                        {/* Decoración lateral de color */}
                         <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", datos.colorEstado.split(" ")[0])} />
 
-                        {/* Info Principal */}
                         <div className="flex-1 pl-2">
                           <div className="flex items-center gap-2 mb-2">
                             <span className={cn("px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border", datos.colorEstado)}>
@@ -413,7 +411,6 @@ export function TabCRM({
                           <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{act.descripcion || "Sin detalles adicionales."}</p>
                         </div>
 
-                        {/* Finanzas y Estado (Adaptado a Pesos + USD chiquito) */}
                         <div className="sm:w-56 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50 flex flex-col justify-center space-y-2.5">
                           
                           <div className="flex justify-between items-center text-xs font-bold">
