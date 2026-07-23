@@ -59,6 +59,13 @@ export function TabCRM({
     return () => clearInterval(interval)
   }, [])
 
+  const parseNum = (val: any) => {
+    if (val === null || val === undefined) return 0;
+    if (typeof val === 'number') return val;
+    const str = String(val).replace(/[^0-9.-]+/g, "");
+    return Number(str) || 0;
+  }
+
   const obtenerEtiquetasCliente = (clienteId: string) => {
     const clienteObj = clientes.find(c => c.id === clienteId)
     const comprasCliente = ventas.filter(v => (v.cliente_id === clienteId) || (clienteObj && v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteObj.nombre.toLowerCase())))
@@ -75,11 +82,15 @@ export function TabCRM({
 
   const analizarActividad = (v: any) => {
     const prod = (v.nombre_producto || "").toLowerCase()
-    const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio"
-    const isDevolucion = v.tipo === "devolucion" || v.tipo_venta === "devolucion" || Number(v.total) < 0 || prod.includes("devolucion") || prod.includes("cambio") || prod.includes("garantia")
+    
+    // 🚀 LÓGICA CORREGIDA: Detecta perfectamente si es un Service
+    const isRepair = prod.includes("repara") || prod.includes("revis") || prod.includes("taller") || prod.includes("pantalla") || prod.includes("bateria") || prod.includes("pin") || prod.includes("modulo") || v.tipo_venta === "servicio" || prod.includes("cambio de")
 
-    const total = Number(v.total_trato || v.total || v.precio || v.monto_total || 0)
-    const abonado = Number(v.monto_pagado || v.monto_abonado || v.abono || v.pagado || 0)
+    // 🚀 LÓGICA CORREGIDA: Si ya sabemos que es un Repair, ignoramos la palabra "cambio" o "garantía" accidental
+    const isDevolucion = v.tipo === "devolucion" || v.tipo_venta === "devolucion" || parseNum(v.total) < 0 || prod.includes("devolucion") || (prod.includes("garantia") && !isRepair)
+
+    const total = parseNum(v.total_trato || v.total || v.precio || v.monto_total || 0)
+    const abonado = parseNum(v.monto_pagado || v.monto_abonado || v.abono || v.pagado || 0)
     
     const pagoReal = (abonado === 0 && !isRepair && !isDevolucion && v.estado !== "Pendiente") ? total : abonado
     const deuda = (total - pagoReal > 0) ? (total - pagoReal) : 0
@@ -112,29 +123,22 @@ export function TabCRM({
     return { isRepair, isDevolucion, total, pagoReal, deuda, tieneSena, estadoLocal, colorEstado, icon }
   }
 
-  // 🚀 CALCULADORA DEL BALANCE REAL (Monedero + Deuda de Tickets)
   const calcularBalanceReal = (clienteObj: any) => {
     if (!clienteObj) return { saldoRealARS: 0, saldoRealUSD: 0, deudor: false };
     
-    // Buscamos todas las actividades de este cliente
     const acts = ventas.filter(v => {
       const matchId = v.cliente_id === clienteObj.id;
       const matchNombre = v.cliente_referencia && v.cliente_referencia.toLowerCase().includes(clienteObj.nombre.toLowerCase());
       return matchId || matchNombre;
     });
 
-    // Sumamos la deuda de cada ticket individual
     const deudaTickets = acts.reduce((acc, act) => acc + analizarActividad(act).deuda, 0);
-    
-    // Su monedero base (convertido a pesos)
-    const saldoBaseARS = (clienteObj.saldo_usd || 0) * cotizacionDolar;
-    
-    // El balance definitivo: Monedero - Lo que debe en tickets
+    const saldoBaseARS = parseNum(clienteObj.saldo_usd) * cotizacionDolar;
     const saldoRealARS = saldoBaseARS - deudaTickets;
     
     return {
       saldoRealARS,
-      saldoRealUSD: saldoRealARS / cotizacionDolar,
+      saldoRealUSD: saldoRealARS / (cotizacionDolar || 1400),
       deudor: saldoRealARS < 0
     };
   };
@@ -156,8 +160,8 @@ export function TabCRM({
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) : []
 
   const prodNuevoSeleccionado = postVenta?.producto_nuevo_id ? productos.find(p => p.id === postVenta.producto_nuevo_id) : null;
-  const precioProdNuevo = prodNuevoSeleccionado ? Number(prodNuevoSeleccionado.precio_minorista ?? prodNuevoSeleccionado.precio) : 0;
-  const diferenciaCambio = precioProdNuevo - Number(postVenta?.pago_original || 0);
+  const precioProdNuevo = prodNuevoSeleccionado ? parseNum(prodNuevoSeleccionado.precio_minorista ?? prodNuevoSeleccionado.precio) : 0;
+  const diferenciaCambio = precioProdNuevo - parseNum(postVenta?.pago_original || 0);
 
   const confirmarPostVenta = () => {
     if (handleRegistrarPostVenta) {
@@ -168,11 +172,10 @@ export function TabCRM({
       });
       setPostVenta(null);
     } else {
-      alert("⚠️ Falta implementar handleRegistrarPostVenta en useDashboard.tsx.");
+      alert("⚠️ Falta implementar handleRegistrarPostVenta en useDashboard.tsx. Mirá las instrucciones del chat.");
     }
   }
 
-  // Calculamos el balance real del cliente que está abierto en el Modal
   const balanceModal = calcularBalanceReal(clienteHistorial);
 
   return (
@@ -227,10 +230,7 @@ export function TabCRM({
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
                 {clientesFiltrados.map((cliente) => {
-                  
-                  // 🚀 USAMOS LA CALCULADORA PARA MOSTRAR EL BALANCE REAL EN LA TABLA
                   const { saldoRealARS, saldoRealUSD, deudor } = calcularBalanceReal(cliente);
-                  
                   const tags = obtenerEtiquetasCliente(cliente.id); const esProspecto = !tags.taller && !tags.equipos && !tags.accesorios;
                   return (
                     <tr key={cliente.id} className="hover:bg-zinc-800/30 transition-colors group">
@@ -280,11 +280,12 @@ export function TabCRM({
               </div>
               
               <div className="flex items-start gap-4">
-                {/* 🚀 ACÁ ESTÁ EL CAMBIO: USAMOS EL BALANCE REAL CALCULADO PARA ESTE CLIENTE */}
                 <div className={cn("px-4 py-3 rounded-xl border flex flex-col items-end w-full sm:w-auto", balanceModal.deudor ? "bg-red-500/10 border-red-500/20" : "bg-emerald-500/10 border-emerald-500/20")}>
                   <span className={cn("text-[10px] font-black uppercase tracking-widest", balanceModal.deudor ? "text-red-500" : "text-emerald-500")}>Balance Real Global</span>
                   <span className={cn("text-lg font-black flex items-baseline gap-1.5", balanceModal.deudor ? "text-red-400" : "text-emerald-400")}>
-                    {balanceModal.deudor ? `Debe: $${Math.abs(balanceModal.saldoRealARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` : `A Favor: $${balanceModal.saldoRealARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}
+                    {balanceModal.deudor 
+                      ? `Debe: $${Math.abs(balanceModal.saldoRealARS).toLocaleString('es-AR', {maximumFractionDigits:0})}` 
+                      : `A Favor: $${balanceModal.saldoRealARS.toLocaleString('es-AR', {maximumFractionDigits:0})}`}
                     <span className="text-xs font-bold opacity-60">(U$D {Math.abs(balanceModal.saldoRealUSD).toFixed(2)})</span>
                   </span>
 
@@ -420,7 +421,7 @@ export function TabCRM({
                       <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Seleccionar el nuevo producto a entregar:</label>
                       <select value={postVenta.producto_nuevo_id} onChange={e => setPostVenta({...postVenta, producto_nuevo_id: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-purple-500">
                         <option value="">-- Buscar Producto --</option>
-                        {productos.map((p:any) => <option key={p.id} value={p.id}>{p.nombre} - ${Number(p.precio_minorista ?? p.precio).toLocaleString()}</option>)}
+                        {productos.map((p:any) => <option key={p.id} value={p.id}>{p.nombre} - ${parseNum(p.precio_minorista ?? p.precio).toLocaleString()}</option>)}
                       </select>
                     </div>
                     {postVenta.producto_nuevo_id && (
@@ -438,7 +439,7 @@ export function TabCRM({
                   <div className="space-y-4 animate-in fade-in">
                     <div>
                       <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Dinero a reintegrar (o cargar como Saldo a Favor):</label>
-                      <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-red-500" /><input type="number" value={postVenta.pago_original} onChange={e => setPostVenta({...postVenta, pago_original: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-lg font-black text-red-400 outline-none focus:border-red-500" /></div>
+                      <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-red-500" /><input type="number" value={postVenta.pago_original} onChange={e => setPostVenta({...postVenta, pago_original: parseNum(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-10 pr-3 py-3 text-lg font-black text-red-400 outline-none focus:border-red-500" /></div>
                       <p className="text-[10px] text-zinc-500 mt-1.5 font-bold">Por defecto sugerimos lo que el cliente pagó realmente en su momento.</p>
                     </div>
                   </div>
