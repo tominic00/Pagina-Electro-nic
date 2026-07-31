@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2 } from "lucide-react"
-import supabase from "@/lib/supabase"
+import { ShoppingCart, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2 } from "lucide-react"
+import  supabase  from "@/lib/supabase"
+import { cn } from "@/lib/utils"
+import jsPDF from "jspdf"
+import "jspdf-autotable"
 
 export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [stock, setStock] = useState<any[]>([])
@@ -27,7 +30,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // Filtrar el stock para que no se puedan seleccionar equipos que ya están en el carrito
   const stockDisponible = stock.filter(eq => !carrito.some(c => c.id === eq.id))
   const eqSeleccionado = stockDisponible.find(e => e.id === equipoSeleccionadoId)
 
@@ -48,6 +50,84 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     setCarrito(carrito.filter(item => item.id !== id))
   }
 
+  // 🚀 FUNCIÓN MAESTRA PARA GENERAR PDF (Sirve para Presupuesto y Remito)
+  const generarPDF = (tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", listaItems: any[], nombreCliente: string) => {
+    const doc = new jsPDF()
+    
+    // Encabezado Empresa
+    doc.setFontSize(22)
+    doc.setFont("helvetica", "bold")
+    doc.text("Electro·Nic", 14, 20)
+    
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "normal")
+    doc.text("División Mayorista B2B", 14, 26)
+    doc.text("Tucumán, Argentina", 14, 31)
+
+    // Datos del Documento
+    doc.setFontSize(14)
+    doc.setFont("helvetica", "bold")
+    const textoDoc = `${tipoDocumento} N° ${Math.floor(Math.random() * 10000)}`
+    doc.text(textoDoc, 140, 20)
+    
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 140, 26)
+    doc.text(`Cliente: ${nombreCliente || "Consumidor Final"}`, 140, 31)
+    doc.text(`Atendido por: ${usuarioActual.nombre}`, 140, 36)
+
+    doc.line(14, 42, 196, 42) // Línea separadora
+
+    // 🚀 TABLA DE PRODUCTOS
+    const columnas = ["Cant", "Descripción (Modelo)", "Condición", "IMEI / Serie", "Precio Unitario"]
+    const filas = listaItems.map(item => [
+      "1",
+      item.equipo || item.equipo_nombre,
+      item.condicion || "---",
+      item.imei || "---",
+      `U$D ${item.precio_cerrado_usd || item.monto_vendido_usd}`
+    ])
+
+    const total = listaItems.reduce((acc, item) => acc + Number(item.precio_cerrado_usd || item.monto_vendido_usd), 0)
+
+    // @ts-ignore (jsPDF-autotable se inyecta dinámicamente)
+    doc.autoTable({
+      startY: 48,
+      head: [columnas],
+      body: filas,
+      theme: 'grid',
+      headStyles: { fillColor: [16, 185, 129], textColor: 255 }, // Color Emerald-500
+      styles: { fontSize: 9 },
+      columnStyles: {
+        0: { halign: 'center' },
+        4: { halign: 'right', fontStyle: 'bold' }
+      }
+    })
+
+    // @ts-ignore
+    const finalY = doc.lastAutoTable.finalY + 10
+
+    // Total
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "bold")
+    doc.text(`TOTAL A PAGAR: U$D ${total}`, 130, finalY)
+
+    // Footer
+    if (tipoDocumento === "PRESUPUESTO") {
+      doc.setFontSize(9)
+      doc.setFont("helvetica", "italic")
+      doc.text("* Los precios expresados en este presupuesto están sujetos a modificaciones sin previo aviso.", 14, finalY + 15)
+      doc.text("* Este documento no compromete reserva de stock.", 14, finalY + 20)
+    }
+
+    doc.save(`${tipoDocumento}_${nombreCliente.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`)
+  }
+
+  const handlePresupuesto = () => {
+    if (carrito.length === 0) return alert("El carrito está vacío.")
+    generarPDF("PRESUPUESTO", carrito, cliente)
+  }
+
   const handleCerrarVentaMultiple = async () => {
     if (!cliente) return alert("Por favor, ingresá el nombre del cliente.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -63,14 +143,17 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         vendedor: usuarioActual.nombre
       }))
 
-      // Insertar todas las ventas de una
+      // Guardar Venta
       await supabase.from("ventas_mayorista").insert(nuevasVentas)
       
-      // Actualizar el estado de todos esos equipos a 'Vendido'
+      // Actualizar Stock
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      alert(`✅ ¡Venta múltiple registrada con éxito! (${carrito.length} equipos)`)
+      // 🚀 DESCARGAR EL REMITO AUTOMÁTICAMENTE AL CERRAR VENTA
+      generarPDF("REMITO OFICIAL", carrito, cliente)
+
+      alert(`✅ ¡Venta registrada y Remito generado!`)
       setCarrito([])
       setCliente("")
       fetchData()
@@ -93,13 +176,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       <div className="p-6 border-b xl:border-b-0 xl:border-r border-zinc-800 bg-[#161B22] flex flex-col h-full">
         <h3 className="text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><ShoppingCart className="size-5"/> Caja Rápida B2B</h3>
         
-        {/* 1. SELECCIÓN DE CLIENTE */}
         <div className="mb-6">
           <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Nombre del Cliente / Local</label>
           <input required type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Ej: Lucas Importaciones..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 shadow-inner" />
         </div>
 
-        {/* 2. AGREGAR AL CARRITO */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-6">
           <form onSubmit={handleAgregarAlCarrito} className="space-y-4">
             <div>
@@ -118,14 +199,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <input required type="number" value={precioItem} onChange={e => setPrecioItem(e.target.value)} placeholder="0" className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" />
                 </div>
               </div>
-              <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3.5 rounded-xl transition-all shadow-md active:scale-95" title="Agregar al Ticket">
-                <Plus className="size-5 font-black" />
-              </button>
+              <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3.5 rounded-xl transition-all shadow-md active:scale-95" title="Agregar al Ticket"><Plus className="size-5 font-black" /></button>
             </div>
           </form>
         </div>
 
-        {/* 3. LISTA DEL CARRITO */}
         <div className="flex-1 min-h-[150px] bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-6 flex flex-col">
           <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-800 pb-2">Ticket Actual ({carrito.length} Items)</h4>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
@@ -153,7 +231,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           </div>
         </div>
 
-        {/* 4. TOTALES Y CONFIRMACIÓN */}
         {carrito.length > 0 && (
           <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl animate-in slide-in-from-bottom-4">
             <div className="flex justify-between items-end mb-4">
@@ -166,9 +243,15 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                 <p className="text-lg font-black text-emerald-500">+ U$D {gananciaNeta}</p>
               </div>
             </div>
-            <button onClick={handleCerrarVentaMultiple} disabled={isProcessing} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest py-4 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50">
-              {isProcessing ? <Loader2 className="size-5 animate-spin"/> : `Confirmar Venta (${carrito.length} uds)`}
-            </button>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={handlePresupuesto} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-sky-400 border border-sky-500/30 font-black uppercase tracking-widest py-3.5 rounded-xl transition-all active:scale-95 flex justify-center items-center gap-2 text-xs">
+                <FileText className="size-4"/> Bajar Presupuesto
+              </button>
+              <button onClick={handleCerrarVentaMultiple} disabled={isProcessing} className="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50">
+                {isProcessing ? <Loader2 className="size-5 animate-spin"/> : <><CheckCircle2 className="size-5"/> Confirmar y Hacer Remito</>}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -185,9 +268,19 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <span className="text-sky-400">👤 {v.cliente}</span> • <span>Vendedor: {v.vendedor}</span>
                 </p>
               </div>
-              <div className="text-right">
-                <p className="font-black text-white">U$D {v.monto_vendido_usd}</p>
-                <p className="text-[10px] text-emerald-500 font-black uppercase mt-1 bg-emerald-500/10 px-2 py-0.5 rounded inline-block">Neto: U$D {v.ganancia_usd}</p>
+              <div className="text-right flex items-center gap-3">
+                <div>
+                  <p className="font-black text-white">U$D {v.monto_vendido_usd}</p>
+                  <p className="text-[10px] text-emerald-500 font-black uppercase mt-1 bg-emerald-500/10 px-2 py-0.5 rounded inline-block">Neto: U$D {v.ganancia_usd}</p>
+                </div>
+                {/* 🚀 BOTÓN RE-IMPRIMIR REMITO */}
+                <button 
+                  onClick={() => generarPDF("REMITO OFICIAL", [v], v.cliente)} 
+                  className="bg-zinc-800 hover:bg-sky-500 hover:text-black text-zinc-400 p-2.5 rounded-xl transition-all"
+                  title="Descargar Comprobante PDF"
+                >
+                  <Printer className="size-4" />
+                </button>
               </div>
             </div>
           ))}
