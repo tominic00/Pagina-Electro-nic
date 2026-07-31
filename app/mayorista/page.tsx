@@ -1,20 +1,25 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users } from "lucide-react"
+import  supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
+// Importamos las 5 pestañas desde sus propios archivos
 import { TabStock } from "./TabStock"
 import { TabVentas } from "./TabVentas"
 import { TabPedidos } from "./TabPedidos"
+import { TabClientesB2B } from "./TabClientesB2B"
+import { TabAnaliticas } from "./TabAnaliticas"
 
 export default function PortalMayorista() {
   const [usuarioActual, setUsuarioActual] = useState<any | null>(null)
   const [loginEmail, setLoginEmail] = useState("")
   const [loginPassword, setLoginPassword] = useState("")
   const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const [activeTab, setActiveTab] = useState<"stock" | "ventas" | "pedidos" | "analiticas">("stock")
+  
+  // Agregamos todas las opciones al estado inicial
+  const [activeTab, setActiveTab] = useState<"stock" | "ventas" | "pedidos" | "clientes" | "analiticas">("stock")
 
   useEffect(() => {
     const userGuardado = localStorage.getItem("electro_user")
@@ -42,6 +47,7 @@ export default function PortalMayorista() {
     setUsuarioActual(null)
   }
 
+  // PANTALLA DE INGRESO
   if (!usuarioActual) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4">
@@ -59,6 +65,7 @@ export default function PortalMayorista() {
     )
   }
 
+  // PANTALLA DE BLOQUEO POR PERMISOS
   if (usuarioActual && !usuarioActual.accesos?.mayorista) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-4">
@@ -70,34 +77,39 @@ export default function PortalMayorista() {
     )
   }
 
+  // PORTAL PRINCIPAL
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white p-6 md:p-10 font-sans">
       <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
+        
+        {/* HEADER Y MENÚ */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-sky-500 tracking-tight flex items-center gap-3"><Smartphone className="size-8 text-emerald-400" /> B2B Mayorista Celulares</h1>
             <div className="flex items-center gap-3 mt-3">
               <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-1.5"><UserCheck className="size-3" /> {usuarioActual.nombre}</span>
-              <button onClick={handleLogout} className="text-zinc-500 hover:text-red-400 text-xs font-bold uppercase tracking-widest flex items-center gap-1"><LogOut className="size-3" /> Salir</button>
+              <button onClick={handleLogout} className="text-zinc-500 hover:text-red-400 text-xs font-bold uppercase tracking-widest flex items-center gap-1 transition-colors"><LogOut className="size-3" /> Salir</button>
             </div>
           </div>
           
-          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 overflow-x-auto">
-            <button onClick={() => setActiveTab("stock")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2", activeTab === "stock" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300")}><Package className="size-4"/> Stock</button>
-            <button onClick={() => setActiveTab("ventas")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2", activeTab === "ventas" ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-500 hover:text-zinc-300")}><ShoppingCart className="size-4"/> Ventas POS</button>
-            <button onClick={() => setActiveTab("pedidos")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2", activeTab === "pedidos" ? "bg-amber-500/10 text-amber-400" : "text-zinc-500 hover:text-zinc-300")}><Truck className="size-4"/> Pedidos</button>
-            <button onClick={() => setActiveTab("analiticas")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2", activeTab === "analiticas" ? "bg-sky-500/10 text-sky-400" : "text-zinc-500 hover:text-zinc-300")}><LineChart className="size-4"/> Analíticas</button>
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 overflow-x-auto hide-scrollbar">
+            <button onClick={() => setActiveTab("stock")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "stock" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300")}><Package className="size-4"/> Stock</button>
+            <button onClick={() => setActiveTab("ventas")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "ventas" ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-500 hover:text-zinc-300")}><ShoppingCart className="size-4"/> Caja POS</button>
+            <button onClick={() => setActiveTab("pedidos")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "pedidos" ? "bg-amber-500/10 text-amber-400" : "text-zinc-500 hover:text-zinc-300")}><Truck className="size-4"/> Pedidos</button>
+            <button onClick={() => setActiveTab("clientes")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "clientes" ? "bg-purple-500/10 text-purple-400" : "text-zinc-500 hover:text-zinc-300")}><Users className="size-4"/> Clientes B2B</button>
+            <button onClick={() => setActiveTab("analiticas")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "analiticas" ? "bg-sky-500/10 text-sky-400" : "text-zinc-500 hover:text-zinc-300")}><LineChart className="size-4"/> Analíticas</button>
           </div>
         </div>
 
-        {/* RENDERIZADO DE PESTAÑAS */}
-        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+        {/* CONTENEDOR DE PESTAÑAS */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500">
           {activeTab === "stock" && <TabStock usuarioActual={usuarioActual} />}
           {activeTab === "ventas" && <TabVentas usuarioActual={usuarioActual} />}
           {activeTab === "pedidos" && <TabPedidos usuarioActual={usuarioActual} />}
-          {activeTab === "analiticas" && <div className="p-20 text-center text-zinc-500">Próximamente analíticas (Paso 2)...</div>}
+          {activeTab === "clientes" && <TabClientesB2B usuarioActual={usuarioActual} />}
+          {activeTab === "analiticas" && <TabAnaliticas />}
         </div>
+        
       </div>
     </div>
   )
