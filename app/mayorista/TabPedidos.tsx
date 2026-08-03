@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react"
-import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, CreditCard, Loader2, PackageOpen } from "lucide-react"
+import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, PackageOpen } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const [pedidos, setPedidos] = useState<any[]>([])
+  const [modelosHistoricos, setModelosHistoricos] = useState<string[]>([]) // 🚀 CATÁLOGO DE AUTOCOMPLETADO
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -20,22 +21,52 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
 
   // ÍTEMS DEL LOTE
   const [items, setItems] = useState<any[]>([])
-  const [itemTemp, setItemTemp] = useState({ modelo: "", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+  const [itemTemp, setItemTemp] = useState({ modelo: "", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
 
-  const fetchPedidos = async () => {
+  const fetchData = async () => {
     setLoading(true)
-    const { data } = await supabase.from("pedidos_mayorista").select("*").eq("estado", "En Camino").order("fecha_pedido", { ascending: false })
-    if (data) setPedidos(data)
+    
+    // 1. Traer Pedidos en camino
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*").eq("estado", "En Camino").order("fecha_pedido", { ascending: false })
+    if (pedidosData) setPedidos(pedidosData)
+
+    // 2. 🚀 CREAR CATÁLOGO INTELIGENTE DE MODELOS HISTÓRICOS
+    const { data: stockData } = await supabase.from("stock_mayorista").select("equipo")
+    const { data: ventasData } = await supabase.from("ventas_mayorista").select("equipo_nombre")
+    
+    // Juntamos todos los nombres que existieron alguna vez en el local
+    const todosLosNombres = [
+      ...(stockData?.map(d => d.equipo) || []),
+      ...(ventasData?.map(d => d.equipo_nombre) || [])
+    ]
+
+    // Limpiamos los GB del nombre (ej: "iPhone 13 - 128GB" pasa a ser solo "iPhone 13") y sacamos duplicados
+    const modelosUnicos = Array.from(new Set(
+      todosLosNombres.map(nombre => nombre.split(" - ")[0].trim())
+    )).filter(Boolean).sort()
+
+    setModelosHistoricos(modelosUnicos)
     setLoading(false)
   }
 
-  useEffect(() => { fetchPedidos() }, [])
+  useEffect(() => { fetchData() }, [])
 
-  // 🚀 LÓGICA DE ÍTEMS
+  // 🚀 LÓGICA DE ÍTEMS CON CAPACIDAD
   const agregarItem = () => {
     if (!itemTemp.modelo || !itemTemp.costo_usd) return alert("Completá el modelo y el costo unitario.")
-    setItems([...items, { ...itemTemp, cantidad: Number(itemTemp.cantidad), costo_usd: Number(itemTemp.costo_usd), precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) }])
-    setItemTemp({ modelo: "", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+    
+    // Concatenamos el modelo con los GB para que en el stock quede perfecto
+    const nombreCompleto = itemTemp.capacidad === "N/A" ? itemTemp.modelo.trim() : `${itemTemp.modelo.trim()} - ${itemTemp.capacidad}`
+
+    setItems([...items, { 
+      ...itemTemp, 
+      modelo: nombreCompleto, 
+      cantidad: Number(itemTemp.cantidad), 
+      costo_usd: Number(itemTemp.costo_usd), 
+      precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) 
+    }])
+    
+    setItemTemp({ modelo: "", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
   }
 
   const quitarItem = (index: number) => {
@@ -49,7 +80,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   // 🚀 GUARDAR LOTE
   const handleGuardarLote = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (items.length === 0) return alert("Debes agregar al menos un modelo al lote.")
+    if (items.length === 0) return alert("Debes agregar al menos un equipo al lote.")
     
     setIsSaving(true)
     try {
@@ -66,15 +97,17 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         ingresado_por: usuarioActual.nombre
       }
 
-      await supabase.from("pedidos_mayorista").insert([payload])
+      const { error } = await supabase.from("pedidos_mayorista").insert([payload])
+      if (error) throw new Error(error.message)
       
       setShowModal(false)
       // Reset
       setItems([])
       setProveedor(""); setTitulo(""); setTracking(""); setEnvioMiamiBsAs(""); setEnvioBsAsTuc("")
-      fetchPedidos()
-    } catch (error) {
-      alert("Error al guardar el lote.")
+      fetchData()
+    } catch (error: any) {
+      console.error(error)
+      alert("Error al guardar el lote en la base de datos: " + error.message)
     } finally {
       setIsSaving(false)
     }
@@ -83,7 +116,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   // 🚀 ACTUALIZAR ESTADO DE PAGOS (Finanzas)
   const togglePago = async (pedidoId: string, campo: string, valorActual: boolean) => {
     await supabase.from("pedidos_mayorista").update({ [campo]: !valorActual }).eq("id", pedidoId)
-    fetchPedidos()
+    fetchData()
   }
 
   // 🚀 INGRESAR LOTE AL STOCK MASIVAMENTE
@@ -91,12 +124,9 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     if(!confirm(`¿Recibiste el lote completo? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
 
     try {
-      // Generamos N filas para el stock (desglosando las cantidades de cada ítem)
       const equiposParaStock: any[] = []
-      
       const itemsDelPedido = pedido.items || []
       
-      // Lógica de compatibilidad si quedó algún pedido viejo con un solo modelo (del sistema anterior)
       if (itemsDelPedido.length === 0 && pedido.modelo) {
         itemsDelPedido.push({ modelo: pedido.modelo, condicion: pedido.condicion, cantidad: pedido.cantidad, costo_usd: pedido.costo_unitario_usd, precio_sugerido_usd: pedido.precio_venta_sugerido_usd })
       }
@@ -115,15 +145,16 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       })
 
       if (equiposParaStock.length > 0) {
-        await supabase.from("stock_mayorista").insert(equiposParaStock)
+        const { error: errorStock } = await supabase.from("stock_mayorista").insert(equiposParaStock)
+        if (errorStock) throw new Error(errorStock.message)
       }
       
       await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date() }).eq('id', pedido.id)
       
-      fetchPedidos()
+      fetchData()
       alert("¡Lote ingresado al stock correctamente!")
-    } catch (error) {
-      alert("Error al inyectar equipos al stock.")
+    } catch (error: any) {
+      alert("Error al inyectar equipos al stock: " + error.message)
     }
   }
 
@@ -140,7 +171,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-amber-500"/></div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pedidos.map(p => (
-            <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col">
+            <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col shadow-lg">
               {/* Encabezado Lote */}
               <div className="p-5 border-b border-zinc-800 bg-zinc-950/50 relative">
                 <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
@@ -157,7 +188,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               <div className="p-5 flex-1 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-1">Control de Pagos</p>
                 
-                {/* Checkbox Equipos */}
                 <button onClick={() => togglePago(p.id, "pagado_equipos", p.pagado_equipos)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
@@ -165,7 +195,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   </div>
                 </button>
 
-                {/* Checkbox Miami -> BsAs */}
                 {Number(p.envio_miami_bsas_usd) > 0 && (
                   <button onClick={() => togglePago(p.id, "pagado_miami_bsas", p.pagado_miami_bsas)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_miami_bsas ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
@@ -175,7 +204,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   </button>
                 )}
 
-                {/* Checkbox BsAs -> Tuc */}
                 {Number(p.envio_bsas_tuc_usd) > 0 && (
                   <button onClick={() => togglePago(p.id, "pagado_bsas_tuc", p.pagado_bsas_tuc)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_bsas_tuc ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
@@ -233,12 +261,38 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2 mb-4">2. Equipos a Comprar</h4>
                 
-                {/* Formulario Agregar Ítem */}
+                {/* 🚀 FORMULARIO CON AUTOCOMPLETADO */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col md:flex-row gap-3 items-end">
                   <div className="flex-[2] w-full">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo</label>
-                    <input type="text" value={itemTemp.modelo} onChange={e => setItemTemp({...itemTemp, modelo: e.target.value})} placeholder="Ej: iPhone 13 Pro" className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                    {/* Lista autogenerada para que no haya errores de tipeo */}
+                    <input 
+                      type="text" 
+                      list="modelos-guardados"
+                      value={itemTemp.modelo} 
+                      onChange={e => setItemTemp({...itemTemp, modelo: e.target.value})} 
+                      placeholder="Ej: iPhone 13 Pro" 
+                      className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500" 
+                    />
+                    <datalist id="modelos-guardados">
+                      {modelosHistoricos.map(modelo => (
+                        <option key={modelo} value={modelo} />
+                      ))}
+                    </datalist>
                   </div>
+                  
+                  <div className="w-24">
+                    <label className="text-[10px] font-bold text-zinc-500 block mb-1 flex items-center gap-1"><HardDrive className="size-3"/> GB</label>
+                    <select value={itemTemp.capacidad} onChange={e => setItemTemp({...itemTemp, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500">
+                      <option value="64GB">64GB</option>
+                      <option value="128GB">128GB</option>
+                      <option value="256GB">256GB</option>
+                      <option value="512GB">512GB</option>
+                      <option value="1TB">1TB</option>
+                      <option value="N/A">N/A</option>
+                    </select>
+                  </div>
+
                   <div className="flex-1 w-full">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1">Condición</label>
                     <select value={itemTemp.condicion} onChange={e => setItemTemp({...itemTemp, condicion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500">
