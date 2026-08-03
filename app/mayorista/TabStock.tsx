@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -18,16 +18,17 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   
   const [formData, setFormData] = useState({ equipo: "", condicion: "Nuevo", imei: "", bateria: "", costo_usd: "", precio_venta_usd: "" })
 
-  // Estados para Filtros
+  // 🚀 ESTADOS PARA FILTROS INTELIGENTES
   const [filtroTexto, setFiltroTexto] = useState("")
   const [filtroCondicion, setFiltroCondicion] = useState("Todos")
-  const [filtroBateria, setFiltroBateria] = useState("")
+  const [filtroBateriaMinima, setFiltroBateriaMinima] = useState("")
+  const [filtroPrecioMaximo, setFiltroPrecioMaximo] = useState("")
 
   // Opciones de Exportación
   const [exportOptions, setExportOptions] = useState({
     bateria: true,
     imei: false,
-    costo: false // Por defecto oculto para no mandarlo por error a clientes
+    costo: false 
   })
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -41,13 +42,31 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchStock() }, [])
 
-  // 🚀 LÓGICA DE FILTRADO
+  // 🚀 LÓGICA DE FILTRADO POR RANGOS
   const equiposFiltrados = equipos.filter(eq => {
     const matchTexto = eq.equipo.toLowerCase().includes(filtroTexto.toLowerCase()) || (eq.imei && eq.imei.toLowerCase().includes(filtroTexto.toLowerCase()))
     const matchCondicion = filtroCondicion === "Todos" ? true : eq.condicion === filtroCondicion
-    const matchBateria = filtroBateria === "" ? true : (eq.bateria && eq.bateria.toString() === filtroBateria)
     
-    return matchTexto && matchCondicion && matchBateria
+    // Filtro Batería: "Mayor o igual a..."
+    let matchBateria = true
+    if (filtroBateriaMinima !== "") {
+      const minBat = Number(filtroBateriaMinima)
+      // Si el equipo no tiene batería cargada o es menor al mínimo, lo ocultamos
+      if (!eq.bateria || Number(eq.bateria) < minBat) {
+        matchBateria = false
+      }
+    }
+
+    // Filtro Precio Máximo: "Menor o igual a..."
+    let matchPrecio = true
+    if (filtroPrecioMaximo !== "") {
+      const maxPrecio = Number(filtroPrecioMaximo)
+      if (Number(eq.precio_venta_usd) > maxPrecio) {
+        matchPrecio = false
+      }
+    }
+    
+    return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
   // 🚀 LÓGICA DE EXPORTACIÓN A MEDIDA
@@ -191,7 +210,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             <Upload className="size-4"/> Importar
           </button>
           <button onClick={() => setShowExportModal(true)} className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm">
-            <Download className="size-4"/> Crear Lista (Exportar)
+            <Download className="size-4"/> Crear Lista
           </button>
           <button onClick={abrirNuevo} className="bg-emerald-500 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
             <Plus className="size-4 font-black"/> Ingresar Equipo
@@ -199,29 +218,37 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* 🚀 BARRA DE FILTROS */}
-      <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-          <input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Buscar por modelo o IMEI..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-emerald-500" />
-        </div>
-        <div className="relative">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-          <select value={filtroCondicion} onChange={e => setFiltroCondicion(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-emerald-500 appearance-none">
+      {/* 🚀 BARRA DE FILTROS INTELIGENTES */}
+      <div className="bg-[#161B22] border border-zinc-800 p-4 rounded-2xl mb-6 shadow-inner">
+        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-1.5"><Filter className="size-3"/> Filtros de Búsqueda ({equiposFiltrados.length} resultados)</p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+            <input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Modelo o IMEI..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-all" />
+          </div>
+          
+          <select value={filtroCondicion} onChange={e => setFiltroCondicion(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 appearance-none transition-all">
             <option value="Todos">Todas las condiciones</option>
             <option value="Nuevo">Solo Nuevos</option>
             <option value="Usado">Solo Usados</option>
           </select>
-        </div>
-        <div className="relative">
-          <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-          <input type="number" value={filtroBateria} onChange={e => setFiltroBateria(e.target.value)} placeholder="Filtrar por % de batería exacto..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-emerald-500" />
+          
+          <div className="relative group">
+            <BatteryMedium className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500 group-focus-within:text-emerald-400" />
+            <input type="number" value={filtroBateriaMinima} onChange={e => setFiltroBateriaMinima(e.target.value)} placeholder="Batería Mayor a (%)" className="w-full bg-emerald-500/5 border border-emerald-500/20 text-emerald-400 font-bold rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-all placeholder:text-emerald-500/50 placeholder:font-normal" />
+          </div>
+
+          <div className="relative group">
+            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-sky-500 group-focus-within:text-sky-400" />
+            <input type="number" value={filtroPrecioMaximo} onChange={e => setFiltroPrecioMaximo(e.target.value)} placeholder="Presupuesto Máximo" className="w-full bg-sky-500/5 border border-sky-500/20 text-sky-400 font-bold rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-sky-500 transition-all placeholder:text-sky-500/50 placeholder:font-normal" />
+          </div>
         </div>
       </div>
 
       {/* 🚀 TABLA DE DATOS */}
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div> : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
               <tr><th className="p-4 rounded-tl-xl">Equipo & IMEI</th><th className="p-4 text-center">Condición</th><th className="p-4 text-center">% Batería</th><th className="p-4 text-right">Costo</th><th className="p-4 text-right">Precio Sug.</th><th className="p-4 text-center">Estado</th><th className="p-4 text-center rounded-tr-xl">Acciones</th></tr>
@@ -283,7 +310,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL: INGRESAR / EDITAR INDIVIDUAL (Oculto en código para no repetir la estructura que ya tenías, pero todo está igual) */}
+      {/* MODAL: INGRESAR / EDITAR INDIVIDUAL */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
