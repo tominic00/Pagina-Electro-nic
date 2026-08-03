@@ -1,19 +1,23 @@
 import { useState, useEffect } from "react"
-import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, PackageOpen } from "lucide-react"
+import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const [pedidos, setPedidos] = useState<any[]>([])
-  const [modelosHistoricos, setModelosHistoricos] = useState<string[]>([]) // 🚀 CATÁLOGO DE AUTOCOMPLETADO
+  const [modelosHistoricos, setModelosHistoricos] = useState<string[]>([]) 
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+
+  // ESTADO DE EDICIÓN
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   // DATOS GENERALES DEL LOTE
   const [proveedor, setProveedor] = useState("")
   const [titulo, setTitulo] = useState("")
   const [tracking, setTracking] = useState("")
+  const [fechaEstimada, setFechaEstimada] = useState("")
   
   // LOGÍSTICA
   const [envioMiamiBsAs, setEnvioMiamiBsAs] = useState("")
@@ -25,47 +29,43 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
 
   const fetchData = async () => {
     setLoading(true)
-    
-    // 1. Traer Pedidos en camino
     const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*").eq("estado", "En Camino").order("fecha_pedido", { ascending: false })
     if (pedidosData) setPedidos(pedidosData)
 
-    // 2. 🚀 CREAR CATÁLOGO INTELIGENTE DE MODELOS HISTÓRICOS
     const { data: stockData } = await supabase.from("stock_mayorista").select("equipo")
     const { data: ventasData } = await supabase.from("ventas_mayorista").select("equipo_nombre")
     
-    // Juntamos todos los nombres que existieron alguna vez en el local
-    const todosLosNombres = [
-      ...(stockData?.map(d => d.equipo) || []),
-      ...(ventasData?.map(d => d.equipo_nombre) || [])
-    ]
-
-    // Limpiamos los GB del nombre (ej: "iPhone 13 - 128GB" pasa a ser solo "iPhone 13") y sacamos duplicados
-    const modelosUnicos = Array.from(new Set(
-      todosLosNombres.map(nombre => nombre.split(" - ")[0].trim())
-    )).filter(Boolean).sort()
-
+    const todosLosNombres = [...(stockData?.map(d => d.equipo) || []), ...(ventasData?.map(d => d.equipo_nombre) || [])]
+    const modelosUnicos = Array.from(new Set(todosLosNombres.map(nombre => nombre.split(" - ")[0].trim()))).filter(Boolean).sort()
     setModelosHistoricos(modelosUnicos)
     setLoading(false)
   }
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 LÓGICA DE ÍTEMS CON CAPACIDAD
+  // 🚀 ABRIR MODAL EN MODO NUEVO O EDICIÓN
+  const abrirNuevo = () => {
+    setEditingId(null)
+    setProveedor(""); setTitulo(""); setTracking(""); setFechaEstimada(""); setEnvioMiamiBsAs(""); setEnvioBsAsTuc(""); setItems([])
+    setShowModal(true)
+  }
+
+  const abrirEdicion = (pedido: any) => {
+    setEditingId(pedido.id)
+    setTitulo(pedido.titulo || "")
+    setProveedor(pedido.proveedor || "")
+    setTracking(pedido.tracking || "")
+    setFechaEstimada(pedido.fecha_estimada_llegada ? pedido.fecha_estimada_llegada.split('T')[0] : "")
+    setEnvioMiamiBsAs(pedido.envio_miami_bsas_usd || "")
+    setEnvioBsAsTuc(pedido.envio_bsas_tuc_usd || "")
+    setItems(pedido.items || [])
+    setShowModal(true)
+  }
+
   const agregarItem = () => {
     if (!itemTemp.modelo || !itemTemp.costo_usd) return alert("Completá el modelo y el costo unitario.")
-    
-    // Concatenamos el modelo con los GB para que en el stock quede perfecto
     const nombreCompleto = itemTemp.capacidad === "N/A" ? itemTemp.modelo.trim() : `${itemTemp.modelo.trim()} - ${itemTemp.capacidad}`
-
-    setItems([...items, { 
-      ...itemTemp, 
-      modelo: nombreCompleto, 
-      cantidad: Number(itemTemp.cantidad), 
-      costo_usd: Number(itemTemp.costo_usd), 
-      precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) 
-    }])
-    
+    setItems([...items, { ...itemTemp, modelo: nombreCompleto, cantidad: Number(itemTemp.cantidad), costo_usd: Number(itemTemp.costo_usd), precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) }])
     setItemTemp({ modelo: "", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
   }
 
@@ -77,7 +77,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const totalUnidades = items.reduce((acc, item) => acc + item.cantidad, 0)
   const costoTotalOperacion = costoTotalEquipos + Number(envioMiamiBsAs) + Number(envioBsAsTuc)
 
-  // 🚀 GUARDAR LOTE
+  // 🚀 GUARDAR LOTE (NUEVO O ACTUALIZADO)
   const handleGuardarLote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (items.length === 0) return alert("Debes agregar al menos un equipo al lote.")
@@ -88,6 +88,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         titulo: titulo || `Lote ${new Date().toLocaleDateString()}`,
         proveedor,
         tracking,
+        fecha_estimada_llegada: fechaEstimada || null, // Guardamos la posible llegada
         items,
         cantidad: totalUnidades,
         costo_equipos_usd: costoTotalEquipos,
@@ -97,31 +98,40 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         ingresado_por: usuarioActual.nombre
       }
 
-      const { error } = await supabase.from("pedidos_mayorista").insert([payload])
-      if (error) throw new Error(error.message)
+      if (editingId) {
+        const { error } = await supabase.from("pedidos_mayorista").update(payload).eq("id", editingId)
+        if (error) throw new Error(error.message)
+      } else {
+        const { error } = await supabase.from("pedidos_mayorista").insert([payload])
+        if (error) throw new Error(error.message)
+      }
       
       setShowModal(false)
-      // Reset
-      setItems([])
-      setProveedor(""); setTitulo(""); setTracking(""); setEnvioMiamiBsAs(""); setEnvioBsAsTuc("")
       fetchData()
     } catch (error: any) {
-      console.error(error)
-      alert("Error al guardar el lote en la base de datos: " + error.message)
+      alert("Error al guardar el lote: " + error.message)
     } finally {
       setIsSaving(false)
     }
   }
 
-  // 🚀 ACTUALIZAR ESTADO DE PAGOS (Finanzas)
-  const togglePago = async (pedidoId: string, campo: string, valorActual: boolean) => {
-    await supabase.from("pedidos_mayorista").update({ [campo]: !valorActual }).eq("id", pedidoId)
+  // 🚀 ACTUALIZAR ESTADO DE PAGOS (Y REGISTRAR FECHAS)
+  const togglePago = async (pedidoId: string, campoBoolean: string, valorActual: boolean) => {
+    // Si lo estamos marcando como pagado, guardamos la fecha de hoy en el campo de fecha correspondiente
+    const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
+    
+    const payload = {
+      [campoBoolean]: !valorActual,
+      [campoFecha]: !valorActual ? new Date().toISOString() : null // Si lo destildamos, borramos la fecha
+    }
+
+    await supabase.from("pedidos_mayorista").update(payload).eq("id", pedidoId)
     fetchData()
   }
 
-  // 🚀 INGRESAR LOTE AL STOCK MASIVAMENTE
+  // 🚀 INGRESAR LOTE AL STOCK Y MARCAR LLEGADA REAL
   const marcarRecibido = async (pedido: any) => {
-    if(!confirm(`¿Recibiste el lote completo? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
+    if(!confirm(`¿Recibiste el lote completo hoy? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
 
     try {
       const equiposParaStock: any[] = []
@@ -149,10 +159,11 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         if (errorStock) throw new Error(errorStock.message)
       }
       
-      await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date() }).eq('id', pedido.id)
+      // La fecha_recibido será la fecha real en la que efectivamente ingresó a tu local
+      await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date().toISOString() }).eq('id', pedido.id)
       
       fetchData()
-      alert("¡Lote ingresado al stock correctamente!")
+      alert("¡Lote ingresado al stock! (Se registró la fecha de llegada real de hoy)")
     } catch (error: any) {
       alert("Error al inyectar equipos al stock: " + error.message)
     }
@@ -165,22 +176,30 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
           <h3 className="text-xl font-black text-white flex items-center gap-2"><Truck className="size-5 text-amber-500"/> Órdenes de Compra (Lotes)</h3>
           <p className="text-xs text-zinc-500 mt-1">Seguimiento de logística y pagos de importación.</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="bg-amber-500 hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 active:scale-95"><Plus className="size-4"/> Nuevo Lote</button>
+        <button onClick={abrirNuevo} className="bg-amber-500 hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 active:scale-95"><Plus className="size-4"/> Nuevo Lote</button>
       </div>
 
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-amber-500"/></div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pedidos.map(p => (
             <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col shadow-lg">
+              
               {/* Encabezado Lote */}
               <div className="p-5 border-b border-zinc-800 bg-zinc-950/50 relative">
                 <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
                 <div className="flex justify-between items-start mb-2">
                   <span className="text-[10px] font-black uppercase bg-amber-500/10 text-amber-500 px-2 py-1 rounded">En Tránsito</span>
-                  <span className="text-xs text-zinc-500 font-bold">{new Date(p.fecha_pedido).toLocaleDateString()}</span>
+                  <button onClick={() => abrirEdicion(p)} className="text-zinc-500 hover:text-sky-400 bg-zinc-900 p-1.5 rounded-lg"><Edit3 className="size-4"/></button>
                 </div>
+                
                 <h4 className="text-lg font-black text-white">{p.titulo || p.proveedor || "Lote de Compra"}</h4>
                 <p className="text-xs text-zinc-400 uppercase mt-1 flex items-center gap-1.5"><Box className="size-3"/> {p.proveedor} • {p.cantidad} Uds.</p>
+                
+                {/* Fechas */}
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1"><Calendar className="size-3"/> Pedido: {new Date(p.fecha_pedido).toLocaleDateString()}</p>
+                  {p.fecha_estimada_llegada && <p className="text-[10px] text-amber-500 uppercase font-bold flex items-center gap-1"><Truck className="size-3"/> Llega: {new Date(p.fecha_estimada_llegada).toLocaleDateString()}</p>}
+                </div>
                 {p.tracking && <p className="text-[10px] text-sky-400 font-mono mt-2 bg-sky-500/10 px-2 py-1 rounded w-fit">Track: {p.tracking}</p>}
               </div>
 
@@ -191,7 +210,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                 <button onClick={() => togglePago(p.id, "pagado_equipos", p.pagado_equipos)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
-                    <div><p className={cn("text-xs font-bold", p.pagado_equipos ? "text-emerald-400" : "text-zinc-300")}>Costo Equipos</p><p className="text-[10px] text-zinc-500">U$D {p.costo_equipos_usd}</p></div>
+                    <div>
+                      <p className={cn("text-xs font-bold", p.pagado_equipos ? "text-emerald-400" : "text-zinc-300")}>Costo Equipos</p>
+                      <p className="text-[10px] text-zinc-500">U$D {p.costo_equipos_usd} {p.fecha_pago_equipos && ` • (${new Date(p.fecha_pago_equipos).toLocaleDateString()})`}</p>
+                    </div>
                   </div>
                 </button>
 
@@ -199,7 +221,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   <button onClick={() => togglePago(p.id, "pagado_miami_bsas", p.pagado_miami_bsas)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_miami_bsas ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
                       <Plane className={cn("size-4", p.pagado_miami_bsas ? "text-emerald-500" : "text-zinc-600")} />
-                      <div><p className={cn("text-xs font-bold", p.pagado_miami_bsas ? "text-emerald-400" : "text-zinc-300")}>Flete Miami - BsAs</p><p className="text-[10px] text-zinc-500">U$D {p.envio_miami_bsas_usd}</p></div>
+                      <div>
+                        <p className={cn("text-xs font-bold", p.pagado_miami_bsas ? "text-emerald-400" : "text-zinc-300")}>Flete Miami - BsAs</p>
+                        <p className="text-[10px] text-zinc-500">U$D {p.envio_miami_bsas_usd} {p.fecha_pago_miami_bsas && ` • (${new Date(p.fecha_pago_miami_bsas).toLocaleDateString()})`}</p>
+                      </div>
                     </div>
                   </button>
                 )}
@@ -208,7 +233,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   <button onClick={() => togglePago(p.id, "pagado_bsas_tuc", p.pagado_bsas_tuc)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_bsas_tuc ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
                       <MapPin className={cn("size-4", p.pagado_bsas_tuc ? "text-emerald-500" : "text-zinc-600")} />
-                      <div><p className={cn("text-xs font-bold", p.pagado_bsas_tuc ? "text-emerald-400" : "text-zinc-300")}>Envío BsAs - Tucumán</p><p className="text-[10px] text-zinc-500">U$D {p.envio_bsas_tuc_usd}</p></div>
+                      <div>
+                        <p className={cn("text-xs font-bold", p.pagado_bsas_tuc ? "text-emerald-400" : "text-zinc-300")}>Envío BsAs - Tucumán</p>
+                        <p className="text-[10px] text-zinc-500">U$D {p.envio_bsas_tuc_usd} {p.fecha_pago_bsas_tuc && ` • (${new Date(p.fecha_pago_bsas_tuc).toLocaleDateString()})`}</p>
+                      </div>
                     </div>
                   </button>
                 )}
@@ -217,7 +245,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               {/* Acción Recibir */}
               <div className="p-4 border-t border-zinc-800">
                 <button onClick={() => marcarRecibido(p)} className="w-full bg-zinc-800 hover:bg-emerald-500 hover:text-black text-white font-black uppercase tracking-widest py-3 rounded-xl text-xs transition-colors flex justify-center items-center gap-2">
-                  <PackageOpen className="size-4"/> Recibir e Ingresar Stock
+                  <PackageOpen className="size-4"/> Lote Recibido (Ingresar Hoy)
                 </button>
               </div>
             </div>
@@ -226,13 +254,13 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL: CREAR NUEVO LOTE GIGANTE */}
+      {/* 🚀 MODAL: CREAR O EDITAR LOTE GIGANTE */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
             
             <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
-              <h3 className="text-xl font-black text-white flex items-center gap-2"><ListOrdered className="size-5 text-amber-500"/> Armar Orden de Compra</h3>
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><ListOrdered className="size-5 text-amber-500"/> {editingId ? "Editar Lote" : "Armar Orden de Compra"}</h3>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900"><X className="size-5"/></button>
             </div>
 
@@ -241,10 +269,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               {/* SECCIÓN 1: DATOS PROVEEDOR */}
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2 mb-4">1. Identificación del Lote</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Nombre Interno (Ej: Lote Agosto)</label>
-                    <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Opcional..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Nombre Interno (Opcional)</label>
+                    <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ej: Lote Agosto" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Proveedor / Contacto</label>
@@ -254,6 +282,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                     <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Tracking N°</label>
                     <input type="text" value={tracking} onChange={e => setTracking(e.target.value)} placeholder="Tracking de envío..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-amber-500" />
                   </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-amber-500 block mb-1">Llegada Estimada</label>
+                    <input type="date" value={fechaEstimada} onChange={e => setFechaEstimada(e.target.value)} className="w-full bg-amber-500/5 border border-amber-500/30 text-amber-400 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500 [color-scheme:dark]" />
+                  </div>
                 </div>
               </div>
 
@@ -261,11 +293,9 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2 mb-4">2. Equipos a Comprar</h4>
                 
-                {/* 🚀 FORMULARIO CON AUTOCOMPLETADO */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col md:flex-row gap-3 items-end">
                   <div className="flex-[2] w-full">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo</label>
-                    {/* Lista autogenerada para que no haya errores de tipeo */}
                     <input 
                       type="text" 
                       list="modelos-guardados"
@@ -275,21 +305,14 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                       className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500" 
                     />
                     <datalist id="modelos-guardados">
-                      {modelosHistoricos.map(modelo => (
-                        <option key={modelo} value={modelo} />
-                      ))}
+                      {modelosHistoricos.map(modelo => <option key={modelo} value={modelo} />)}
                     </datalist>
                   </div>
                   
                   <div className="w-24">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1 flex items-center gap-1"><HardDrive className="size-3"/> GB</label>
                     <select value={itemTemp.capacidad} onChange={e => setItemTemp({...itemTemp, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500">
-                      <option value="64GB">64GB</option>
-                      <option value="128GB">128GB</option>
-                      <option value="256GB">256GB</option>
-                      <option value="512GB">512GB</option>
-                      <option value="1TB">1TB</option>
-                      <option value="N/A">N/A</option>
+                      <option value="64GB">64GB</option><option value="128GB">128GB</option><option value="256GB">256GB</option><option value="512GB">512GB</option><option value="1TB">1TB</option><option value="N/A">N/A</option>
                     </select>
                   </div>
 
@@ -314,7 +337,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   <button type="button" onClick={agregarItem} className="bg-amber-500 hover:bg-amber-400 text-black p-2.5 rounded-lg transition-all active:scale-95"><Plus className="size-4 font-black"/></button>
                 </div>
 
-                {/* Lista de Ítems */}
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2 hide-scrollbar">
                   {items.map((item, index) => (
                     <div key={index} className="flex justify-between items-center bg-zinc-950 border border-zinc-800 p-3 rounded-xl">
@@ -363,7 +385,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               <div className="flex gap-2 w-full sm:w-auto">
                 <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-bold rounded-xl transition-colors">Cancelar</button>
                 <button onClick={handleGuardarLote} disabled={isSaving || items.length === 0} className="px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 disabled:opacity-50 flex items-center gap-2">
-                  {isSaving ? <Loader2 className="size-5 animate-spin"/> : <><CheckCircle2 className="size-5"/> Generar Orden</>}
+                  {isSaving ? <Loader2 className="size-5 animate-spin"/> : <><CheckCircle2 className="size-5"/> {editingId ? "Actualizar Lote" : "Generar Orden"}</>}
                 </button>
               </div>
             </div>
