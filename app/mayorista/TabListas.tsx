@@ -1,0 +1,225 @@
+import { useState, useEffect } from "react"
+import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, BatteryMedium } from "lucide-react"
+import  supabase  from "@/lib/supabase"
+import { cn } from "@/lib/utils"
+
+export function TabListas() {
+  const [stockCrudo, setStockCrudo] = useState<any[]>([])
+  const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  
+  // Opciones de formato
+  const [mostrarBateria, setMostrarBateria] = useState(true)
+  
+  // Selección de equipos
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+
+  // Textos editables
+  const [encabezado, setEncabezado] = useState("🚀 ¡Llegó stock fresquito a Electro·Nic! 🚀\nSeparamos las mejores naves para vos. Chequeá los precios de hoy:")
+  const [piePagina, setPiePagina] = useState("💳 Aceptamos USDT, Dólares y Pesos al cambio del día.\n\nEscribime y reservá el tuyo antes de que vuelen! 🏃‍♂️💨")
+
+  const fetchData = async () => {
+    setLoading(true)
+    const { data: stockData } = await supabase.from("stock_mayorista").select("*").eq("estado", "Disponible")
+    if (stockData) setStockCrudo(stockData)
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  // 🚀 AGRUPACIÓN DINÁMICA (Depende de si mostramos o no la batería)
+  useEffect(() => {
+    const grupos = stockCrudo.reduce((acc: any, item: any) => {
+      // Si el equipo es nuevo, nunca importa la batería. 
+      // Si es usado y está tildado "mostrarBateria", separamos por batería. Si no, los juntamos.
+      const esNuevo = item.condicion?.toLowerCase().includes("nuevo")
+      const bateriaKey = (mostrarBateria && !esNuevo) ? (item.bateria || 'N/A') : 'MIXTA'
+      
+      // Clave única para agrupar
+      const key = `${item.equipo}-${item.condicion}-${item.precio_venta_usd}-${bateriaKey}`
+      
+      if (!acc[key]) {
+        acc[key] = {
+          id_group: key,
+          equipo: item.equipo,
+          condicion: item.condicion || "Nuevo",
+          precio: item.precio_venta_usd,
+          bateria: (mostrarBateria && !esNuevo) ? item.bateria : null,
+          cantidad: 1
+        }
+      } else {
+        acc[key].cantidad += 1
+      }
+      return acc
+    }, {})
+
+    const arrayAgrupado = Object.values(grupos) as any[]
+    arrayAgrupado.sort((a, b) => a.equipo.localeCompare(b.equipo))
+    
+    setStockAgrupado(arrayAgrupado)
+    setSeleccionados(new Set(arrayAgrupado.map(g => g.id_group)))
+  }, [stockCrudo, mostrarBateria])
+
+  const toggleSeleccion = (id_group: string) => {
+    const nuevos = new Set(seleccionados)
+    if (nuevos.has(id_group)) nuevos.delete(id_group)
+    else nuevos.add(id_group)
+    setSeleccionados(nuevos)
+  }
+
+  // 🚀 GENERADOR DEL TEXTO PARA WHATSAPP
+  const generarTextoWhatsApp = () => {
+    const equiposFiltrados = stockAgrupado.filter(g => seleccionados.has(g.id_group))
+    
+    const nuevos = equiposFiltrados.filter(g => g.condicion.toLowerCase().includes("nuevo"))
+    const usados = equiposFiltrados.filter(g => !g.condicion.toLowerCase().includes("nuevo"))
+
+    let mensaje = `${encabezado.trim()}\n\n`
+
+    if (nuevos.length > 0) {
+      mensaje += `✨ *NUEVOS SELLADOS*\n`
+      nuevos.forEach(eq => {
+        mensaje += `📱 ${eq.equipo} ➖ *U$D ${eq.precio}* ${eq.cantidad > 1 ? `(${eq.cantidad} disp.)` : ''}\n`
+      })
+      mensaje += `\n`
+    }
+
+    if (usados.length > 0) {
+      mensaje += `🔋 *USADOS IMPECABLES*\n`
+      usados.forEach(eq => {
+        const detalleBat = (mostrarBateria && eq.bateria) ? `(Bat: ${eq.bateria}%)` : `(${eq.condicion})`
+        mensaje += `📱 ${eq.equipo} ${detalleBat} ➖ *U$D ${eq.precio}* ${eq.cantidad > 1 ? `(${eq.cantidad} disp.)` : ''}\n`
+      })
+      mensaje += `\n`
+    }
+
+    if (equiposFiltrados.length === 0) {
+      mensaje += `_No hay equipos seleccionados para la lista._\n\n`
+    }
+
+    mensaje += `${piePagina.trim()}`
+    
+    return mensaje
+  }
+
+  const copiarLista = async () => {
+    await navigator.clipboard.writeText(generarTextoWhatsApp())
+    alert("✅ ¡Lista copiada! Ya podés pegarla en WhatsApp.")
+  }
+
+  const abrirWhatsApp = () => {
+    const url = `https://wa.me/?text=${encodeURIComponent(generarTextoWhatsApp())}`
+    window.open(url, "_blank")
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-8">
+        <h2 className="text-xl font-black text-white flex items-center gap-2"><Share2 className="size-5 text-emerald-500"/> Listas para WhatsApp</h2>
+        <p className="text-xs text-zinc-500 mt-1">Generá una lista comercial atractiva lista para mandar por difusión.</p>
+      </div>
+
+      {loading ? (
+        <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* PANEL IZQUIERDO: CONFIGURACIÓN */}
+          <div className="space-y-6">
+            
+            <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Encabezado del mensaje</label>
+              <textarea 
+                value={encabezado} 
+                onChange={e => setEncabezado(e.target.value)} 
+                className="w-full bg-zinc-950 border border-zinc-800 text-emerald-400 font-medium rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all h-20 resize-none" 
+              />
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Equipos en Stock ({stockAgrupado.length})</label>
+                
+                {/* 🚀 TOGGLE DE BATERÍA MÁGICO */}
+                <label className="flex items-center gap-2 cursor-pointer bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-emerald-500/50 transition-colors">
+                  <BatteryMedium className={cn("size-3.5", mostrarBateria ? "text-emerald-500" : "text-zinc-500")} />
+                  <input type="checkbox" checked={mostrarBateria} onChange={e => setMostrarBateria(e.target.checked)} className="hidden" />
+                  <span className={cn("text-[10px] font-bold uppercase", mostrarBateria ? "text-emerald-400" : "text-zinc-500")}>Detallar Batería</span>
+                </label>
+              </div>
+              
+              <div className="max-h-[300px] overflow-y-auto pr-2 space-y-2 hide-scrollbar">
+                {stockAgrupado.map((eq) => {
+                  const seleccionado = seleccionados.has(eq.id_group)
+                  return (
+                    <div 
+                      key={eq.id_group} 
+                      onClick={() => toggleSeleccion(eq.id_group)}
+                      className={cn("flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-all", 
+                        seleccionado ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        {seleccionado ? <CheckSquare className="size-4 text-emerald-500" /> : <Square className="size-4 text-zinc-600" />}
+                        <div>
+                          <p className={cn("font-bold text-sm", seleccionado ? "text-emerald-400" : "text-white")}>{eq.equipo}</p>
+                          <p className="text-[10px] text-zinc-500 flex items-center gap-1.5 mt-0.5">
+                            <span className="uppercase">{eq.condicion}</span> 
+                            {eq.bateria && <span>• Bat: {eq.bateria}%</span>}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-white">U$D {eq.precio}</p>
+                        <p className="text-[9px] text-zinc-500 font-bold uppercase">{eq.cantidad} {eq.cantidad === 1 ? 'disp.' : 'disp.'}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+                {stockAgrupado.length === 0 && <p className="text-xs text-zinc-500 italic text-center py-4">No hay equipos disponibles en stock.</p>}
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Pie de página (Cierre)</label>
+              <textarea 
+                value={piePagina} 
+                onChange={e => setPiePagina(e.target.value)} 
+                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-300 font-medium rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all h-24 resize-none" 
+              />
+            </div>
+
+          </div>
+
+          {/* PANEL DERECHO: VISTA PREVIA Y ACCIONES */}
+          <div>
+            <div className="bg-white rounded-3xl p-6 shadow-2xl border border-zinc-200 sticky top-6">
+              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+                <Sparkles className="size-5 text-emerald-500" />
+                <h3 className="text-lg font-black text-black">Vista Previa</h3>
+              </div>
+              
+              {/* Celular Fake Preview */}
+              <div className="bg-[#E5DDD5] p-4 rounded-2xl mb-6 shadow-inner h-[400px] overflow-y-auto hide-scrollbar">
+                <div className="bg-white p-3 rounded-tr-xl rounded-bl-xl rounded-br-xl shadow-sm text-sm text-black whitespace-pre-wrap font-sans relative">
+                  <div className="absolute top-0 left-[-8px] w-0 h-0 border-t-[10px] border-t-white border-l-[10px] border-l-transparent"></div>
+                  {generarTextoWhatsApp()}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button onClick={copiarLista} className="flex-1 py-4 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-xl transition-all active:scale-95 flex justify-center items-center gap-2">
+                  <Copy className="size-5"/> Copiar lista
+                </button>
+                <button onClick={abrirWhatsApp} className="flex-[1.5] py-4 bg-[#25D366] hover:bg-[#20bd5a] text-white font-black rounded-xl transition-all shadow-lg shadow-[#25D366]/20 active:scale-95 flex justify-center items-center gap-2">
+                  <MessageCircle className="size-5"/> Abrir WhatsApp
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  )
+}
