@@ -13,6 +13,9 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [equipos, setEquipos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
+  // 🚀 SUB-PESTAÑAS DE INVENTARIO
+  const [activeSubTab, setActiveSubTab] = useState<"disponibles" | "vendidos">("disponibles")
+
   // Modales
   const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -27,10 +30,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [isImporting, setIsImporting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
-  // 🚀 NUEVO ESTADO DE FORMULARIO ESTRUCTURADO
+  // ESTADO DE FORMULARIO ESTRUCTURADO (Ahorra con precio minorista)
   const [formUI, setFormUI] = useState({
     tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", 
-    bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", 
+    bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "",
     estado: "Disponible", stock_inicial: 1, comentarios: ""
   })
 
@@ -58,37 +61,45 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchStock() }, [])
 
-  // FILTRADO
+  // 🚀 FILTRADO INTELIGENTE (Incluye el estado de venta)
   const equiposFiltrados = equipos.filter(eq => {
+    // 1. Filtro de Sub-pestañas
+    if (activeSubTab === "disponibles" && eq.estado === "Vendido") return false
+    if (activeSubTab === "vendidos" && eq.estado !== "Vendido") return false
+
+    // 2. Filtros de Texto y Valores
     const matchTexto = eq.equipo.toLowerCase().includes(filtroTexto.toLowerCase()) || (eq.imei && eq.imei.toLowerCase().includes(filtroTexto.toLowerCase()))
     const matchCondicion = filtroCondicion === "Todos" ? true : eq.condicion === filtroCondicion
+    
     let matchBateria = true
     if (filtroBateriaMinima !== "") {
       const minBat = Number(filtroBateriaMinima)
       if (!eq.bateria || Number(eq.bateria) < minBat) matchBateria = false
     }
+    
     let matchPrecio = true
     if (filtroPrecioMaximo !== "") {
       const maxPrecio = Number(filtroPrecioMaximo)
-      if (Number(eq.precio_venta_usd) > maxPrecio) matchPrecio = false
+      if (Number(eq.precio_venta_usd) > maxPrecio && Number(eq.precio_minorista_usd) > maxPrecio) matchPrecio = false
     }
+    
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
-  // 🚀 LÓGICAS DE EXPORTACIÓN E IMPORTACIÓN
+  // LÓGICAS DE EXPORTACIÓN E IMPORTACIÓN
   const ejecutarExportacion = () => {
     const headers = ["Equipo", "Condicion"]
     if (exportOptions.bateria) headers.push("Bateria")
     if (exportOptions.imei) headers.push("IMEI")
     if (exportOptions.costo) headers.push("Costo_USD")
-    headers.push("Precio_Venta_USD")
+    headers.push("Precio_Mayorista_USD", "Precio_Minorista_USD")
 
     const filas = equiposFiltrados.map(eq => {
       const fila = [ `"${eq.equipo}"`, `"${eq.condicion || 'Nuevo'}"` ]
       if (exportOptions.bateria) fila.push(`"${eq.bateria || ''}"`)
       if (exportOptions.imei) fila.push(`"${eq.imei || ''}"`)
       if (exportOptions.costo) fila.push(eq.costo_usd)
-      fila.push(eq.precio_venta_usd)
+      fila.push(eq.precio_venta_usd, eq.precio_minorista_usd || 0)
       return fila
     })
 
@@ -96,7 +107,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `${exportOptions.costo ? "Copia_Seguridad" : "Lista_Precios_Clientes"}_${new Date().toISOString().split('T')[0]}.csv`)
+    const nombreArchivo = `${exportOptions.costo ? "Copia_Seguridad" : "Lista_Precios"}_${activeSubTab}_${new Date().toISOString().split('T')[0]}.csv`
+    link.setAttribute("download", nombreArchivo)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -117,7 +129,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           const cols = row.split(regex).map(c => c.replace(/(^"|"$)/g, '').trim())
           return {
             equipo: cols[0], condicion: cols[1] || 'Nuevo', bateria: cols[2] || null,
-            imei: cols[3] || null, costo_usd: Number(cols[4]) || 0, precio_venta_usd: Number(cols[5]) || 0,
+            imei: cols[3] || null, costo_usd: Number(cols[4]) || 0, 
+            precio_venta_usd: Number(cols[5]) || 0, precio_minorista_usd: Number(cols[6]) || 0,
             estado: 'Disponible', ingresado_por: usuarioActual.nombre
           }
         })
@@ -134,19 +147,19 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     reader.readAsText(file)
   }
 
-  // 🚀 LÓGICAS DE ABM (ALTA, BAJA, MODIFICACIÓN)
+  // LÓGICAS DE ABM
   const abrirNuevo = () => {
     setEditingId(null)
-    setFormUI({ tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", estado: "Disponible", stock_inicial: 1, comentarios: "" })
+    setFormUI({ tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "", estado: "Disponible", stock_inicial: 1, comentarios: "" })
     setShowAddModal(true)
   }
 
   const abrirEdicion = (eq: any) => {
     setEditingId(eq.id)
     setFormUI({ 
-      tipo: "iPhone", modelo: eq.equipo, // Fallback por si el nombre viene viejo o armado
+      tipo: "iPhone", modelo: eq.equipo,
       capacidad: "N/A", color: "N/A", bateria: eq.bateria || "", condicion: eq.condicion || "A", 
-      imei: eq.imei || "", costo_usd: eq.costo_usd, precio_venta_usd: eq.precio_venta_usd, 
+      imei: eq.imei || "", costo_usd: eq.costo_usd, precio_venta_usd: eq.precio_venta_usd, precio_minorista_usd: eq.precio_minorista_usd || "",
       estado: eq.estado || "Disponible", stock_inicial: 1, comentarios: "" 
     })
     setShowAddModal(true)
@@ -162,7 +175,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     e.preventDefault()
     setIsSaving(true)
     try {
-      // Si estamos editando o el modelo ya trae guiones, no lo concatenamos de nuevo
       const nombreGenerado = (editingId || formUI.modelo.includes("-")) 
         ? formUI.modelo 
         : `${formUI.modelo} - ${formUI.capacidad} - ${formUI.color}`.replace(" - N/A", "")
@@ -172,10 +184,11 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         payloadArray.push({
           equipo: nombreGenerado,
           condicion: formUI.condicion,
-          imei: formUI.stock_inicial === 1 ? formUI.imei : "", // Solo guardamos IMEI si es 1 unidad
+          imei: formUI.stock_inicial === 1 ? formUI.imei : "",
           bateria: formUI.bateria,
           costo_usd: Number(formUI.costo_usd),
           precio_venta_usd: Number(formUI.precio_venta_usd),
+          precio_minorista_usd: Number(formUI.precio_minorista_usd),
           estado: formUI.estado,
           ingresado_por: usuarioActual.nombre
         })
@@ -196,11 +209,12 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 LÓGICAS DE COTIZACIÓN WHATSAPP
+  // LÓGICAS DE COTIZACIÓN WHATSAPP
   const abrirCotizacion = (eq: any) => {
     setCotizarItem(eq)
     setFormCotizacion({
-      precio: eq.precio_venta_usd, moneda: "USD", actualizarPrecio: false,
+      precio: eq.precio_minorista_usd || eq.precio_venta_usd, // Por defecto carga el minorista para WhatsApp
+      moneda: "USD", actualizarPrecio: false,
       condicion: eq.condicion || "A+", disponibilidad: "Disponible",
       garantia: "30 días", observacion: "", incluirImei: true
     })
@@ -208,9 +222,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   }
 
   const avanzarAPrevisualizacion = async () => {
-    if (formCotizacion.actualizarPrecio && Number(formCotizacion.precio) !== cotizarItem.precio_venta_usd) {
-      await supabase.from("stock_mayorista").update({ precio_venta_usd: Number(formCotizacion.precio) }).eq("id", cotizarItem.id)
-      fetchStock() // Refrescamos en el fondo
+    if (formCotizacion.actualizarPrecio && Number(formCotizacion.precio) !== cotizarItem.precio_minorista_usd) {
+      // Si eligió actualizar, actualizamos el precio minorista (que es el de WhatsApp)
+      await supabase.from("stock_mayorista").update({ precio_minorista_usd: Number(formCotizacion.precio) }).eq("id", cotizarItem.id)
+      fetchStock() 
     }
     setShowCotizarModal(false)
     setShowPrevisualizarModal(true)
@@ -246,13 +261,25 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   return (
     <div className="p-6">
       
-      {/* CABECERA Y BOTONES PRINCIPALES */}
-      <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4 mb-6">
-        <h3 className="text-xl font-black text-white flex items-center gap-2"><Package className="size-5 text-emerald-500"/> Inventario Activo</h3>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* 🚀 CABECERA Y SUB-PESTAÑAS */}
+      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-4 mb-6">
+        <div>
+          <h3 className="text-xl font-black text-white flex items-center gap-2 mb-4"><Package className="size-5 text-emerald-500"/> Gestión de Inventario</h3>
+          
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            <button onClick={() => setActiveSubTab("disponibles")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === "disponibles" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              Disponibles / Reservados
+            </button>
+            <button onClick={() => setActiveSubTab("vendidos")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === "vendidos" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              Historial Vendidos
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2 pb-1">
           <button onClick={() => setShowImportModal(true)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"><Upload className="size-4"/> Importar</button>
-          <button onClick={() => setShowExportModal(true)} className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"><Download className="size-4"/> Crear Lista</button>
-          <button onClick={abrirNuevo} className="bg-emerald-500 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20"><Plus className="size-4 font-black"/> Ingresar Equipo</button>
+          <button onClick={() => setShowExportModal(true)} className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"><Download className="size-4"/> Exportar ({activeSubTab})</button>
+          <button onClick={abrirNuevo} className="bg-emerald-500 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20"><Plus className="size-4 font-black"/> Cargar Equipo</button>
         </div>
       </div>
 
@@ -275,33 +302,50 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
-              <tr><th className="p-4 rounded-tl-xl">Equipo & IMEI</th><th className="p-4 text-center">Condición</th><th className="p-4 text-center">% Batería</th><th className="p-4 text-right">Costo</th><th className="p-4 text-right">Precio Sug.</th><th className="p-4 text-center">Estado</th><th className="p-4 text-center rounded-tr-xl">Acciones</th></tr>
+              <tr>
+                <th className="p-4 rounded-tl-xl">Equipo & IMEI</th>
+                <th className="p-4 text-center">Condición</th>
+                <th className="p-4 text-center">% Batería</th>
+                <th className="p-4 text-right">Costo</th>
+                <th className="p-4 text-right">Precios (May / Min)</th>
+                <th className="p-4 text-center">Estado</th>
+                <th className="p-4 text-center rounded-tr-xl">Acciones</th>
+              </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {equiposFiltrados.map(eq => (
                 <tr key={eq.id} className="hover:bg-zinc-900/50 transition-colors">
-                  <td className="p-4"><p className="font-black text-white text-base">{eq.equipo}</p><p className="text-[10px] text-zinc-500 font-mono mt-0.5">IMEI: {eq.imei || "S/N"}</p></td>
-                  <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion === 'Nuevo' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "Nuevo"}</span></td>
+                  <td className="p-4"><p className={cn("font-black text-base", eq.estado === "Vendido" ? "text-zinc-400" : "text-white")}>{eq.equipo}</p><p className="text-[10px] text-zinc-500 font-mono mt-0.5">IMEI: {eq.imei || "S/N"}</p></td>
+                  <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span></td>
                   <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
                   <td className="p-4 text-right font-black text-zinc-300">U$D {eq.costo_usd}</td>
-                  <td className="p-4 text-right font-black text-emerald-400">U$D {eq.precio_venta_usd}</td>
-                  <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : 'text-zinc-500 border-zinc-700'}`}>{eq.estado}</span></td>
+                  <td className="p-4 text-right">
+                    <p className="font-black text-emerald-400 text-sm">May: U$D {eq.precio_venta_usd}</p>
+                    <p className="font-bold text-sky-400 text-[10px] mt-0.5">Min: U$D {eq.precio_minorista_usd || "0"}</p>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : eq.estado === 'Reservado' ? 'text-amber-500 border-amber-500/20' : 'text-zinc-500 border-zinc-700 bg-zinc-800'}`}>
+                      {eq.estado}
+                    </span>
+                  </td>
                   <td className="p-4 text-center">
                     <div className="flex justify-center gap-2">
-                      <button onClick={() => abrirCotizacion(eq)} className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all" title="Cotizar / Enviar por WhatsApp"><Tag className="size-4"/></button>
+                      {eq.estado !== "Vendido" && (
+                        <button onClick={() => abrirCotizacion(eq)} className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all" title="Cotizar / Enviar por WhatsApp"><Tag className="size-4"/></button>
+                      )}
                       <button onClick={() => abrirEdicion(eq)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-sky-400 hover:bg-zinc-700 rounded-lg transition-all" title="Editar"><Edit3 className="size-4"/></button>
                       <button onClick={() => eliminarEquipo(eq.id)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg transition-all" title="Eliminar"><Trash2 className="size-4"/></button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {equiposFiltrados.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-500 font-bold italic">No se encontraron equipos que coincidan con la búsqueda.</td></tr>}
+              {equiposFiltrados.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-500 font-bold italic">No se encontraron equipos en esta sección.</td></tr>}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* 🚀 MODAL: CREAR / EDITAR EQUIPO (NUEVO DISEÑO ESTRUCTURADO) */}
+      {/* 🚀 MODAL: CREAR / EDITAR EQUIPO */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-auto">
@@ -360,20 +404,26 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   </select>
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-xs font-bold text-white block mb-1.5">IMEI / N° de serie (si corresponde)</label>
                   <input type="text" value={formUI.imei} onChange={e => setFormUI({...formUI, imei: e.target.value})} placeholder="359412345678901" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
                   <p className="text-[10px] text-zinc-500 mt-1">Completalo únicamente si el equipo lo tiene. Cada IMEI corresponde a una sola unidad.</p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Costo USD</label>
+                  <label className="text-xs font-bold text-white block mb-1.5 flex items-center gap-1"><DollarSign className="size-3 text-zinc-500"/> Costo Base (USD)</label>
                   <input required type="number" value={formUI.costo_usd} onChange={e => setFormUI({...formUI, costo_usd: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Precio de venta USD</label>
-                  <input required type="number" value={formUI.precio_venta_usd} onChange={e => setFormUI({...formUI, precio_venta_usd: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-emerald-500 block mb-1.5">P. Mayorista (USD)</label>
+                    <input required type="number" value={formUI.precio_venta_usd} onChange={e => setFormUI({...formUI, precio_venta_usd: e.target.value})} className="w-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-sky-500 block mb-1.5">P. Minorista (USD)</label>
+                    <input required type="number" value={formUI.precio_minorista_usd} onChange={e => setFormUI({...formUI, precio_minorista_usd: e.target.value})} className="w-full bg-sky-500/10 border border-sky-500/30 text-sky-400 font-bold rounded-xl px-4 py-3 outline-none focus:border-sky-500 transition-all" />
+                  </div>
                 </div>
 
                 <div>
@@ -386,9 +436,9 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 </div>
 
                 {!editingId && (
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-white block mb-1.5">Stock inicial (Cantidad a ingresar)</label>
-                    <input type="number" min="1" value={formUI.stock_inicial} onChange={e => setFormUI({...formUI, stock_inicial: Number(e.target.value)})} className="w-full md:w-1/2 bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
+                  <div>
+                    <label className="text-xs font-bold text-white block mb-1.5">Stock inicial (Cant.)</label>
+                    <input type="number" min="1" value={formUI.stock_inicial} onChange={e => setFormUI({...formUI, stock_inicial: Number(e.target.value)})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
                   </div>
                 )}
                 
@@ -419,19 +469,26 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             </div>
             
             <div className="p-6 bg-[#161B22] space-y-5">
-              {/* Info del producto original */}
               <div className="flex items-center gap-4 bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
                 <div className="p-3 bg-zinc-800 rounded-xl"><Smartphone className="size-6 text-zinc-400"/></div>
                 <div>
                   <p className="text-sm font-bold text-white">{cotizarItem.equipo}</p>
-                  <p className="text-[10px] text-zinc-500 mt-1">Solo se comparte lo que ves acá -- nunca costo, proveedor ni IMEI completo.</p>
+                  <p className="text-[10px] text-zinc-500 mt-1">Solo se comparte lo que ves acá -- nunca costo ni proveedor.</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Precio</label>
+                  <div className="flex justify-between items-end mb-1.5">
+                    <label className="text-xs font-bold text-white">Precio</label>
+                  </div>
                   <input type="number" value={formCotizacion.precio} onChange={e => setFormCotizacion({...formCotizacion, precio: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+                  
+                  {/* Botones rápidos para autocompletar precio */}
+                  <div className="flex gap-2 mt-2">
+                    <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_venta_usd})} className="text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-500 hover:text-black transition-colors">Usar Mayorista</button>
+                    <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_minorista_usd})} className="text-[9px] font-bold uppercase bg-sky-500/10 text-sky-400 px-2 py-1 rounded hover:bg-sky-500 hover:text-black transition-colors">Usar Minorista</button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-white block mb-1.5">Moneda</label>
@@ -444,7 +501,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={formCotizacion.actualizarPrecio} onChange={e => setFormCotizacion({...formCotizacion, actualizarPrecio: e.target.checked})} className="size-4 accent-emerald-500 rounded" />
-                <span className="text-sm text-zinc-300">Actualizar también el precio del producto en la base de datos</span>
+                <span className="text-sm text-zinc-300">Actualizar también el precio <strong className="text-sky-400">minorista</strong> en la base de datos</span>
               </label>
 
               <div className="grid grid-cols-2 gap-4">
@@ -482,7 +539,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL 2: PREVISUALIZAR Y COMPARTIR */}
+      {/* MODAL 2: PREVISUALIZAR Y COMPARTIR */}
       {showPrevisualizarModal && cotizarItem && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
@@ -492,8 +549,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             </div>
             
             <div className="p-6 bg-[#161B22] space-y-6">
-              
-              {/* CUADRO DE TEXTO WHATSAPP */}
               <div className="bg-white rounded-2xl p-4 text-black text-sm whitespace-pre-wrap font-sans shadow-inner">
                 {generarTextoWhatsapp()}
               </div>
@@ -506,13 +561,12 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   <MessageCircle className="size-5"/> Compartir por WhatsApp
                 </button>
               </div>
-
             </div>
           </div>
         </div>
       )}
       
-      {/* 🚀 MODAL: EXPORTAR (Mantenido igual) */}
+      {/* MODAL: EXPORTAR */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl">
@@ -521,7 +575,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
               <button onClick={() => setShowExportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
             <div className="p-6 space-y-4 bg-[#161B22]">
-              <p className="text-xs text-zinc-400 mb-4 font-medium">Elegí qué datos querés incluir en tu archivo Excel/CSV. (El Nombre, la Condición y el Precio Final siempre se incluyen).</p>
+              <p className="text-xs text-zinc-400 mb-4 font-medium">Elegí qué datos querés incluir en tu archivo Excel/CSV. (El Nombre, la Condición y los Precios siempre se incluyen).</p>
               
               <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-800 transition-colors">
                 <input type="checkbox" checked={exportOptions.bateria} onChange={e => setExportOptions({...exportOptions, bateria: e.target.checked})} className="size-5 accent-sky-500 rounded bg-zinc-950 border-zinc-700" />
@@ -546,7 +600,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL: INSTRUCCIONES E IMPORTACIÓN MASIVA (Mantenido igual) */}
+      {/* MODAL: IMPORTAR MASIVO */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
@@ -554,28 +608,22 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
               <h3 className="text-xl font-black text-white flex items-center gap-2"><FileSpreadsheet className="size-5 text-sky-400"/> Importar Stock Masivo</h3>
               <button onClick={() => setShowImportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
-            
             <div className="p-6 space-y-6">
               <div className="bg-sky-500/10 border border-sky-500/20 p-4 rounded-2xl">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-sky-500 mb-2 flex items-center gap-1.5"><Info className="size-4"/> Instrucciones de Excel</h4>
-                <p className="text-xs text-zinc-300 leading-relaxed">
-                  Para subir muchos equipos a la vez, armá una tabla en Excel con <strong>exactamente este orden de columnas</strong> (no cambies los nombres de los títulos en la fila 1):
-                </p>
+                <p className="text-xs text-zinc-300 leading-relaxed">Para subir muchos equipos a la vez, armá una tabla en Excel con <strong>exactamente este orden de columnas</strong>:</p>
                 <div className="mt-3 overflow-x-auto bg-black/50 border border-zinc-800 rounded-lg p-2">
                   <table className="text-[10px] text-zinc-400 w-full text-left whitespace-nowrap">
                     <thead className="text-white font-bold border-b border-zinc-800">
-                      <tr><th className="pr-2 pb-1">Equipo</th><th className="pr-2 pb-1">Condicion</th><th className="pr-2 pb-1">Bateria</th><th className="pr-2 pb-1">IMEI</th><th className="pr-2 pb-1">Costo_USD</th><th className="pb-1">Precio_Venta_USD</th></tr>
+                      <tr><th className="pr-2 pb-1">Equipo</th><th className="pr-2 pb-1">Condicion</th><th className="pr-2 pb-1">Bateria</th><th className="pr-2 pb-1">IMEI</th><th className="pr-2 pb-1">Costo_USD</th><th className="pr-2 pb-1">Precio_Mayorista_USD</th><th className="pb-1">Precio_Minorista_USD</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td className="pr-2 pt-1">iPhone 13</td><td className="pr-2 pt-1">Usado</td><td className="pr-2 pt-1">85</td><td className="pr-2 pt-1">351234...</td><td className="pr-2 pt-1">450</td><td className="pt-1">550</td></tr>
+                      <tr><td className="pr-2 pt-1">iPhone 13 - 128 GB - Midnight</td><td className="pr-2 pt-1">A</td><td className="pr-2 pt-1">85</td><td className="pr-2 pt-1">351234...</td><td className="pr-2 pt-1">450</td><td className="pr-2 pt-1">500</td><td className="pt-1">550</td></tr>
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-zinc-400 mt-3 font-bold italic">
-                  💡 Importante: Cuando termines tu Excel, andá a "Guardar como..." y elegí el formato <strong>CSV (delimitado por comas)</strong>.
-                </p>
+                <p className="text-xs text-zinc-400 mt-3 font-bold italic">💡 Guardá como <strong>CSV (delimitado por comas)</strong>.</p>
               </div>
-
               <div>
                 <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportarCSV} className="hidden" id="csvUpload" />
                 <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950 hover:bg-sky-500/5")}>
