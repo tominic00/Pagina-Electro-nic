@@ -4,7 +4,7 @@ import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 // 🚀 LISTAS DESPLEGABLES OFICIALES
-const MODELOS_APPLE = ["iPhone 11", "iPhone 12", "iPhone 13", "iPhone 13 mini", "iPhone 13 Pro", "iPhone 13 Pro Max", "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max", "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max", "iPhone 16", "iPhone 16 Plus", "iPhone 16 Pro", "iPhone 16 Pro Max", "iPhone 16e", "iPhone 17", "iPhone 17 Air", "iPhone 17 Pro"]
+const MODELOS_APPLE = ["iPhone 11", "iPhone 12", "iPhone 13", "iPhone 13 mini", "iPhone 13 Pro", "iPhone 13 Pro Max", "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max", "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max", "iPhone 16", "iPhone 16 Plus", "iPhone 16 Pro", "iPhone 16 Pro Max", "iPhone 16e", "iPhone 17", "iPhone 17 Air", "iPhone 17 Pro", "iPhone 17 Pro Max" ]
 const COLORES = ["Midnight", "Starlight", "Blue", "Black", "White", "(PRODUCT)RED", "Purple", "Deep Purple", "Pink", "Yellow", "Green", "Graphite", "Gold", "Silver", "Space Gray", "Natural Titanium", "Blue Titanium"]
 const CAPACIDADES = ["32 GB", "64 GB", "128 GB", "256 GB", "512 GB", "1 TB", "N/A"]
 const CONDICIONES = ["Nuevo Sellado", "A+", "A", "A-", "B", "C"]
