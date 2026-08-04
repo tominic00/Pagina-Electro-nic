@@ -1,150 +1,184 @@
-"use client"
-
 import { useState, useEffect } from "react"
-import { Shield, KeyRound, Users, Plus, Edit3, Trash2, Loader2, UserCheck, Lock, ToggleLeft, ToggleRight, CheckCircle2, X, AlertCircle, Wrench, Package, Smartphone } from "lucide-react"
+import { Users, Plus, X, Loader2, Info, UserX, ShieldAlert, CheckCircle2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-export function TabEquipo() {
-  const [usuarios, setUsuarios] = useState<any[]>([])
+export function TabEquipo({ usuarioActual }: { usuarioActual: any }) {
+  const [equipo, setEquipo] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   
-  const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  
-  // Estado del formulario
-  const [formData, setFormData] = useState({
-    nombre: "",
+  // Estado para invitaciones
+  const [form, setForm] = useState({
     email: "",
-    password: "",
-    rol: "empleado",
-    estado: "Activo",
-    accesos: { taller: true, crm: true, inventario: false, mayorista: false, equipo: false }
+    rol: "Vendedor",
+    password: "" // Contraseña temporal
   })
 
-  const fetchUsuarios = async () => {
+  const fetchData = async () => {
     setLoading(true)
-    const { data } = await supabase.from("equipo_trabajo").select("*").order("created_at", { ascending: true })
-    if (data) setUsuarios(data)
+    // Usamos la tabla "equipo_trabajo" que ya tenés configurada para el login
+    const { data } = await supabase.from("equipo_trabajo").select("*").order("rol", { ascending: true })
+    if (data) setEquipo(data)
     setLoading(false)
   }
 
-  useEffect(() => {
-    fetchUsuarios()
-  }, [])
+  useEffect(() => { fetchData() }, [])
 
-  const abrirNuevo = () => {
-    setEditingId(null)
-    setFormData({ nombre: "", email: "", password: "", rol: "empleado", estado: "Activo", accesos: { taller: true, crm: true, inventario: false, mayorista: false, equipo: false } })
-    setShowModal(true)
-  }
+  // Solo los Dueños o Administradores pueden gestionar el equipo
+  const puedeGestionar = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
-  const abrirEdicion = (user: any) => {
-    setEditingId(user.id)
-    setFormData({
-      nombre: user.nombre,
-      email: user.email,
-      password: user.password,
-      rol: user.rol,
-      estado: user.estado,
-      accesos: typeof user.accesos === 'string' ? JSON.parse(user.accesos) : user.accesos
-    })
-    setShowModal(true)
-  }
-
-  const handleGuardar = async (e: React.FormEvent) => {
+  const handleInvitar = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!form.email || !form.password) return alert("Email y contraseña son obligatorios.")
     setIsSaving(true)
+
     try {
-      if (editingId) {
-        const { error } = await supabase.from("equipo_trabajo").update(formData).eq("id", editingId)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from("equipo_trabajo").insert([formData])
-        if (error) throw error
+      // 1. Chequear si el email ya existe
+      const { data: existe } = await supabase.from("equipo_trabajo").select("id").eq("email", form.email).single()
+      if (existe) throw new Error("Ya existe un usuario con este email.")
+
+      // 2. Definir accesos según el rol
+      const accesos = {
+        mayorista: true,
+        analiticas: form.rol === "Dueño/a" || form.rol === "Administrador",
+        configuracion: form.rol === "Dueño/a" || form.rol === "Administrador"
       }
+
+      // 3. Insertar el nuevo colaborador en la base de datos
+      const payload = {
+        nombre: form.email.split('@')[0], // Usamos la primera parte del email como nombre temporal
+        email: form.email,
+        password: form.password, // En un sistema real esto iría encriptado o vía Auth nativo
+        rol: form.rol,
+        estado: 'Activo',
+        accesos: accesos
+      }
+
+      const { error } = await supabase.from("equipo_trabajo").insert([payload])
+      if (error) throw new Error(error.message)
+
       setShowModal(false)
-      fetchUsuarios()
+      setForm({ email: "", rol: "Vendedor", password: "" })
+      fetchData()
+      
+      // Mensaje con los datos para mandarle por WhatsApp
+      alert(`✅ ¡Colaborador creado!
+
+Pasale estos datos para que ingrese:
+Email: ${payload.email}
+Clave: ${payload.password}`)
+      
     } catch (error: any) {
-      alert("Error al guardar usuario: " + error.message)
+      alert("Error: " + error.message)
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleEliminar = async (id: string, rol: string) => {
-    if (rol === 'admin') return alert("No podés eliminar a un Administrador principal por seguridad.")
-    if (confirm("¿Estás seguro de eliminar este acceso definitivamente?")) {
-      await supabase.from("equipo_trabajo").delete().eq("id", id)
-      fetchUsuarios()
+  const toggleEstado = async (id: string, estadoActual: string) => {
+    if (!puedeGestionar) return alert("No tenés permisos para hacer esto.")
+    
+    // Evitar que se desactive a sí mismo
+    if (id === usuarioActual.id) return alert("No podés desactivar tu propia cuenta.")
+
+    const nuevoEstado = estadoActual === "Activo" ? "Desactivado" : "Activo"
+    const accion = estadoActual === "Activo" ? "desactivar" : "activar"
+    
+    if (!confirm(`¿Estás seguro de ${accion} a este usuario?`)) return
+
+    try {
+      await supabase.from("equipo_trabajo").update({ estado: nuevoEstado }).eq("id", id)
+      fetchData()
+    } catch (error) {
+      alert("Error al cambiar el estado.")
     }
   }
 
-  const toggleAcceso = (modulo: keyof typeof formData.accesos) => {
-    setFormData(prev => ({
-      ...prev,
-      accesos: { ...prev.accesos, [modulo]: !prev.accesos[modulo] }
-    }))
+  const eliminarColaborador = async (id: string, rol: string) => {
+    if (!puedeGestionar) return
+    if (id === usuarioActual.id) return alert("No podés eliminar tu propia cuenta.")
+    if (rol === "Dueño/a" && usuarioActual.rol !== "Dueño/a") return alert("Solo un Dueño puede eliminar a otro Dueño.")
+    
+    if (!confirm("⚠️ ATENCIÓN: ¿Estás seguro de eliminar a este colaborador permanentemente?")) return
+
+    try {
+      await supabase.from("equipo_trabajo").delete().eq("id", id)
+      fetchData()
+    } catch (error) {
+      alert("Error al eliminar colaborador.")
+    }
+  }
+
+  if (!puedeGestionar) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center text-center px-4">
+        <ShieldAlert className="size-16 text-zinc-700 mb-4" />
+        <h3 className="text-xl font-black text-white">Acceso Denegado</h3>
+        <p className="text-zinc-500 mt-2 max-w-sm">Solo los Administradores y Dueños pueden ver y gestionar los accesos del equipo.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6 text-left w-full animate-in fade-in duration-500">
-      
-      <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6">
+    <div className="p-6">
+      {/* CABECERA */}
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2"><Shield className="size-6 text-purple-500"/> Gestión de Accesos y Equipo</h2>
-          <p className="text-xs text-zinc-400 mt-1">Creá cuentas para tus socios o empleados y definí qué pueden ver.</p>
+          <h2 className="text-xl font-black text-white flex items-center gap-2"><Users className="size-5 text-emerald-500"/> Equipo</h2>
+          <p className="text-xs text-zinc-500 mt-1">Quién puede entrar a tu tienda y qué puede hacer.</p>
         </div>
-        <button onClick={abrirNuevo} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95">
-          <Plus className="size-4"/> Nueva Cuenta
+        <button onClick={() => setShowModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+          <Plus className="size-4 font-black" /> Invitar colaborador
         </button>
       </div>
 
-      <div className="bg-[#161B22] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
-        {loading ? (
-          <div className="p-20 flex justify-center"><Loader2 className="size-8 animate-spin text-purple-500"/></div>
-        ) : (
-          <div className="overflow-x-auto">
+      {loading ? (
+        <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div>
+      ) : (
+        <div className="space-y-6">
+          
+          {/* TABLA DE COLABORADORES ACTIVOS */}
+          <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-zinc-950/50 border-b border-zinc-800 text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                <tr><th className="p-4 pl-6">Usuario</th><th className="p-4">Credenciales</th><th className="p-4">Permisos Activos</th><th className="p-4 text-center">Estado</th><th className="p-4 text-center pr-6">Acciones</th></tr>
+              <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
+                <tr>
+                  <th className="p-4 rounded-tl-xl">Nombre</th>
+                  <th className="p-4">Email</th>
+                  <th className="p-4">Rol</th>
+                  <th className="p-4 text-center">Estado</th>
+                  <th className="p-4 text-center rounded-tr-xl">Acciones</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
-                {usuarios.map(user => {
-                  const accesos = typeof user.accesos === 'string' ? JSON.parse(user.accesos) : user.accesos;
-                  
+                {equipo.map(user => {
+                  const isMe = user.id === usuarioActual.id
                   return (
-                    <tr key={user.id} className="hover:bg-zinc-800/30 transition-colors">
-                      <td className="p-4 pl-6">
-                        <p className="font-bold text-base text-white">{user.nombre}</p>
-                        <span className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md mt-1 inline-block border", user.rol === 'admin' ? "bg-purple-500/10 text-purple-400 border-purple-500/30" : user.rol === 'socio' ? "bg-sky-500/10 text-sky-400 border-sky-500/30" : "bg-zinc-800 text-zinc-400 border-zinc-700")}>
-                          {user.rol}
-                        </span>
+                    <tr key={user.id} className={cn("hover:bg-zinc-900/50 transition-colors", user.estado !== 'Activo' && "opacity-50")}>
+                      <td className="p-4 font-bold text-white">
+                        {user.nombre} {isMe && <span className="text-zinc-500 font-normal ml-1">(vos)</span>}
                       </td>
-                      <td className="p-4">
-                        <p className="text-sm font-medium text-zinc-300 flex items-center gap-1.5"><UserCheck className="size-3 text-zinc-500"/> {user.email}</p>
-                        <p className="text-xs font-mono text-zinc-500 mt-1 flex items-center gap-1.5"><KeyRound className="size-3 text-zinc-600"/> {user.password}</p>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex gap-1.5">
-                          {accesos?.taller && <span className="size-6 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500" title="Taller"><Wrench className="size-3"/></span>}
-                          {accesos?.crm && <span className="size-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500" title="CRM"><Users className="size-3"/></span>}
-                          {accesos?.inventario && <span className="size-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500" title="Inventario"><Package className="size-3"/></span>}
-                          {accesos?.mayorista && <span className="size-6 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-500" title="Mayorista B2B"><Smartphone className="size-3"/></span>}
-                          {accesos?.equipo && <span className="size-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500" title="Admin General"><Shield className="size-3"/></span>}
-                        </div>
+                      <td className="p-4 text-zinc-400">{user.email}</td>
+                      <td className="p-4 text-zinc-300 font-medium">{user.rol}</td>
+                      <td className="p-4 text-center">
+                        <span className={cn("px-2 py-1 rounded text-[9px] font-black uppercase border", 
+                          user.estado === 'Activo' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"
+                        )}>{user.estado}</span>
                       </td>
                       <td className="p-4 text-center">
-                        <span className={cn("text-[10px] font-black uppercase px-2 py-1 rounded-lg", user.estado === 'Activo' ? "text-emerald-500" : "text-red-500")}>
-                          {user.estado}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center pr-6">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button onClick={() => abrirEdicion(user)} className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-purple-400 transition-colors"><Edit3 className="size-4" /></button>
-                          <button onClick={() => handleEliminar(user.id, user.rol)} disabled={user.rol === 'admin'} className="p-2 rounded-lg text-zinc-500 hover:bg-red-500/10 hover:text-red-500 transition-colors disabled:opacity-30"><Trash2 className="size-4" /></button>
-                        </div>
+                        {!isMe && (
+                          <div className="flex justify-center gap-2">
+                            <button onClick={() => toggleEstado(user.id, user.estado)} className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 transition-colors">
+                              {user.estado === 'Activo' ? 'Desactivar' : 'Activar'}
+                            </button>
+                            {usuarioActual.rol === "Dueño/a" && (
+                              <button onClick={() => eliminarColaborador(user.id, user.rol)} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-white hover:bg-red-500 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 transition-colors">
+                                Eliminar
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )
@@ -152,58 +186,60 @@ export function TabEquipo() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
 
-      {/* MODAL CREAR / EDITAR USUARIO */}
+          {/* CAJA INFORMATIVA ESTILO FOTO */}
+          <div className="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 flex items-start gap-3">
+            <Info className="size-5 text-sky-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-sky-400 mb-1">Sobre los permisos del equipo</p>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Los <strong>Vendedores</strong> solo pueden ver y operar los módulos de Stock, Caja, Reservas, Usados y Garantías. No tienen acceso a las analíticas de ganancias, configuraciones de negocio ni eliminación permanente de registros. Los <strong>Administradores y Dueños</strong> tienen control total del sistema.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* 🚀 MODAL INVITAR COLABORADOR (ESTILO OSCURO / ESTRUCTURADO) */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl my-auto">
             
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-500/10 rounded-xl border border-purple-500/20"><Shield className="size-5 text-purple-400"/></div>
-                <div><h3 className="text-lg font-black text-white">{editingId ? "Editar Cuenta" : "Nueva Cuenta de Acceso"}</h3><p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Configuración de Seguridad</p></div>
-              </div>
-              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl hover:bg-zinc-800"><X className="size-5"/></button>
-            </div>
-
-            <form onSubmit={handleGuardar} className="p-6 bg-[#161B22] space-y-6">
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Nombre y Apellido</label><input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-4 py-3 outline-none focus:border-purple-500" placeholder="Ej: Lucas (Socio)" /></div>
-                <div><label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Rol en la Empresa</label><select value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-4 py-3 outline-none focus:border-purple-500"><option value="admin">Administrador Total</option><option value="socio">Socio Comercial</option><option value="empleado">Empleado / Técnico</option></select></div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Usuario de Ingreso (Puede ser Email o Alias)</label><div className="relative"><UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input required type="text" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl pl-9 pr-4 py-3 outline-none focus:border-purple-500" placeholder="lucas@empresa.com" /></div></div>
-                <div><label className="text-[10px] font-black uppercase text-zinc-500 block mb-1">Contraseña o PIN</label><div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input required type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white font-mono rounded-xl pl-9 pr-4 py-3 outline-none focus:border-purple-500" placeholder="Escribir clave..." /></div></div>
-              </div>
-
-              {/* PANEL DE PERMISOS */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-inner">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 mb-4">Control de Accesos (Módulos)</h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Object.keys(formData.accesos).map((modulo) => (
-                    <button type="button" key={modulo} onClick={() => toggleAcceso(modulo as keyof typeof formData.accesos)} className={cn("p-3 rounded-xl border flex items-center justify-between transition-all", formData.accesos[modulo as keyof typeof formData.accesos] ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-zinc-950 border-zinc-800 text-zinc-500")}>
-                      <span className="text-xs font-black uppercase tracking-widest">{modulo}</span>
-                      {formData.accesos[modulo as keyof typeof formData.accesos] ? <ToggleRight className="size-5 text-emerald-400"/> : <ToggleLeft className="size-5 text-zinc-600"/>}
-                    </button>
-                  ))}
-                </div>
-                {formData.rol === 'admin' && <p className="text-[10px] text-amber-500 flex items-center gap-1 mt-3 font-bold"><AlertCircle className="size-3"/> Al ser Administrador, el sistema podría ignorar estas restricciones y darle acceso total.</p>}
-              </div>
-
-            </form>
-
-            <div className="p-6 border-t border-zinc-800 bg-zinc-950 flex gap-4">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-3.5 rounded-xl font-bold text-sm text-zinc-400 bg-zinc-900 hover:bg-zinc-800 transition-colors">Cancelar</button>
-              <button onClick={handleGuardar} disabled={isSaving} className="flex-[2] py-3.5 rounded-xl font-black text-sm text-white shadow-lg transition-all flex justify-center items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50">
-                {isSaving ? <Loader2 className="size-5 animate-spin" /> : "GUARDAR CUENTA Y PERMISOS"}
-              </button>
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><Users className="size-5 text-emerald-400"/> Invitar colaborador</h3>
+              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
             </div>
             
+            <form onSubmit={handleInvitar} className="p-6 bg-[#161B22] space-y-5">
+              
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Email del colaborador</label>
+                <input required type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="persona@email.com" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Contraseña Temporal de Acceso</label>
+                <input required type="text" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Ej: Vendedor123" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all font-mono" />
+                <p className="text-[10px] text-zinc-500 mt-1">El sistema no manda emails todavía. Deberás pasarle la clave manualmente.</p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Rol asignado</label>
+                <select value={form.rol} onChange={e => setForm({...form, rol: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
+                  <option value="Vendedor">Vendedor (Restringido)</option>
+                  <option value="Administrador">Administrador (Total)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 shadow-lg shadow-emerald-500/20">
+                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : "Generar invitación"}
+                </button>
+              </div>
+              
+            </form>
           </div>
         </div>
       )}

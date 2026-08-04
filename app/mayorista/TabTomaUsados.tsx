@@ -10,6 +10,29 @@ const CAMPOS_INSPECCION = [
   "Cuenta desvinculada", "Bloqueo de activación deshabilitado"
 ]
 
+// 🚀 LISTAS DESPLEGABLES PREDEFINIDAS
+const MARCAS = ["Apple", "Samsung", "Motorola", "Xiaomi", "Otro"]
+
+const MODELOS = [
+  "iPhone 11", "iPhone 11 Pro", "iPhone 11 Pro Max",
+  "iPhone 12 mini", "iPhone 12", "iPhone 12 Pro", "iPhone 12 Pro Max",
+  "iPhone 13 mini", "iPhone 13", "iPhone 13 Pro", "iPhone 13 Pro Max",
+  "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max",
+  "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max",
+  "iPhone 16", "iPhone 16e", "iPhone 16 Pro", "iPhone 16 Pro Max",
+    "iPhone 17", "iPhone 17 air", "iPhone 17 Pro", "iPhone 17 Pro Max",
+  "Apple Watch", "iPad", "MacBook", "Otro"
+]
+
+const ALMACENAMIENTOS = ["64 GB", "128 GB", "256 GB", "512 GB", "1 TB", "2 TB", "N/A"]
+
+const COLORES = [
+  "Negro / Medianoche", "Blanco / Estelar", "Rojo (Product RED)", 
+  "Azul", "Verde", "Morado / Púrpura", "Amarillo", "Rosa", 
+  "Titanio Natural", "Titanio Azul", "Titanio Blanco", "Titanio Negro", 
+  "Plata", "Oro", "Grafito", "Otro"
+]
+
 export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
   const [tomas, setTomas] = useState<any[]>([])
   const [clientesDb, setClientesDb] = useState<any[]>([])
@@ -19,7 +42,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
 
   // ESTADO DEL FORMULARIO
   const [form, setForm] = useState({
-    cliente: "", marca: "", modelo: "", almacenamiento: "", color: "", imei: "",
+    cliente: "", marca: "Apple", modelo: "", almacenamiento: "", color: "", imei: "",
     bateria: "", condicion_general: "Bueno", accesorios: "", observaciones: "",
     precio_reventa: "", costo_reparacion: 0, otros_costos: 0, margen_objetivo: 20
   })
@@ -65,7 +88,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
     setIsSaving(true)
 
     try {
-      const nombreEquipo = `${form.marca} ${form.modelo} ${form.almacenamiento ? `- ${form.almacenamiento}` : ""}`.trim()
+      const nombreEquipo = `${form.marca} ${form.modelo} ${form.almacenamiento && form.almacenamiento !== 'N/A' ? `- ${form.almacenamiento}` : ""}`.trim()
       
       const payload = {
         cliente: form.cliente,
@@ -208,20 +231,42 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
                 </div>
               </div>
 
-              {/* 2. EQUIPO */}
+              {/* 2. EQUIPO (CON LISTAS DESPLEGABLES) */}
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-800 pb-1">2. Equipo</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <input type="text" value={form.marca} onChange={e => setForm({...form, marca: e.target.value})} placeholder="Marca" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
-                  <input required type="text" value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value})} placeholder="Modelo *" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
-                  <input type="text" value={form.almacenamiento} onChange={e => setForm({...form, almacenamiento: e.target.value})} placeholder="Almacenamiento" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
-                  <input type="text" value={form.color} onChange={e => setForm({...form, color: e.target.value})} placeholder="Color" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
+                  
+                  {/* Marca */}
+                  <select value={form.marca} onChange={e => setForm({...form, marca: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
+                    <option value="" disabled>Marca</option>
+                    {MARCAS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+
+                  {/* Modelo */}
+                  <select required value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
+                    <option value="" disabled>Modelo *</option>
+                    {MODELOS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+
+                  {/* Almacenamiento */}
+                  <select value={form.almacenamiento} onChange={e => setForm({...form, almacenamiento: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
+                    <option value="" disabled>Capacidad</option>
+                    {ALMACENAMIENTOS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+
+                  {/* Color */}
+                  <select value={form.color} onChange={e => setForm({...form, color: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
+                    <option value="" disabled>Color</option>
+                    {COLORES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                   
                   <input type="text" value={form.imei} onChange={e => setForm({...form, imei: e.target.value})} placeholder="IMEI / N.° serie" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
                   <input type="number" value={form.bateria} onChange={e => setForm({...form, bateria: e.target.value})} placeholder="Batería %" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
+                  
                   <select value={form.condicion_general} onChange={e => setForm({...form, condicion_general: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all">
                     <option>Excelente</option><option>Bueno</option><option>Con detalles</option><option>Para repuestos</option>
                   </select>
+                  
                   <input type="text" value={form.accesorios} onChange={e => setForm({...form, accesorios: e.target.value})} placeholder="Accesorios" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
                   
                   <div className="col-span-2 md:col-span-4">
@@ -287,7 +332,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-[#161B22] py-4">
                 <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className="px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 shadow-lg shadow-emerald-500/20">
-                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : "Guardar Cotización"}
+                  {isSaving ? <Loader2 className="size-4 animate-spin" /> : "Guardar Cotización"}
                 </button>
               </div>
 
