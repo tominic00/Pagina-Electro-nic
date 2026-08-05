@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react"
-import { Bot, Settings, MessageSquare, Play, Loader2, Save, Sparkles, User, Key, ShieldAlert } from "lucide-react"
-import supabase from "@/lib/supabase"
+import { Bot, Settings, Play, Save, Sparkles, Key } from "lucide-react"
+import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
   const [apiKey, setApiKey] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [mensajes, setMensajes] = useState<{rol: "user" | "ia", texto: string}[]>([
-    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual. Configurá mi cerebro a la izquierda, agregá tu API Key de OpenAI y probá hablarme." }
+    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Google Gemini (100% Gratis). Configurá tu API Key a la izquierda y probemos." }
   ])
   const [inputMensaje, setInputMensaje] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -27,13 +27,11 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 {STOCK_DATA}`
 
   useEffect(() => {
-    // Cargar config local
-    const savedKey = localStorage.getItem("electro_openai_key") || ""
+    const savedKey = localStorage.getItem("electro_gemini_key") || ""
     const savedPrompt = localStorage.getItem("electro_ai_prompt") || defaultPrompt
     setApiKey(savedKey)
     setSystemPrompt(savedPrompt)
 
-    // Traer stock para el contexto
     const fetchStock = async () => {
       const { data } = await supabase.from("stock_mayorista").select("*").eq("estado", "Disponible")
       if (data) setStockActual(data)
@@ -42,7 +40,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   }, [])
 
   const guardarConfig = () => {
-    localStorage.setItem("electro_openai_key", apiKey)
+    localStorage.setItem("electro_gemini_key", apiKey)
     localStorage.setItem("electro_ai_prompt", systemPrompt)
     alert("✅ Configuración guardada en tu navegador.")
   }
@@ -50,7 +48,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   const enviarMensaje = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputMensaje.trim()) return
-    if (!apiKey) return alert("⚠️ Necesitás pegar una API Key de OpenAI para probar el simulador.")
+    if (!apiKey) return alert("⚠️ Necesitás pegar tu API Key GRATIS de Google Gemini para probar el simulador.")
 
     const nuevoMensajeUsuario = { rol: "user" as const, texto: inputMensaje }
     const historial = [...mensajes, nuevoMensajeUsuario]
@@ -60,50 +58,41 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
     setIsTyping(true)
 
     try {
-      // 1. Formateamos el stock para que la IA lo entienda
       const stockFormateado = stockActual.map(eq => 
         `- ${eq.equipo} | Condición: ${eq.condicion} | Bat: ${eq.bateria || 'N/A'}% | Precio Minorista: USD ${eq.precio_minorista_usd || eq.precio_venta_usd}`
       ).join("\n")
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // 2. Preparamos los mensajes para OpenAI
-      const mensajesParaOpenAI = [
-        { role: "system", content: promptConStock },
-        // Pasamos el historial previo para que tenga contexto
-        ...historial.slice(1).map(m => ({
-          role: m.rol === "user" ? "user" : "assistant",
-          content: m.texto
-        }))
-      ]
+      // Formato de historial para Google Gemini API
+      const contentsForGemini = historial.slice(1).map(m => ({
+        role: m.rol === "user" ? "user" : "model",
+        parts: [{ text: m.texto }]
+      }))
 
-      // 3. Llamada a OpenAI (Directa desde el cliente solo para el simulador)
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      // Llamada directa a Gemini 1.5 Flash (Gratuito y rápido)
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-4o-mini", // El modelo más rápido y barato
-          messages: mensajesParaOpenAI,
-          temperature: 0.7,
+          system_instruction: {
+            parts: [{ text: promptConStock }]
+          },
+          contents: contentsForGemini
         })
       })
 
       const data = await res.json()
-      
-      if (data.error) {
-        throw new Error(data.error.message)
-      }
 
-      const respuestaIA = data.choices[0].message.content
+      if (data.error) throw new Error(data.error.message)
+
+      const respuestaIA = data.candidates[0].content.parts[0].text
 
       setMensajes([...historial, { rol: "ia", texto: respuestaIA }])
 
     } catch (error: any) {
       console.error(error)
-      setMensajes([...historial, { rol: "ia", texto: `❌ Error de conexión con OpenAI: ${error.message}` }])
+      setMensajes([...historial, { rol: "ia", texto: `❌ Error de conexión con Gemini: ${error.message}` }])
     } finally {
       setIsTyping(false)
     }
@@ -112,8 +101,8 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA</h2>
-        <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático y probá cómo responde leyendo tu stock real.</p>
+        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Gratis)</h2>
+        <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Google Gemini.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -121,18 +110,18 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         {/* PANEL IZQUIERDO: CONFIGURACIÓN DEL CEREBRO */}
         <div className="space-y-6">
           <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Key className="size-4"/> Conexión OpenAI</h3>
+            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Key className="size-4"/> Conexión Google Gemini (100% Gratis)</h3>
             
-            <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de OpenAI (ChatGPT)</label>
+            <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de Gemini</label>
             <input 
               type="password" 
               value={apiKey} 
               onChange={e => setApiKey(e.target.value)} 
-              placeholder="sk-proj-..." 
+              placeholder="AIzaSy..." 
               className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono mb-2" 
             />
             <p className="text-[10px] text-zinc-500 leading-relaxed mb-4">
-              La llave se guarda de forma segura en tu navegador. Si no tenés una, podés generarla en <a href="https://platform.openai.com/api-keys" target="_blank" className="text-indigo-400 hover:underline">platform.openai.com</a>.
+              Obtené tu clave gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Google AI Studio</a>. No requiere tarjeta.
             </p>
 
             <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 mt-8 flex items-center gap-2"><Settings className="size-4"/> Comportamiento (System Prompt)</h3>
@@ -142,7 +131,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
               onChange={e => setSystemPrompt(e.target.value)} 
               className="w-full bg-[#161B22] border border-zinc-800 text-zinc-300 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono h-[350px] resize-none" 
             />
-            <p className="text-[10px] text-zinc-500 mt-2">La etiqueta <strong>{`{STOCK_DATA}`}</strong> será reemplazada dinámicamente por tus equipos disponibles.</p>
+            <p className="text-[10px] text-zinc-500 mt-2">La etiqueta <strong>{`{STOCK_DATA}`}</strong> se reemplaza dinámicamente con tus equipos reales.</p>
 
             <button onClick={guardarConfig} className="w-full mt-6 bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 border border-zinc-700">
               <Save className="size-4"/> Guardar Configuración
