@@ -752,7 +752,14 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
               {/* CARGAR ARCHIVO */}
               <div>
-                <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportarCSV} className="hidden" id="csvUpload" />
+                <input 
+                  type="file" 
+                  accept=".csv, .numbers, .xlsx, .xls" 
+                  ref={fileInputRef} 
+                  onChange={handleImportarCSV} 
+                  className="hidden" 
+                  id="csvUpload" 
+                />
                 <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950 hover:bg-sky-500/5")}>
                   {isImporting ? (
                     <><Loader2 className="size-10 text-sky-500 animate-spin mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Procesando Importación...</span></>
