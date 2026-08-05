@@ -149,6 +149,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   }
 
 // 📤 IMPORTACIÓN UNIVERSAL (.CSV, .XLSX, .NUMBERS)
+
 const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -157,68 +158,95 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const reader = new FileReader();
   reader.onload = async (event) => {
     try {
-      const data = event.target?.result;
+      const data = new Uint8Array(event.target?.result as ArrayBuffer);
       
-      // La librería XLSX procesa cualquier formato automáticamente
-      const workbook = XLSX.read(data, { type: 'binary' });
+      // Procesa .numbers, .xlsx y .csv de forma nativa
+      const workbook = XLSX.read(data, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       
-      // Convierte la planilla a un arreglo de objetos JSON
-      const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      // Convertir a objetos JSON usando la primera fila como clave
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-      // Omitir la fila de encabezados (índice 0)
-      const dataRows = rows.slice(1);
-
-      const payload = dataRows
-        .filter(cols => cols.length > 0 && cols[0]) // Ignorar filas vacías
-        .map(cols => {
-          const modelo = String(cols[1] || cols[0] || "").trim();
-          const capacidad = String(cols[2] || "").trim();
-          const color = String(cols[3] || "").trim();
-          const bateria = cols[4] ? String(cols[4]) : null;
-          const condicion = String(cols[5] || "A").trim();
-          const imei = cols[6] ? String(cols[6]) : null;
-          const costo_usd = Number(cols[7]) || 0;
-          const precio_venta_usd = Number(cols[8]) || 0;
-          const precio_minorista_usd = Number(cols[9]) || 0;
-          const estado = String(cols[10] || "Disponible").trim();
-          const observaciones = String(cols[11] || "").trim();
-
-          let nombreEquipo = modelo;
-          if (capacidad && capacidad !== "N/A" && !modelo.includes(capacidad)) nombreEquipo += ` - ${capacidad}`;
-          if (color && color !== "N/A" && !modelo.includes(color)) nombreEquipo += ` - ${color}`;
-
-          return {
-            equipo: nombreEquipo,
-            condicion: condicion,
-            bateria: bateria,
-            imei: imei,
-            costo_usd: costo_usd,
-            precio_venta_usd: precio_venta_usd,
-            precio_minorista_usd: precio_minorista_usd,
-            estado: estado,
-            observaciones: observaciones,
-            ingresado_por: usuarioActual.nombre
-          };
-        });
-
-      if (payload.length > 0) {
-        const { error } = await supabase.from("stock_mayorista").insert(payload);
-        if (error) throw error;
-        alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
-        setShowImportModal(false);
-        fetchData();
+      if (jsonData.length === 0) {
+        throw new Error("El archivo está vacío o no se pudieron leer las filas.");
       }
+
+      // Función auxiliar para buscar el valor de una columna ignorando mayúsculas/minúsculas y espacios
+      const getVal = (row: any, ...keys: string[]) => {
+        const rowKeys = Object.keys(row);
+        for (const key of keys) {
+          const foundKey = rowKeys.find(k => k.trim().toLowerCase().replace(/_/g, '') === key.toLowerCase().replace(/_/g, ''));
+          if (foundKey && row[foundKey] !== undefined && row[foundKey] !== "") {
+            return String(row[foundKey]).trim();
+          }
+        }
+        return "";
+      };
+
+      // Función para limpiar montos numéricos (quita $, comas, puntos de miles)
+      const parseMonto = (val: string) => {
+        if (!val) return 0;
+        const numLimpio = val.replace(/[^0-9.-]/g, '');
+        return parseFloat(numLimpio) || 0;
+      };
+
+      const payload = jsonData.map(row => {
+        const modelo = getVal(row, "Modelo", "Equipo", "Modelo/Equipo");
+        const capacidad = getVal(row, "Capacidad", "GB", "Memoria");
+        const color = getVal(row, "Color");
+        const bateria = getVal(row, "Bateria", "Batería", "% Bateria");
+        const condicion = getVal(row, "Condicion", "Condición", "Estado Fisico") || "A";
+        const imei = getVal(row, "IMEI", "Serie", "N° Serie");
+        const costo_usd = parseMonto(getVal(row, "Costo_Base_USD", "Costo", "Costo_USD", "Costo Base"));
+        const precio_venta_usd = parseMonto(getVal(row, "Precio_Mayorista_USD", "Precio Mayorista", "Mayorista"));
+        const precio_minorista_usd = parseMonto(getVal(row, "Precio_Minorista_USD", "Precio Minorista", "Minorista"));
+        const estado = getVal(row, "Estado") || "Disponible";
+        const observaciones = getVal(row, "Comentarios", "Observaciones", "Notas");
+
+        let nombreEquipo = modelo;
+        if (capacidad && capacidad !== "N/A" && !modelo.toLowerCase().includes(capacidad.toLowerCase())) {
+          nombreEquipo += ` - ${capacidad}`;
+        }
+        if (color && color !== "N/A" && !modelo.toLowerCase().includes(color.toLowerCase())) {
+          nombreEquipo += ` - ${color}`;
+        }
+
+        return {
+          equipo: nombreEquipo,
+          condicion: condicion,
+          bateria: bateria || null,
+          imei: imei || null,
+          costo_usd: costo_usd,
+          precio_venta_usd: precio_venta_usd,
+          precio_minorista_usd: precio_minorista_usd,
+          estado: estado,
+          observaciones: observaciones,
+          ingresado_por: usuarioActual.nombre
+        };
+      }).filter(p => p.equipo !== ""); // Filtrar si la fila no tiene modelo
+
+      if (payload.length === 0) {
+        throw new Error("No se encontraron filas válidas para importar.");
+      }
+
+      const { error } = await supabase.from("stock_mayorista").insert(payload);
+      if (error) throw error;
+
+      alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
+      setShowImportModal(false);
+      fetchData();
+
     } catch (error: any) {
-      alert("❌ Error al procesar el archivo. Verificá que las columnas coincidan con la plantilla.");
+      console.error("Error importación:", error);
+      alert(`❌ Error al procesar el archivo: ${error.message || "Verificá que el archivo tenga datos válidos."}`);
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 };
 
   const abrirNuevo = () => {
