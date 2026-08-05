@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_message_data' });
     }
 
-    // 3. Verificación de seguridad de Variables de Entorno
+    // 3. Verificación de variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const groqKey = process.env.GROQ_API_KEY;
@@ -28,26 +28,32 @@ export async function POST(req: Request) {
     const evolutionApiKey = process.env.EVOLUTION_API_KEY;
 
     if (!supabaseUrl || !supabaseKey || !groqKey) {
-      console.error('Faltan variables de entorno clave (Supabase o Groq)');
       return NextResponse.json({ error: 'Faltan variables de entorno' }, { status: 500 });
     }
 
-    // Inicializamos clientes adentro del handler
     const supabase = createClient(supabaseUrl, supabaseKey);
     const groq = new Groq({ apiKey: groqKey });
 
-    // 4. Consultar Supabase
-    const { data: productos } = await supabase.from('productos').select('*');
+    // 4. Traer SOLO los productos/precios mayoristas
+    // (Si tenés una columna 'es_mayorista', o tabla 'productos_mayoristas', ajustalo acá)
+    const { data: productosMayoristas } = await supabase
+      .from('productos')
+      .select('*'); 
 
-    // 5. Consultar a Groq
-    const systemPrompt = `Sos el asistente virtual de ventas MAYORISTAS de Electro-Nic. 
-Tu objetivo es responder dudas de clientes y vender productos basándote en esta lista:
-${JSON.stringify(productos || [], null, 2)}
+    // 5. System Prompt enfocado 100% en la venta MAYORISTA
+    const systemPrompt = `Sos el asesor exclusivo de ventas MAYORISTAS de Electro-Nic.
+Atendés a revendedores, comerciantes y clientes mayoristas por WhatsApp.
 
-Reglas:
-- Respuestas breves y claras para WhatsApp.
-- Mencioná precios mayoristas y condiciones si preguntan.`;
+Catálogo y precios mayoristas disponibles:
+${JSON.stringify(productosMayoristas || [], null, 2)}
 
+REGLAS DE ATENCIÓN MAYORISTA:
+1. Tu enfoque principal es la venta POR MAYOR (mencioná cantidades mínimas, packs o precios mayoristas si aplican).
+2. Mantené un tono profesional, ágil y comerciante.
+3. Respuestas concisas, listas para leer en WhatsApp (usá viñetas o negritas para precios/productos).
+4. Si preguntan por condiciones de compra mayorista, explicá los medios de pago, envíos y montos mínimos de compra de la tienda.`;
+
+    // 6. Generar respuesta con Groq
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
@@ -56,9 +62,9 @@ Reglas:
       model: 'llama-3.3-70b-versatile',
     });
 
-    const aiReply = chatCompletion.choices[0]?.message?.content || "Hola, en breve te atendemos.";
+    const aiReply = chatCompletion.choices[0]?.message?.content || "Hola! En un momento te asesoramos con tu pedido mayorista.";
 
-    // 6. Responder a WhatsApp vía Evolution API
+    // 7. Enviar a WhatsApp
     if (evolutionUrl && evolutionApiKey) {
       const INSTANCE_NAME = 'electro-nic-cel-bot';
       await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
@@ -77,7 +83,7 @@ Reglas:
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('ERROR DETALLADO EN WHATSAPP:', error?.message || error);
+    console.error('ERROR EN WHATSAPP MAYORISTA:', error?.message || error);
     return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
   }
 }
