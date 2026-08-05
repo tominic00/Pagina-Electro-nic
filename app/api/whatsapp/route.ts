@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-// @ts-expect-error - `groq-sdk` types are unavailable in this environment
 import Groq from 'groq-sdk';
 
 // Inicializamos Groq y Supabase
@@ -41,7 +40,7 @@ Reglas:
 - Mencioná precios mayoristas y condiciones si preguntan.`;
 
     // 5. Consultar a la IA (Groq)
-    const chatCompletion = await groq.chatCompletions.create({
+    const chatCompletion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: messageText }
