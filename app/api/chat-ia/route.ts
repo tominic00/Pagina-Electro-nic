@@ -5,28 +5,29 @@ export async function POST(req: Request) {
     const { apiKey, systemPrompt, mensajes } = await req.json()
 
     if (!apiKey) {
-      return NextResponse.json({ error: "Falta la API Key" }, { status: 400 })
+      return NextResponse.json({ error: "Falta la API Key de Groq" }, { status: 400 })
     }
 
-    // Armamos el prompt contextualizado
-    let promptCompleto = `[INSTRUCCIONES Y STOCK]\n${systemPrompt}\n\n[HISTORIAL DE CHAT]\n`
-    
-    mensajes.forEach((m: any) => {
-      promptCompleto += `${m.rol === "user" ? "Cliente" : "Vendedor"}: ${m.texto}\n`
-    })
-    
-    promptCompleto += `Vendedor:`
+    // Armamos el historial en el formato oficial de OpenAI / Groq
+    const messagesForGroq = [
+      { role: "system", content: systemPrompt },
+      ...mensajes.map((m: any) => ({
+        role: m.rol === "user" ? "user" : "assistant",
+        content: m.texto
+      }))
+    ]
 
-    // Llamada directa a la REST API oficial de Google (Servidor a Servidor)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
+    // Llamada a la API ultrarrápida de Groq (Modelo Llama-3.3-70b)
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: promptCompleto }]
-          }
-        ]
+        model: "llama-3.3-70b-versatile", // El modelo más potente y rápido de Meta
+        messages: messagesForGroq,
+        temperature: 0.65
       })
     })
 
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: data.error.message }, { status: 400 })
     }
 
-    const respuestaTexto = data.candidates?.[0]?.content?.parts?.[0]?.text || "No pude procesar la respuesta."
+    const respuestaTexto = data.choices?.[0]?.message?.content || "No pude procesar la respuesta."
 
     return NextResponse.json({ respuesta: respuestaTexto })
 

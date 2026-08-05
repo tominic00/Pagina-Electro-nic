@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react"
-import { Bot, Settings, Play, Save, Sparkles, Key, Crown } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import { Bot, Settings, Play, Save, Sparkles, Key, Zap } from "lucide-react"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
   const [apiKey, setApiKey] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [mensajes, setMensajes] = useState<{rol: "user" | "ia", texto: string}[]>([
-    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual. Configurá tu API Key a la izquierda y probemos." }
+    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Groq (Llama 3.3 Gratis). Configurá tu API Key a la izquierda y probemos." }
   ])
   const [inputMensaje, setInputMensaje] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -27,7 +27,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 {STOCK_DATA}`
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("electro_gemini_key") || ""
+    const savedKey = localStorage.getItem("electro_groq_key") || ""
     const savedPrompt = localStorage.getItem("electro_ai_prompt") || defaultPrompt
     setApiKey(savedKey)
     setSystemPrompt(savedPrompt)
@@ -40,16 +40,16 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   }, [])
 
   const guardarConfig = () => {
-    localStorage.setItem("electro_gemini_key", apiKey.trim())
+    localStorage.setItem("electro_groq_key", apiKey.trim())
     localStorage.setItem("electro_ai_prompt", systemPrompt)
-    alert("✅ Configuración guardada en tu navegador.")
+    alert("✅ Configuración de Groq guardada correctamente.")
   }
 
   const enviarMensaje = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputMensaje.trim()) return
     const keyLimpia = apiKey.trim()
-    if (!keyLimpia) return alert("⚠️ Necesitás pegar tu API Key de Google Gemini para probar el simulador.")
+    if (!keyLimpia) return alert("⚠️ Necesitás pegar tu API Key de Groq para probar el simulador.")
 
     const nuevoMensajeUsuario = { rol: "user" as const, texto: inputMensaje }
     const historial = [...mensajes, nuevoMensajeUsuario]
@@ -65,7 +65,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // 🚀 Consumimos nuestro propio endpoint de Next.js
+      // 🚀 Petición a nuestro backend en Next.js (/api/chat-ia)
       const res = await fetch("/api/chat-ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -93,8 +93,8 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA</h2>
-        <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Google Gemini.</p>
+        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Groq Gratis)</h2>
+        <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Llama 3.3.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -102,18 +102,18 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         {/* PANEL IZQUIERDO: CONFIGURACIÓN */}
         <div className="space-y-6">
           <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Crown className="size-4 text-amber-400"/> Conexión Google Gemini</h3>
+            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Zap className="size-4 text-orange-400"/> Conexión Groq (100% Gratis)</h3>
             
-            <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de Gemini</label>
+            <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de Groq</label>
             <input 
               type="password" 
               value={apiKey} 
               onChange={e => setApiKey(e.target.value)} 
-              placeholder="AIzaSy..." 
+              placeholder="gsk_..." 
               className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono mb-2" 
             />
             <p className="text-[10px] text-zinc-500 leading-relaxed mb-4">
-              Obtené tu clave en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Google AI Studio</a>.
+              Obtené tu clave gratis en <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">console.groq.com/keys</a>. No requiere tarjeta.
             </p>
 
             <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 mt-8 flex items-center gap-2"><Settings className="size-4"/> Comportamiento (System Prompt)</h3>
