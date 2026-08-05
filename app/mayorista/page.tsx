@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet } from "lucide-react"
-import  supabase from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-// Importamos todas las pestañas creadas
+// 🚀 Importamos ABSOLUTAMENTE TODAS las pestañas creadas
 import { TabResumen } from "./TabResumen"
 import { TabStock } from "./TabStock"
 import { TabVentas } from "./TabVentas"
+import { TabCaja } from "./TabCaja" // Agregado
 import { TabPedidos } from "./TabPedidos"
 import { TabReservas } from "./TabReservas"
 import { TabTomaUsados } from "./TabTomaUsados"
@@ -21,7 +22,8 @@ import { TabConfiguracion } from "./TabConfiguracion"
 import { TabClientesB2B } from "./TabClientesB2B"
 import { TabAnaliticas } from "./TabAnaliticas"
 
-type TabType = "resumen" | "stock" | "ventas" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion"
+// Agregamos "caja" a los tipos permitidos
+type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion"
 
 export default function PortalMayorista() {
   const [usuarioActual, setUsuarioActual] = useState<any | null>(null)
@@ -98,26 +100,27 @@ export default function PortalMayorista() {
 
   const esDueñoOAdmin = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
-// DATOS DEL MENÚ LATERAL (Mapeados con los nuevos accesos granulares)
+  // 🚀 MENÚ LATERAL: Diseño idéntico a la captura (con bordes de colores definidos en activeBg)
   const menuItems = [
-    { id: "resumen", label: "Dashboard", icon: LayoutDashboard, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white", ver: true },
-    { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white", ver: usuarioActual?.accesos?.stock ?? true },
-    { id: "ventas", label: "Caja POS", icon: ShoppingCart, color: "hover:bg-emerald-500/10 hover:text-emerald-400", activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", ver: usuarioActual?.accesos?.ventas ?? true },
-    { id: "caja", label: "Caja Diaria", icon: Wallet, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/20", ver: usuarioActual?.accesos?.caja ?? false },
-    { id: "reservas", label: "Reservas", icon: Calendar, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/20", ver: usuarioActual?.accesos?.reservas ?? true },
-    { id: "usados", label: "Toma Usados", icon: RefreshCcw, color: "hover:bg-teal-500/10 hover:text-teal-400", activeBg: "bg-teal-500/10 text-teal-400 border-teal-500/20", ver: usuarioActual?.accesos?.usados ?? true },
-    { id: "garantias", label: "Garantías", icon: ShieldCheck, color: "hover:bg-red-500/10 hover:text-red-400", activeBg: "bg-red-500/10 text-red-400 border-red-500/20", ver: usuarioActual?.accesos?.garantias ?? true },
-    { id: "proveedores", label: "Proveedores", icon: Briefcase, color: "hover:bg-fuchsia-500/10 hover:text-fuchsia-400", activeBg: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20", ver: usuarioActual?.accesos?.proveedores ?? false },
-    { id: "pedidos", label: "Pedidos", icon: Truck, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/20", ver: usuarioActual?.accesos?.pedidos ?? false },
-    { id: "listas", label: "Listas WP", icon: Share2, color: "hover:bg-orange-500/10 hover:text-orange-400", activeBg: "bg-orange-500/10 text-orange-400 border-orange-500/20", ver: usuarioActual?.accesos?.listas ?? true },
-    { id: "clientes", label: "Clientes", icon: Users, color: "hover:bg-purple-500/10 hover:text-purple-400", activeBg: "bg-purple-500/10 text-purple-400 border-purple-500/20", ver: usuarioActual?.accesos?.clientes ?? false },
-    { id: "equipo", label: "Equipo", icon: Users, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20", ver: usuarioActual?.accesos?.equipo ?? false },
-    { id: "analiticas", label: "Analíticas", icon: LineChart, color: "hover:bg-sky-500/10 hover:text-sky-400", activeBg: "bg-sky-500/10 text-sky-400 border-sky-500/20", ver: usuarioActual?.accesos?.analiticas ?? false },
-  ].filter(item => item.ver) // 🚀 ESTO ES CLAVE: Filtra la lista para que no renderice el botón si no tiene permiso
+    { id: "resumen", label: "Dashboard", icon: LayoutDashboard, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white border-zinc-600 shadow-md", ver: true },
+    { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white border-zinc-600 shadow-md", ver: usuarioActual?.accesos?.stock ?? true },
+    { id: "ventas", label: "Caja POS", icon: ShoppingCart, color: "hover:bg-emerald-500/10 hover:text-emerald-400", activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/50 shadow-[0_0_15px_-3px_rgba(16,185,129,0.15)]", ver: usuarioActual?.accesos?.ventas ?? true },
+    { id: "caja", label: "Caja Diaria", icon: Wallet, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/50 shadow-[0_0_15px_-3px_rgba(245,158,11,0.15)]", ver: usuarioActual?.accesos?.caja ?? false },
+    { id: "reservas", label: "Reservas", icon: Calendar, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/50 shadow-[0_0_15px_-3px_rgba(244,63,94,0.15)]", ver: usuarioActual?.accesos?.reservas ?? true },
+    { id: "usados", label: "Toma Usados", icon: RefreshCcw, color: "hover:bg-teal-500/10 hover:text-teal-400", activeBg: "bg-teal-500/10 text-teal-400 border-teal-500/50 shadow-[0_0_15px_-3px_rgba(20,184,166,0.15)]", ver: usuarioActual?.accesos?.usados ?? true },
+    { id: "garantias", label: "Garantías", icon: ShieldCheck, color: "hover:bg-red-500/10 hover:text-red-400", activeBg: "bg-red-500/10 text-red-400 border-red-500/50 shadow-[0_0_15px_-3px_rgba(239,68,68,0.15)]", ver: usuarioActual?.accesos?.garantias ?? true },
+    { id: "listas", label: "Listas WP", icon: Share2, color: "hover:bg-orange-500/10 hover:text-orange-400", activeBg: "bg-orange-500/10 text-orange-400 border-orange-500/50 shadow-[0_0_15px_-3px_rgba(249,115,22,0.15)]", ver: usuarioActual?.accesos?.listas ?? true },
+    { id: "clientes", label: "Clientes", icon: Users, color: "hover:bg-purple-500/10 hover:text-purple-400", activeBg: "bg-purple-500/10 text-purple-400 border-purple-500/50 shadow-[0_0_15px_-3px_rgba(168,85,247,0.15)]", ver: usuarioActual?.accesos?.clientes ?? false },
+    { id: "proveedores", label: "Proveedores", icon: Briefcase, color: "hover:bg-fuchsia-500/10 hover:text-fuchsia-400", activeBg: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/50 shadow-[0_0_15px_-3px_rgba(217,70,239,0.15)]", ver: usuarioActual?.accesos?.proveedores ?? false },
+    { id: "pedidos", label: "Pedidos", icon: Truck, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_-3px_rgba(99,102,241,0.15)]", ver: usuarioActual?.accesos?.pedidos ?? false },
+    { id: "equipo", label: "Equipo", icon: Users, color: "hover:bg-sky-500/10 hover:text-sky-400", activeBg: "bg-sky-500/10 text-sky-400 border-sky-500/50 shadow-[0_0_15px_-3px_rgba(14,165,233,0.15)]", ver: usuarioActual?.accesos?.equipo ?? false },
+    { id: "analiticas", label: "Analíticas", icon: LineChart, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/50 shadow-[0_0_15px_-3px_rgba(244,63,94,0.15)]", ver: usuarioActual?.accesos?.analiticas ?? false },
+  ].filter(item => item.ver)
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-white font-sans overflow-hidden">
       
+      {/* SIDEBAR DESKTOP */}
       <aside className="w-64 flex-shrink-0 bg-[#0A0A0A] border-r border-zinc-800 hidden xl:flex flex-col">
         <div className="h-20 flex items-center px-6 border-b border-zinc-800">
           <div>
@@ -128,17 +131,17 @@ export default function PortalMayorista() {
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1.5 hide-scrollbar">
+        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2 hide-scrollbar">
           {menuItems.map(item => (
             <button 
               key={item.id} 
               onClick={() => setActiveTab(item.id as TabType)} 
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all border border-transparent",
-                activeTab === item.id ? item.activeBg : `text-zinc-400 ${item.color}`
+                "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all border",
+                activeTab === item.id ? item.activeBg : `border-transparent text-zinc-400 hover:text-white hover:bg-zinc-900/50`
               )}
             >
-              <item.icon className="size-4" />
+              <item.icon className={cn("size-5", activeTab === item.id ? "" : "opacity-70")} />
               {item.label}
             </button>
           ))}
@@ -148,21 +151,22 @@ export default function PortalMayorista() {
           <button 
             onClick={() => setActiveTab("configuracion")} 
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all border border-transparent",
-              activeTab === "configuracion" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+              "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all border",
+              activeTab === "configuracion" ? "bg-zinc-800 text-white border-zinc-600 shadow-md" : "border-transparent text-zinc-400 hover:bg-zinc-900 hover:text-white"
             )}
           >
-            <Settings className="size-4" /> Configuración
+            <Settings className="size-5 opacity-70" /> Configuración
           </button>
           
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-zinc-500 hover:bg-red-500/10 hover:text-red-400 transition-colors">
-            <LogOut className="size-4" /> Cerrar Sesión
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold text-zinc-500 hover:bg-red-500/10 hover:text-red-400 transition-colors border border-transparent">
+            <LogOut className="size-5 opacity-70" /> Cerrar Sesión
           </button>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#0A0A0A]">
         
+        {/* HEADER TOP */}
         <header className="h-20 flex items-center justify-between px-6 border-b border-zinc-800 bg-[#0A0A0A]">
           <div className="xl:hidden flex items-center gap-2">
              <Smartphone className="size-6 text-emerald-400" />
@@ -174,49 +178,49 @@ export default function PortalMayorista() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl">
+            <div className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-2xl">
               <UserCheck className="size-4 text-emerald-500" />
               <span className="text-xs font-bold text-zinc-300">{usuarioActual.nombre} <span className="text-zinc-500 font-normal">({usuarioActual.rol})</span></span>
             </div>
             
-            <button onClick={() => setActiveTab("notificaciones")} className={cn("p-2.5 border rounded-xl transition-all relative group", activeTab === "notificaciones" ? "bg-zinc-800 border-zinc-700 text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50")}>
+            <button onClick={() => setActiveTab("notificaciones")} className={cn("p-2.5 border rounded-2xl transition-all relative group", activeTab === "notificaciones" ? "bg-zinc-800 border-zinc-700 text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50")}>
               <Bell className="size-5" />
-              {hayNotifNoLeidas && <span className="absolute top-1.5 right-1.5 size-2.5 bg-red-500 rounded-full border-2 border-zinc-950 group-hover:border-zinc-900 animate-pulse"></span>}
+              {hayNotifNoLeidas && <span className="absolute top-1 right-1.5 size-2.5 bg-red-500 rounded-full border-2 border-zinc-950 group-hover:border-zinc-900 animate-pulse"></span>}
             </button>
           </div>
         </header>
 
-        <div className="xl:hidden flex bg-zinc-950 border-b border-zinc-800 p-2 overflow-x-auto hide-scrollbar">
+        {/* MENÚ MÓVIL (HORIZONTAL) */}
+        <div className="xl:hidden flex bg-zinc-950 border-b border-zinc-800 p-2 overflow-x-auto hide-scrollbar gap-2">
            {menuItems.map(item => (
              <button 
                key={item.id} 
                onClick={() => setActiveTab(item.id as TabType)} 
-               className={cn("whitespace-nowrap px-4 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === item.id ? item.activeBg : "text-zinc-500")}
+               className={cn("whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border", activeTab === item.id ? item.activeBg : "border-transparent text-zinc-500")}
              >
                <item.icon className="size-4"/> {item.label}
              </button>
            ))}
-           <button onClick={() => setActiveTab("configuracion")} className={cn("whitespace-nowrap px-4 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === "configuracion" ? "bg-zinc-800 text-white" : "text-zinc-500")}>
-             <Settings className="size-4"/> Configuración
-           </button>
-           <button onClick={handleLogout} className="whitespace-nowrap px-4 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all text-zinc-500 hover:text-red-400">
-             <LogOut className="size-4"/> Salir
+           <button onClick={() => setActiveTab("configuracion")} className={cn("whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border", activeTab === "configuracion" ? "bg-zinc-800 text-white border-zinc-600" : "border-transparent text-zinc-500")}>
+             <Settings className="size-4"/> Config
            </button>
         </div>
 
+        {/* 🚀 CONTENEDOR DE PESTAÑAS (MÓDULOS ACTIVOS) */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-[#0A0A0A]">
           <div className="max-w-[1400px] mx-auto h-full">
             {activeTab === "resumen" && <TabResumen usuarioActual={usuarioActual} setActiveTab={setActiveTab} />}
             {activeTab === "stock" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabStock usuarioActual={usuarioActual} /></div>}
             {activeTab === "ventas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabVentas usuarioActual={usuarioActual} /></div>}
+            {activeTab === "caja" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabCaja usuarioActual={usuarioActual} /></div>}
             {activeTab === "reservas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabReservas usuarioActual={usuarioActual} /></div>}
             {activeTab === "usados" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabTomaUsados usuarioActual={usuarioActual} /></div>}
             {activeTab === "garantias" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabGarantias usuarioActual={usuarioActual} /></div>}
             {activeTab === "proveedores" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabProveedores usuarioActual={usuarioActual} /></div>}
             {activeTab === "pedidos" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabPedidos usuarioActual={usuarioActual} /></div>}
             {activeTab === "listas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabListas /></div>}
-            {activeTab === "equipo" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabEquipo usuarioActual={usuarioActual} /></div>}
             {activeTab === "clientes" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabClientesB2B usuarioActual={usuarioActual} /></div>}
+            {activeTab === "equipo" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabEquipo usuarioActual={usuarioActual} /></div>}
             {activeTab === "notificaciones" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabNotificaciones /></div>}
             {activeTab === "configuracion" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabConfiguracion usuarioActual={usuarioActual} /></div>}
             
