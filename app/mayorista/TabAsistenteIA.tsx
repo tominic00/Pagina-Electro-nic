@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react"
 import { Bot, Settings, Play, Save, Sparkles, Key, Crown } from "lucide-react"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -66,29 +65,26 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // 🚀 INICIALIZACIÓN CON MODELO ESTÁNDAR COMPATIBLE
-      const genAI = new GoogleGenerativeAI(keyLimpia)
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-
-      // Armamos el prompt con contexto directo
-      let promptCompleto = `[INSTRUCCIONES DE COMPORTAMIENTO Y STOCK]\n${promptConStock}\n\n[HISTORIAL DE CHAT]\n`
-      
-      historial.slice(1).forEach(m => {
-        promptCompleto += `${m.rol === "user" ? "Cliente" : "Vendedor"}: ${m.texto}\n`
+      // 🚀 Consumimos nuestro propio endpoint de Next.js
+      const res = await fetch("/api/chat-ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: keyLimpia,
+          systemPrompt: promptConStock,
+          mensajes: historial.slice(1)
+        })
       })
-      
-      promptCompleto += `Vendedor:`
 
-      const result = await model.generateContent(promptCompleto)
-      const responseText = result.response.text()
+      const data = await res.json()
 
-      if (!responseText) throw new Error("La IA no devolvió respuesta.")
+      if (data.error) throw new Error(data.error)
 
-      setMensajes([...historial, { rol: "ia", texto: responseText.trim() }])
+      setMensajes([...historial, { rol: "ia", texto: data.respuesta }])
 
     } catch (error: any) {
-      console.error("Error SDK Gemini:", error)
-      setMensajes([...historial, { rol: "ia", texto: `❌ Error de API: ${error.message || 'Error al conectar con Gemini'}` }])
+      console.error("Error al enviar mensaje:", error)
+      setMensajes([...historial, { rol: "ia", texto: `❌ Error: ${error.message}` }])
     } finally {
       setIsTyping(false)
     }
