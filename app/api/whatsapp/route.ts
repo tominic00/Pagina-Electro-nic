@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import { createClient } from '@supabase/supabase-js';
 
-// Reemplazá con tu número REAL (ejemplo: 5493815123456@s.whatsapp.net)
 const MI_WHATSAPP_PERSONAL = '5493815944101@s.whatsapp.net';
 
 export async function POST(req: Request) {
@@ -33,7 +32,81 @@ export async function POST(req: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const INSTANCE_NAME = 'electro-nic-cel-bot';
 
+    // -------------------------------------------------------------
+    // A) SI EL MENSAJE ES TUYO (EL DUEÑO RESPONDIENDO UNA CITA)
+    // -------------------------------------------------------------
+    if (remoteJid === MI_WHATSAPP_PERSONAL) {
+      // Buscar la última cita pendiente registrada
+      const { data: ultimaCita } = await supabase
+        .from('citas')
+        .select('*')
+        .eq('estado', 'pendiente')
+        .order('id', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (ultimaCita) {
+        // Pedir a Groq que entienda la decisión del dueño
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || fallbackGroqKey });
+        
+        const decisionPrompt = `El dueño de la tienda respondió esto sobre la cita del cliente (${ultimaCita.cliente_nombre}): "${messageText}".
+Determina qué decidió el dueño:
+1. Si ACEPTÓ la cita tal cual, responde solo: CONFIRMAR
+2. Si RECHAZÓ o PROPUSO OTRO HORARIO, escribe la respuesta educada que el bot debe mandarle al cliente notificándole la reprogramación.`;
+
+        const resGroq = await groq.chat.completions.create({
+          messages: [{ role: 'user', content: decisionPrompt }],
+          model: 'llama-3.3-70b-versatile',
+        });
+
+        const decision = resGroq.choices[0]?.message?.content || '';
+
+        if (decision.includes('CONFIRMAR')) {
+          // Actualizar estado en Supabase
+          await supabase.from('citas').update({ estado: 'confirmada' }).eq('id', ultimaCita.id);
+
+          // Avisar al cliente
+          const mensajeCliente = `¡Hola ${ultimaCita.cliente_nombre}! 👋 Te confirmo que quedó agendada la cita para ver el ${ultimaCita.equipo}. Te esperamos en el local (Florida Sur 24 local 2, Yerba Buena). ¡Nos vemos!`;
+          
+          await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey! },
+            body: JSON.stringify({ number: ultimaCita.cliente_telefono, text: mensajeCliente })
+          });
+
+          // Confirmarte a vos
+          await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey! },
+            body: JSON.stringify({ number: MI_WHATSAPP_PERSONAL, text: `✅ Cita de ${ultimaCita.cliente_nombre} confirmada y avisada al cliente.` })
+          });
+
+        } else {
+          // Actualizar estado y enviar respuesta personalizada de reprogramación
+          await supabase.from('citas').update({ estado: 'reprogramada' }).eq('id', ultimaCita.id);
+
+          await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey! },
+            body: JSON.stringify({ number: ultimaCita.cliente_telefono, text: decision })
+          });
+
+          await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey! },
+            body: JSON.stringify({ number: MI_WHATSAPP_PERSONAL, text: `📩 Mensaje de cambio de horario enviado a ${ultimaCita.cliente_nombre}.` })
+          });
+        }
+
+        return NextResponse.json({ success: true, mode: 'owner_intervention' });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // B) FLUJO NORMAL DE ATENCIÓN AL CLIENTE
+    // -------------------------------------------------------------
     const { data: config } = await supabase
       .from('configuracion_ia')
       .select('*')
@@ -41,20 +114,15 @@ export async function POST(req: Request) {
       .single();
 
     const groqKeyToUse = config?.groq_api_key || fallbackGroqKey;
-    if (!groqKeyToUse) {
-      return NextResponse.json({ error: 'No se encontró la API Key de Groq' }, { status: 500 });
-    }
-
     const groq = new Groq({ apiKey: groqKeyToUse });
 
-    // Guardar mensaje entrante
+    // Guardar mensaje en el historial
     await supabase.from('mensajes_whatsapp').insert({
       remote_jid: remoteJid,
       role: 'user',
       content: messageText
     });
 
-    // Cargar historial previo (últimos 6)
     const { data: historialPrevio } = await supabase
       .from('mensajes_whatsapp')
       .select('role, content')
@@ -64,7 +132,6 @@ export async function POST(req: Request) {
 
     const mensajesOrdenados = (historialPrevio || []).reverse();
 
-    // Cargar stock
     const { data: stockActual } = await supabase
       .from('stock_mayorista')
       .select('*')
@@ -93,62 +160,48 @@ export async function POST(req: Request) {
 
     let aiReply = chatCompletion.choices[0]?.message?.content || "Hola, en un momento te atendemos.";
 
-    // Guardar respuesta de la IA
     await supabase.from('mensajes_whatsapp').insert({
       remote_jid: remoteJid,
       role: 'ia',
       content: aiReply
     });
 
-    // DETECTAR CITA
+    // Detectar si la IA sugirió agendar una cita
     const matchCita = aiReply.match(/\[AGENDAR_CITA:\s*(.*?)\]/i);
     let detalleCita = '';
 
     if (matchCita) {
       detalleCita = matchCita[1];
-      console.log('✅ CITA DETECTADA:', detalleCita);
-      // Ocultar la etiqueta para el cliente
       aiReply = aiReply.replace(/\[AGENDAR_CITA:\s*.*?\]/i, '').trim();
-    } else {
-      console.log('⚠️ No se detectó etiqueta [AGENDAR_CITA] en el mensaje de la IA');
+
+      // Guardar cita pendiente en Supabase
+      await supabase.from('citas').insert({
+        cliente_nombre: pushName,
+        cliente_telefono: remoteJid,
+        equipo: detalleCita,
+        fecha_hora: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Ajustable según parseo de fecha
+        estado: 'pendiente'
+      });
     }
 
-    // Responder al cliente
+    // Enviar respuesta al cliente
     if (evolutionUrl && evolutionApiKey) {
-      const INSTANCE_NAME = 'electro-nic-cel-bot';
-
       await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': evolutionApiKey
-        },
-        body: JSON.stringify({
-          number: remoteJid,
-          text: aiReply
-        })
+        headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+        body: JSON.stringify({ number: remoteJid, text: aiReply })
       });
 
-      // Notificar a tu celular personal
-      if (detalleCita && !MI_WHATSAPP_PERSONAL.includes('XXXXXXX')) {
+      // Notificar a tu WhatsApp si hay cita
+      if (detalleCita && MI_WHATSAPP_PERSONAL !== remoteJid) {
         const numeroCliente = remoteJid.replace('@s.whatsapp.net', '');
-        const mensajeAviso = `🚨 *¡NUEVA CITA REGISTRADA!* 🚨\n\n👤 *Cliente:* ${pushName} (+${numeroCliente})\n📝 *Detalle:* ${detalleCita}\n\n⚠️ _Por favor confirmale la cita al cliente._`;
+        const mensajeAviso = `🚨 *¡NUEVA CITA PENDIENTE DE APROBACIÓN!* 🚨\n\n👤 *Cliente:* ${pushName} (+${numeroCliente})\n📝 *Detalle:* ${detalleCita}\n\n👉 *Responde a este mensaje decidiendo:* \n- "Confirmado" (para avisarle que sí)\n- o escribí la razón / nuevo horario si tenés que cambiarlo.`;
 
-        console.log(`Enviando aviso a tu número personal (${MI_WHATSAPP_PERSONAL})...`);
-
-        const resAviso = await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
+        await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey
-          },
-          body: JSON.stringify({
-            number: MI_WHATSAPP_PERSONAL,
-            text: mensajeAviso
-          })
+          headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+          body: JSON.stringify({ number: MI_WHATSAPP_PERSONAL, text: mensajeAviso })
         });
-
-        console.log('Respuesta envío aviso personal:', await resAviso.text());
       }
     }
 
