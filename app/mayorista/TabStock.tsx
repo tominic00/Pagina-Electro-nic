@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
+import * as XLSX from 'xlsx';
 
 // LISTAS DESPLEGABLES OFICIALES
 const MODELOS_APPLE = ["iPhone 11", "iPhone 12", "iPhone 13", "iPhone 13 mini", "iPhone 13 Pro", "iPhone 13 Pro Max", "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max", "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max", "iPhone 16", "iPhone 16 Plus", "iPhone 16 Pro", "iPhone 16 Pro Max", "iPhone 16e", "iPhone 17", "iPhone 17 Air", "iPhone 17 Pro", "iPhone 17 Pro Max" ]
@@ -147,68 +148,78 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 📤 IMPORTAR ARCHIVO CSV
-  const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setIsImporting(true)
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string
-        const rows = text.split('\n').slice(1) 
-        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/
+// 📤 IMPORTACIÓN UNIVERSAL (.CSV, .XLSX, .NUMBERS)
+const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setIsImporting(true);
 
-        const payload = rows.filter(row => row.trim() !== "").map(row => {
-          const cols = row.split(regex).map(c => c.replace(/(^"|"$)/g, '').trim())
-          
-          const modelo = cols[1] || cols[0] || ""
-          const capacidad = cols[2] || ""
-          const color = cols[3] || ""
-          const bateria = cols[4] || null
-          const condicion = cols[5] || "A"
-          const imei = cols[6] || null
-          const costo_usd = Number(cols[7]) || 0
-          const precio_venta_usd = Number(cols[8]) || 0
-          const precio_minorista_usd = Number(cols[9]) || 0
-          const estado = cols[10] || "Disponible"
-          const observaciones = cols[11] || ""
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const data = event.target?.result;
+      
+      // La librería XLSX procesa cualquier formato automáticamente
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convierte la planilla a un arreglo de objetos JSON
+      const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-          let nombreEquipo = modelo
-          if (capacidad && capacidad !== "N/A" && !modelo.includes(capacidad)) nombreEquipo += ` - ${capacidad}`
-          if (color && color !== "N/A" && !modelo.includes(color)) nombreEquipo += ` - ${color}`
+      // Omitir la fila de encabezados (índice 0)
+      const dataRows = rows.slice(1);
+
+      const payload = dataRows
+        .filter(cols => cols.length > 0 && cols[0]) // Ignorar filas vacías
+        .map(cols => {
+          const modelo = String(cols[1] || cols[0] || "").trim();
+          const capacidad = String(cols[2] || "").trim();
+          const color = String(cols[3] || "").trim();
+          const bateria = cols[4] ? String(cols[4]) : null;
+          const condicion = String(cols[5] || "A").trim();
+          const imei = cols[6] ? String(cols[6]) : null;
+          const costo_usd = Number(cols[7]) || 0;
+          const precio_venta_usd = Number(cols[8]) || 0;
+          const precio_minorista_usd = Number(cols[9]) || 0;
+          const estado = String(cols[10] || "Disponible").trim();
+          const observaciones = String(cols[11] || "").trim();
+
+          let nombreEquipo = modelo;
+          if (capacidad && capacidad !== "N/A" && !modelo.includes(capacidad)) nombreEquipo += ` - ${capacidad}`;
+          if (color && color !== "N/A" && !modelo.includes(color)) nombreEquipo += ` - ${color}`;
 
           return {
             equipo: nombreEquipo,
             condicion: condicion,
             bateria: bateria,
             imei: imei,
-            costo_usd: costo_usd, 
+            costo_usd: costo_usd,
             precio_venta_usd: precio_venta_usd,
             precio_minorista_usd: precio_minorista_usd,
             estado: estado,
             observaciones: observaciones,
             ingresado_por: usuarioActual.nombre
-          }
-        })
+          };
+        });
 
-        if (payload.length > 0) {
-          const { error } = await supabase.from("stock_mayorista").insert(payload)
-          if (error) throw error
-          alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`)
-          setShowImportModal(false)
-          fetchData()
-        }
-      } catch (error: any) { 
-        alert("❌ Error al importar. Verificá que el archivo siga las columnas de la plantilla.") 
-      } 
-      finally { 
-        setIsImporting(false)
-        if (fileInputRef.current) fileInputRef.current.value = "" 
+      if (payload.length > 0) {
+        const { error } = await supabase.from("stock_mayorista").insert(payload);
+        if (error) throw error;
+        alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
+        setShowImportModal(false);
+        fetchData();
       }
+    } catch (error: any) {
+      alert("❌ Error al procesar el archivo. Verificá que las columnas coincidan con la plantilla.");
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-    reader.readAsText(file)
-  }
+  };
+
+  reader.readAsBinaryString(file);
+};
 
   const abrirNuevo = () => {
     setEditingId(null)
