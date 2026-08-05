@@ -3,7 +3,7 @@ import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Uplo
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-// 🚀 LISTAS DESPLEGABLES OFICIALES
+// LISTAS DESPLEGABLES OFICIALES
 const MODELOS_APPLE = ["iPhone 11", "iPhone 12", "iPhone 13", "iPhone 13 mini", "iPhone 13 Pro", "iPhone 13 Pro Max", "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max", "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max", "iPhone 16", "iPhone 16 Plus", "iPhone 16 Pro", "iPhone 16 Pro Max", "iPhone 16e", "iPhone 17", "iPhone 17 Air", "iPhone 17 Pro", "iPhone 17 Pro Max" ]
 const COLORES = ["Midnight", "Starlight", "Blue", "Black", "White", "(PRODUCT)RED", "Purple", "Deep Purple", "Pink", "Yellow", "Green", "Graphite", "Gold", "Silver", "Space Gray", "Natural Titanium", "Blue Titanium"]
 const CAPACIDADES = ["32 GB", "64 GB", "128 GB", "256 GB", "512 GB", "1 TB", "N/A"]
@@ -98,17 +98,20 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
-  // 📥 DESCARGAR PLANTILLA CSV OFICIAL
+  // 📥 DESCARGA DIRECTA DE PLANTILLA CSV DE DEMOSTRACIÓN
   const descargarPlantillaCSV = () => {
-    const headers = ["Tipo", "Modelo", "Capacidad", "Color", "Bateria", "Condicion", "IMEI", "Costo_Base_USD", "Precio_Mayorista_USD", "Precio_Minorista_USD", "Estado", "Comentarios"]
-    const ejemploRow1 = ["iPhone", "iPhone 13", "128 GB", "Midnight", "87", "A", "359412345678901", "400", "480", "550", "Disponible", "Sin detalles"]
-    const ejemploRow2 = ["iPhone", "iPhone 15 Pro", "256 GB", "Natural Titanium", "100", "Nuevo Sellado", "359412345678902", "850", "980", "1050", "Disponible", "Caja sellada"]
+    const headers = "Tipo,Modelo,Capacidad,Color,Bateria,Condicion,IMEI,Costo_Base_USD,Precio_Mayorista_USD,Precio_Minorista_USD,Estado,Comentarios"
+    const fila1 = "iPhone,iPhone 13,128 GB,Midnight,87,A,359412345678901,400,480,550,Disponible,Excelente estado"
+    const fila2 = "iPhone,iPhone 15 Pro,256 GB,Natural Titanium,100,Nuevo Sellado,359412345678902,850,980,1050,Disponible,Caja sellada"
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ejemploRow1.join(","), ejemploRow2.join(",")].join("\n")
-    const encodedUri = encodeURI(csvContent)
+    const contenidoCSV = `${headers}\n${fila1}\n${fila2}`
+    
+    // Crear objeto Blob para asegurar la descarga directa
+    const blob = new Blob(["\uFEFF" + contenidoCSV], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", "Plantilla_Importacion_Stock_ElectroNic.csv")
+    link.setAttribute("href", url)
+    link.setAttribute("download", "Plantilla_Ejemplo_ElectroNic.csv")
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -131,10 +134,11 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       return fila
     })
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...filas.map(e => e.join(","))].join("\n")
-    const encodedUri = encodeURI(csvContent)
+    const contenido = [headers.join(","), ...filas.map(e => e.join(","))].join("\n")
+    const blob = new Blob(["\uFEFF" + contenido], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
+    link.setAttribute("href", url)
     const nombreArchivo = `${exportOptions.costo ? "Copia_Seguridad" : "Lista_Precios"}_${activeSubTab}_${new Date().toISOString().split('T')[0]}.csv`
     link.setAttribute("download", nombreArchivo)
     document.body.appendChild(link)
@@ -143,7 +147,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 📤 IMPORTAR CSV CON TODOS LOS CAMPOS ESTRUCTURADOS
+  // 📤 IMPORTAR ARCHIVO CSV
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -158,8 +162,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         const payload = rows.filter(row => row.trim() !== "").map(row => {
           const cols = row.split(regex).map(c => c.replace(/(^"|"$)/g, '').trim())
           
-          const tipo = cols[0] || "iPhone"
-          const modelo = cols[1] || ""
+          const modelo = cols[1] || cols[0] || ""
           const capacidad = cols[2] || ""
           const color = cols[3] || ""
           const bateria = cols[4] || null
@@ -171,10 +174,9 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           const estado = cols[10] || "Disponible"
           const observaciones = cols[11] || ""
 
-          // Genera el nombre del equipo exactamente como en la carga manual
           let nombreEquipo = modelo
-          if (capacidad && capacidad !== "N/A") nombreEquipo += ` - ${capacidad}`
-          if (color && color !== "N/A") nombreEquipo += ` - ${color}`
+          if (capacidad && capacidad !== "N/A" && !modelo.includes(capacidad)) nombreEquipo += ` - ${capacidad}`
+          if (color && color !== "N/A" && !modelo.includes(color)) nombreEquipo += ` - ${color}`
 
           return {
             equipo: nombreEquipo,
@@ -198,7 +200,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           fetchData()
         }
       } catch (error: any) { 
-        alert("❌ Error al importar. Asegurate de usar el formato de la plantilla CSV descargable.") 
+        alert("❌ Error al importar. Verificá que el archivo siga las columnas de la plantilla.") 
       } 
       finally { 
         setIsImporting(false)
@@ -216,11 +218,27 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   const abrirEdicion = (eq: any) => {
     setEditingId(eq.id)
+    
+    // Extraer modelo, capacidad y color si el nombre viene separado por guiones
+    const partes = eq.equipo.split(" - ")
+    const mod = partes[0] || eq.equipo
+    const cap = partes[1] || "N/A"
+    const col = partes[2] || "N/A"
+
     setFormUI({ 
-      tipo: "iPhone", modelo: eq.equipo,
-      capacidad: "N/A", color: "N/A", bateria: eq.bateria || "", condicion: eq.condicion || "A", 
-      imei: eq.imei || "", costo_usd: eq.costo_usd, precio_venta_usd: eq.precio_venta_usd, precio_minorista_usd: eq.precio_minorista_usd || "",
-      estado: eq.estado || "Disponible", stock_inicial: 1, comentarios: eq.observaciones || "" 
+      tipo: "iPhone", 
+      modelo: mod,
+      capacidad: cap, 
+      color: col, 
+      bateria: eq.bateria || "", 
+      condicion: eq.condicion || "A", 
+      imei: eq.imei || "", 
+      costo_usd: eq.costo_usd, 
+      precio_venta_usd: eq.precio_venta_usd, 
+      precio_minorista_usd: eq.precio_minorista_usd || "",
+      estado: eq.estado || "Disponible", 
+      stock_inicial: 1, 
+      comentarios: eq.observaciones || "" 
     })
     setShowAddModal(true)
   }
@@ -235,9 +253,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     e.preventDefault()
     setIsSaving(true)
     try {
-      const nombreGenerado = (editingId || formUI.modelo.includes("-")) 
-        ? formUI.modelo 
-        : `${formUI.modelo} - ${formUI.capacidad} - ${formUI.color}`.replace(" - N/A", "")
+      const nombreGenerado = `${formUI.modelo} - ${formUI.capacidad} - ${formUI.color}`.replace(" - N/A", "")
 
       const payloadArray = []
       for(let i=0; i<formUI.stock_inicial; i++) {
@@ -348,7 +364,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       <div className="bg-[#161B22] border border-zinc-800 p-4 rounded-2xl mb-6 shadow-inner">
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-1.5"><Filter className="size-3"/> Filtros de Búsqueda ({equiposFiltrados.length} resultados)</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Modelo o IMEI..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-all" /></div>
+          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" /><input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Modelo, Capacidad, Color o IMEI..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-all" /></div>
           <select value={filtroCondicion} onChange={e => setFiltroCondicion(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 appearance-none transition-all">
             <option value="Todos">Todas las condiciones</option>
             {CONDICIONES.map(c => <option key={c} value={c}>Solo {c}</option>)}
@@ -358,13 +374,13 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* TABLA DE DATOS */}
+      {/* TABLA DE DATOS CON DESGLOSE DE CAMPOS */}
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div> : (
         <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
               <tr>
-                <th className="p-4 rounded-tl-xl">Equipo & IMEI</th>
+                <th className="p-4 rounded-tl-xl">Modelo & Especificaciones</th>
                 <th className="p-4 text-center">Condición</th>
                 <th className="p-4 text-center">% Batería</th>
                 {puedeVerCosto && <th className="p-4 text-right">Costo (Landed)</th>}
@@ -374,43 +390,63 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
-              {equiposFiltrados.map(eq => (
-                <tr key={eq.id} className="hover:bg-zinc-900/50 transition-colors">
-                  <td className="p-4"><p className={cn("font-black text-base", eq.estado === "Vendido" ? "text-zinc-400" : "text-white")}>{eq.equipo}</p><p className="text-[10px] text-zinc-500 font-mono mt-0.5">IMEI: {eq.imei || "S/N"}</p></td>
-                  <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span></td>
-                  <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
-                  
-                  {puedeVerCosto && (
-                    <td className="p-4 text-right">
-                      <p className="font-black text-zinc-300">U$D {eq.costo_usd}</p>
-                      {costoEnvioPromedio > 0 && (
-                        <p className="text-[9px] text-zinc-500 flex items-center justify-end gap-1 mt-0.5" title="Flete Promedio Logístico Estimado">
-                          <Truck className="size-3"/> + U$D {costoEnvioPromedio.toFixed(1)}
-                        </p>
-                      )}
-                    </td>
-                  )}
+              {equiposFiltrados.map(eq => {
+                const partes = eq.equipo.split(" - ")
+                const mod = partes[0] || eq.equipo
+                const cap = partes[1]
+                const col = partes[2]
 
-                  <td className="p-4 text-right">
-                    <p className="font-black text-emerald-400 text-sm">May: U$D {eq.precio_venta_usd}</p>
-                    <p className="font-bold text-sky-400 text-[10px] mt-0.5">Min: U$D {eq.precio_minorista_usd || "0"}</p>
-                  </td>
-                  <td className="p-4 text-center">
-                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : eq.estado === 'Reservado' ? 'text-amber-500 border-amber-500/20' : 'text-zinc-500 border-zinc-700 bg-zinc-800'}`}>
-                      {eq.estado}
-                    </span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <div className="flex justify-center gap-2">
-                      {eq.estado !== "Vendido" && (
-                        <button onClick={() => abrirCotizacion(eq)} className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all" title="Cotizar / Enviar por WhatsApp"><Tag className="size-4"/></button>
-                      )}
-                      <button onClick={() => abrirEdicion(eq)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-sky-400 hover:bg-zinc-700 rounded-lg transition-all" title="Editar"><Edit3 className="size-4"/></button>
-                      <button onClick={() => eliminarEquipo(eq.id)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg transition-all" title="Eliminar"><Trash2 className="size-4"/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                return (
+                  <tr key={eq.id} className="hover:bg-zinc-900/50 transition-colors">
+                    <td className="p-4">
+                      <p className={cn("font-black text-base flex items-center gap-2", eq.estado === "Vendido" ? "text-zinc-400" : "text-white")}>
+                        {mod}
+                      </p>
+                      
+                      <div className="flex items-center gap-2 mt-1">
+                        {cap && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">{cap}</span>}
+                        {col && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">{col}</span>}
+                        <span className="text-[10px] text-zinc-500 font-mono">IMEI: {eq.imei || "S/N"}</span>
+                      </div>
+                    </td>
+
+                    <td className="p-4 text-center">
+                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span>
+                    </td>
+                    <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
+                    
+                    {puedeVerCosto && (
+                      <td className="p-4 text-right">
+                        <p className="font-black text-zinc-300">U$D {eq.costo_usd}</p>
+                        {costoEnvioPromedio > 0 && (
+                          <p className="text-[9px] text-zinc-500 flex items-center justify-end gap-1 mt-0.5" title="Flete Promedio Logístico Estimado">
+                            <Truck className="size-3"/> + U$D {costoEnvioPromedio.toFixed(1)}
+                          </p>
+                        )}
+                      </td>
+                    )}
+
+                    <td className="p-4 text-right">
+                      <p className="font-black text-emerald-400 text-sm">May: U$D {eq.precio_venta_usd}</p>
+                      <p className="font-bold text-sky-400 text-[10px] mt-0.5">Min: U$D {eq.precio_minorista_usd || "0"}</p>
+                    </td>
+                    <td className="p-4 text-center">
+                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : eq.estado === 'Reservado' ? 'text-amber-500 border-amber-500/20' : 'text-zinc-500 border-zinc-700 bg-zinc-800'}`}>
+                        {eq.estado}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex justify-center gap-2">
+                        {eq.estado !== "Vendido" && (
+                          <button onClick={() => abrirCotizacion(eq)} className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all" title="Cotizar / Enviar por WhatsApp"><Tag className="size-4"/></button>
+                        )}
+                        <button onClick={() => abrirEdicion(eq)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-sky-400 hover:bg-zinc-700 rounded-lg transition-all" title="Editar"><Edit3 className="size-4"/></button>
+                        <button onClick={() => eliminarEquipo(eq.id)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg transition-all" title="Eliminar"><Trash2 className="size-4"/></button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
               {equiposFiltrados.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-500 font-bold italic">No se encontraron equipos en esta sección.</td></tr>}
             </tbody>
           </table>
@@ -438,31 +474,24 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 
                 <div>
                   <label className="text-xs font-bold text-white block mb-1.5">Modelo *</label>
-                  {editingId ? (
-                    <input required type="text" value={formUI.modelo} onChange={e => setFormUI({...formUI, modelo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
-                  ) : (
-                    <select required value={formUI.modelo} onChange={e => setFormUI({...formUI, modelo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
-                      {MODELOS_APPLE.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  )}
+                  <select required value={formUI.modelo} onChange={e => setFormUI({...formUI, modelo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
+                    {MODELOS_APPLE.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
                 </div>
 
-                {!editingId && (
-                  <>
-                    <div>
-                      <label className="text-xs font-bold text-white block mb-1.5">Capacidad</label>
-                      <select value={formUI.capacidad} onChange={e => setFormUI({...formUI, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
-                        {CAPACIDADES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-white block mb-1.5">Color</label>
-                      <select value={formUI.color} onChange={e => setFormUI({...formUI, color: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
-                        {COLORES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
+                <div>
+                  <label className="text-xs font-bold text-white block mb-1.5">Capacidad</label>
+                  <select value={formUI.capacidad} onChange={e => setFormUI({...formUI, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
+                    {CAPACIDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-white block mb-1.5">Color</label>
+                  <select value={formUI.color} onChange={e => setFormUI({...formUI, color: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
+                    {COLORES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
 
                 <div>
                   <label className="text-xs font-bold text-white block mb-1.5">Batería (%)</label>
@@ -534,7 +563,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL 1: COTIZAR PRODUCTO */}
+      {/* MODAL: COTIZAR */}
       {showCotizarModal && cotizarItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
@@ -613,7 +642,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL 2: PREVISUALIZAR Y COMPARTIR */}
+      {/* MODAL 2: PREVISUALIZAR */}
       {showPrevisualizarModal && cotizarItem && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
@@ -674,7 +703,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL ACTUALIZADO: IMPORTAR MASIVO CON PLANTILLA DESCARGABLE */}
+      {/* MODAL: IMPORTAR MASIVO CON DESCARGA DIRECTA DE PLANTILLA */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
@@ -685,15 +714,16 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             
             <div className="p-6 space-y-6">
               
-              {/* BOTÓN DESCARGAR PLANTILLA */}
+              {/* BOTÓN DE DESCARGA DIRECTA CON BLOB */}
               <div className="bg-sky-500/10 border border-sky-500/20 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-widest text-sky-400 flex items-center gap-1.5 mb-1">
                     <Download className="size-4"/> Plantilla de Ejemplo
                   </h4>
-                  <p className="text-xs text-zinc-300">Descargá el archivo con la estructura exacta de columnas para evitar errores.</p>
+                  <p className="text-xs text-zinc-300">Descargá el archivo de muestra con la estructura exacta de columnas.</p>
                 </div>
                 <button 
+                  type="button"
                   onClick={descargarPlantillaCSV}
                   className="bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider px-4 py-3 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95 shadow-lg shadow-sky-500/20"
                 >
@@ -701,15 +731,15 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 </button>
               </div>
 
-              {/* DETALLE DE COLUMNAS */}
+              {/* DESGLOSE DE ESTRUCTURA */}
               <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Estructura requerida de columnas en el CSV:</p>
-                <p className="text-[11px] font-mono text-zinc-300 break-all bg-zinc-900 p-2.5 rounded-xl border border-zinc-800">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Columnas requeridas en el CSV:</p>
+                <p className="text-[11px] font-mono text-zinc-300 bg-zinc-900 p-2.5 rounded-xl border border-zinc-800 overflow-x-auto">
                   Tipo, Modelo, Capacidad, Color, Bateria, Condicion, IMEI, Costo_Base_USD, Precio_Mayorista_USD, Precio_Minorista_USD, Estado, Comentarios
                 </p>
               </div>
 
-              {/* ÁREA DE SUBA DE ARCHIVO */}
+              {/* CARGAR ARCHIVO */}
               <div>
                 <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportarCSV} className="hidden" id="csvUpload" />
                 <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950 hover:bg-sky-500/5")}>
