@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2, Plus } from "lucide-react"
+import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any, setActiveTab: (tab: any) => void }) {
