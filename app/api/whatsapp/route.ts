@@ -6,12 +6,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // 1. Ignorar mensajes enviados por el propio bot
+    // 1. Ignorar mensajes del propio bot
     if (body.data?.key?.fromMe) {
       return NextResponse.json({ status: 'ignored' });
     }
 
-    // 2. Extraer el texto y el número del cliente
+    // 2. Extraer texto y número
     const messageText = body.data?.message?.conversation || 
                         body.data?.message?.extendedTextMessage?.text;
     const remoteJid = body.data?.key?.remoteJid;
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_message_data' });
     }
 
-    // 3. Verificación de variables
+    // 3. Variables de Entorno
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const groqKey = process.env.GROQ_API_KEY;
@@ -34,26 +34,32 @@ export async function POST(req: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const groq = new Groq({ apiKey: groqKey });
 
-    // 4. Traer SOLO los productos/precios mayoristas
-    // (Si tenés una columna 'es_mayorista', o tabla 'productos_mayoristas', ajustalo acá)
-    const { data: productosMayoristas } = await supabase
-      .from('productos')
-      .select('*'); 
+    // 4. Traer el stock disponible de 'stock_mayorista'
+    const { data: stockActual } = await supabase
+      .from('stock_mayorista')
+      .select('*')
+      .eq('estado', 'Disponible');
 
-    // 5. System Prompt enfocado 100% en la venta MAYORISTA
-    const systemPrompt = `Sos el asesor exclusivo de ventas MAYORISTAS de Electro-Nic.
-Atendés a revendedores, comerciantes y clientes mayoristas por WhatsApp.
+    // 5. Formatear el stock exacto como en el simulador
+    const stockFormateado = (stockActual || []).map(eq => 
+      `- ${eq.equipo} | Condición: ${eq.condicion} | Bat: ${eq.bateria || 'N/A'}% | Precio Minorista: USD ${eq.precio_minorista_usd || eq.precio_venta_usd}`
+    ).join("\n");
 
-Catálogo y precios mayoristas disponibles:
-${JSON.stringify(productosMayoristas || [], null, 2)}
+    // 6. Definir el prompt idéntico al de tu simulador
+    const systemPrompt = `Sos el vendedor estrella de Electro·Nic, un local de celulares en Tucumán. Estás atendiendo a un cliente por WhatsApp.
 
-REGLAS DE ATENCIÓN MAYORISTA:
-1. Tu enfoque principal es la venta POR MAYOR (mencioná cantidades mínimas, packs o precios mayoristas si aplican).
-2. Mantené un tono profesional, ágil y comerciante.
-3. Respuestas concisas, listas para leer en WhatsApp (usá viñetas o negritas para precios/productos).
-4. Si preguntan por condiciones de compra mayorista, explicá los medios de pago, envíos y montos mínimos de compra de la tienda.`;
+REGLAS ESTRICTAS:
+1. Respuestas súper cortas y al pie (máximo 2 oraciones por mensaje).
+2. Hablá en argentino informal y amigable (usá 'vos', 'mirá', 'fijate', 'te comento').
+3. NUNCA uses listas con viñetas, emojis exagerados ni negritas excesivas. Escribí como una persona real en WhatsApp.
+4. Si preguntan por un equipo que NO está en el stock, decile: "Uh, de ese justo me quedé sin nada, pero te puedo ofrecer..." y ofrecele algo similar.
+5. Si preguntan precio, pasale SIEMPRE el "Precio Minorista" en USD. Aclará que aceptan USDT, Dólares físicos y Pesos al cambio del día.
+6. NUNCA inventes precios ni stock. Usá SOLO la información del inventario que te paso abajo.
 
-    // 6. Generar respuesta con Groq
+INVENTARIO ACTUAL EN TIEMPO REAL:
+${stockFormateado || "Actualmente no hay stock disponible."}`;
+
+    // 7. Petición a Groq
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
@@ -62,9 +68,9 @@ REGLAS DE ATENCIÓN MAYORISTA:
       model: 'llama-3.3-70b-versatile',
     });
 
-    const aiReply = chatCompletion.choices[0]?.message?.content || "Hola! En un momento te asesoramos con tu pedido mayorista.";
+    const aiReply = chatCompletion.choices[0]?.message?.content || "Hola! En un momento te atendemos.";
 
-    // 7. Enviar a WhatsApp
+    // 8. Enviar respuesta por WhatsApp
     if (evolutionUrl && evolutionApiKey) {
       const INSTANCE_NAME = 'electro-nic-cel-bot';
       await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
@@ -83,7 +89,7 @@ REGLAS DE ATENCIÓN MAYORISTA:
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('ERROR EN WHATSAPP MAYORISTA:', error?.message || error);
+    console.error('Error en WhatsApp:', error?.message || error);
     return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
   }
 }
