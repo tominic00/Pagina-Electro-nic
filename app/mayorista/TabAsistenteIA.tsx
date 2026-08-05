@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Bot, Settings, Play, Save, Sparkles, Key } from "lucide-react"
-import supabase from "@/lib/supabase"
+import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
@@ -40,7 +40,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   }, [])
 
   const guardarConfig = () => {
-    localStorage.setItem("electro_gemini_key", apiKey)
+    localStorage.setItem("electro_gemini_key", apiKey.trim())
     localStorage.setItem("electro_ai_prompt", systemPrompt)
     alert("✅ Configuración guardada en tu navegador.")
   }
@@ -70,8 +70,8 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         parts: [{ text: m.texto }]
       }))
 
-      // 🚀 LLAMADA A LA API CON ENDPOINT CORREGIDO (models/gemini-1.5-flash)
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      // 🚀 Intento 1: gemini-2.0-flash
+      let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -82,7 +82,22 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         })
       })
 
-      const data = await res.json()
+      let data = await res.json()
+
+      // 🚀 Fallback a gemini-1.5-flash-latest si la 2.0 no está activa en esa key
+      if (data.error) {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey.trim()}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: promptConStock }]
+            },
+            contents: contentsForGemini
+          })
+        })
+        data = await res.json()
+      }
 
       if (data.error) throw new Error(data.error.message)
 
