@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet } from "lucide-react"
+import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet, Bot } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +20,7 @@ import { TabEquipo } from "./TabEquipo"
 import { TabNotificaciones } from "./TabNotificaciones"
 import { TabConfiguracion } from "./TabConfiguracion"
 import { TabClientesB2B } from "./TabClientesB2B"
+import { TabAsistenteIA } from "./TabAsistenteIA"
 import { TabAnaliticas } from "./TabAnaliticas"
 
 // Agregamos "caja" a los tipos permitidos
@@ -114,6 +115,7 @@ export default function PortalMayorista() {
     { id: "proveedores", label: "Proveedores", icon: Briefcase, color: "hover:bg-fuchsia-500/10 hover:text-fuchsia-400", activeBg: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/50 shadow-[0_0_15px_-3px_rgba(217,70,239,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.proveedores ?? false) },
     { id: "pedidos", label: "Pedidos", icon: Truck, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_-3px_rgba(99,102,241,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.pedidos ?? false) },
     { id: "equipo", label: "Equipo", icon: Users, color: "hover:bg-sky-500/10 hover:text-sky-400", activeBg: "bg-sky-500/10 text-sky-400 border-sky-500/50 shadow-[0_0_15px_-3px_rgba(14,165,233,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.equipo ?? false) },
+    { id: "ia", label: "Asistente IA", icon: Bot, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_-3px_rgba(99,102,241,0.15)]", ver: esDueñoOAdmin },
     { id: "analiticas", label: "Analíticas", icon: LineChart, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/50 shadow-[0_0_15px_-3px_rgba(244,63,94,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.analiticas ?? false) },
   ].filter(item => item.ver)
 
