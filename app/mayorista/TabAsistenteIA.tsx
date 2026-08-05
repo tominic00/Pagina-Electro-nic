@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react"
 import { Bot, Settings, Play, Save, Sparkles, Key, Crown } from "lucide-react"
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import  supabase from "@/lib/supabase"
+import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
   const [apiKey, setApiKey] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [mensajes, setMensajes] = useState<{rol: "user" | "ia", texto: string}[]>([
-    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Google Gemini. Configurá tu API Key a la izquierda y probemos." }
+    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual. Configurá tu API Key a la izquierda y probemos." }
   ])
   const [inputMensaje, setInputMensaje] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -66,44 +66,25 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // 🚀 INICIALIZACIÓN DEL SDK
+      // 🚀 INICIALIZACIÓN CON MODELO ESTÁNDAR COMPATIBLE
       const genAI = new GoogleGenerativeAI(keyLimpia)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+
+      // Armamos el prompt con contexto directo
+      let promptCompleto = `[INSTRUCCIONES DE COMPORTAMIENTO Y STOCK]\n${promptConStock}\n\n[HISTORIAL DE CHAT]\n`
       
-      // Lista de modelos a probar en orden de jerarquía
-      const modelosDisponibles = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash-8b"]
-      let responseText = ""
-      let ultimoError = null
+      historial.slice(1).forEach(m => {
+        promptCompleto += `${m.rol === "user" ? "Cliente" : "Vendedor"}: ${m.texto}\n`
+      })
+      
+      promptCompleto += `Vendedor:`
 
-      // Formato de historial
-      const historyForSdk = historial.slice(1, -1).map(m => ({
-        role: m.rol === "user" ? "user" : "model",
-        parts: [{ text: m.texto }]
-      }))
+      const result = await model.generateContent(promptCompleto)
+      const responseText = result.response.text()
 
-      // Intentamos con cada modelo de la lista
-      for (const nombreModelo of modelosDisponibles) {
-        try {
-          const model = genAI.getGenerativeModel({ 
-            model: nombreModelo,
-            systemInstruction: promptConStock
-          })
+      if (!responseText) throw new Error("La IA no devolvió respuesta.")
 
-          const chat = model.startChat({ history: historyForSdk })
-          const result = await chat.sendMessage(inputMensaje)
-          responseText = result.response.text()
-
-          if (responseText) break // ¡Éxito! Salimos del bucle
-        } catch (err) {
-          ultimoError = err
-          console.warn(`Falló ${nombreModelo}, probando siguiente modelo...`)
-        }
-      }
-
-      if (!responseText) {
-        throw ultimoError || new Error("No se pudo conectar a ningún modelo de Gemini disponible.")
-      }
-
-      setMensajes([...historial, { rol: "ia", texto: responseText }])
+      setMensajes([...historial, { rol: "ia", texto: responseText.trim() }])
 
     } catch (error: any) {
       console.error("Error SDK Gemini:", error)
@@ -116,7 +97,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Multimodelo)</h2>
+        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA</h2>
         <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Google Gemini.</p>
       </div>
 
