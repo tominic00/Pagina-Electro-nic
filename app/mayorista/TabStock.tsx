@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 // 🚀 LISTAS DESPLEGABLES OFICIALES
@@ -11,10 +11,10 @@ const CONDICIONES = ["Nuevo Sellado", "A+", "A", "A-", "B", "C"]
 
 export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [equipos, setEquipos] = useState<any[]>([])
-  const [costoEnvioPromedio, setCostoEnvioPromedio] = useState<number>(0) // 🚀 NUEVO: Costo de flete
+  const [costoEnvioPromedio, setCostoEnvioPromedio] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
-  // 🚀 SUB-PESTAÑAS DE INVENTARIO
+  // SUB-PESTAÑAS
   const [activeSubTab, setActiveSubTab] = useState<"disponibles" | "vendidos">("disponibles")
 
   // Modales
@@ -31,14 +31,14 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [isImporting, setIsImporting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
-  // ESTADO DE FORMULARIO ESTRUCTURADO
+  // FORMULARIO ESTRUCTURADO
   const [formUI, setFormUI] = useState({
     tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", 
     bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "",
     estado: "Disponible", stock_inicial: 1, comentarios: ""
   })
 
-  // Estado de Formulario de Cotización
+  // Formulario Cotización
   const [formCotizacion, setFormCotizacion] = useState({
     precio: "", moneda: "USD", actualizarPrecio: false, condicion: "A+", 
     disponibilidad: "Disponible", garantia: "30 días", observacion: "", incluirImei: true
@@ -57,15 +57,13 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setLoading(true)
     const { data: stockData } = await supabase.from("stock_mayorista").select("*").order("created_at", { ascending: false })
     
-    // 🚀 OBTENER COSTO DE ENVÍO PROMEDIO (PRORRATEO LOGÍSTICO)
     const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*")
     if (pedidosData && pedidosData.length > 0) {
       let totalGastadoEnFletes = 0
       let totalEquiposTraidos = 0
       pedidosData.forEach(p => {
-        // Asumiendo que tenés columnas de costo_envio o que sacas un %
         totalGastadoEnFletes += Number(p.costo_envio_usd || 0)
-        totalEquiposTraidos += Number(p.cantidad_equipos || 1) // o el campo que use pedidos
+        totalEquiposTraidos += Number(p.cantidad_equipos || 1)
       })
       if (totalEquiposTraidos > 0) {
         setCostoEnvioPromedio(totalGastadoEnFletes / totalEquiposTraidos)
@@ -78,13 +76,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 FILTRADO INTELIGENTE (Incluye el estado de venta)
   const equiposFiltrados = equipos.filter(eq => {
-    // 1. Filtro de Sub-pestañas
     if (activeSubTab === "disponibles" && eq.estado === "Vendido") return false
     if (activeSubTab === "vendidos" && eq.estado !== "Vendido") return false
 
-    // 2. Filtros de Texto y Valores
     const matchTexto = eq.equipo.toLowerCase().includes(filtroTexto.toLowerCase()) || (eq.imei && eq.imei.toLowerCase().includes(filtroTexto.toLowerCase()))
     const matchCondicion = filtroCondicion === "Todos" ? true : eq.condicion === filtroCondicion
     
@@ -103,7 +98,23 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
-  // LÓGICAS DE EXPORTACIÓN E IMPORTACIÓN
+  // 📥 DESCARGAR PLANTILLA CSV OFICIAL
+  const descargarPlantillaCSV = () => {
+    const headers = ["Tipo", "Modelo", "Capacidad", "Color", "Bateria", "Condicion", "IMEI", "Costo_Base_USD", "Precio_Mayorista_USD", "Precio_Minorista_USD", "Estado", "Comentarios"]
+    const ejemploRow1 = ["iPhone", "iPhone 13", "128 GB", "Midnight", "87", "A", "359412345678901", "400", "480", "550", "Disponible", "Sin detalles"]
+    const ejemploRow2 = ["iPhone", "iPhone 15 Pro", "256 GB", "Natural Titanium", "100", "Nuevo Sellado", "359412345678902", "850", "980", "1050", "Disponible", "Caja sellada"]
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ejemploRow1.join(","), ejemploRow2.join(",")].join("\n")
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", "Plantilla_Importacion_Stock_ElectroNic.csv")
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // EXPORTAR LISTA DE STOCK
   const ejecutarExportacion = () => {
     const headers = ["Equipo", "Condicion"]
     if (exportOptions.bateria) headers.push("Bateria")
@@ -132,6 +143,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
+  // 📤 IMPORTAR CSV CON TODOS LOS CAMPOS ESTRUCTURADOS
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -142,15 +154,42 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         const text = event.target?.result as string
         const rows = text.split('\n').slice(1) 
         const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/
+
         const payload = rows.filter(row => row.trim() !== "").map(row => {
           const cols = row.split(regex).map(c => c.replace(/(^"|"$)/g, '').trim())
+          
+          const tipo = cols[0] || "iPhone"
+          const modelo = cols[1] || ""
+          const capacidad = cols[2] || ""
+          const color = cols[3] || ""
+          const bateria = cols[4] || null
+          const condicion = cols[5] || "A"
+          const imei = cols[6] || null
+          const costo_usd = Number(cols[7]) || 0
+          const precio_venta_usd = Number(cols[8]) || 0
+          const precio_minorista_usd = Number(cols[9]) || 0
+          const estado = cols[10] || "Disponible"
+          const observaciones = cols[11] || ""
+
+          // Genera el nombre del equipo exactamente como en la carga manual
+          let nombreEquipo = modelo
+          if (capacidad && capacidad !== "N/A") nombreEquipo += ` - ${capacidad}`
+          if (color && color !== "N/A") nombreEquipo += ` - ${color}`
+
           return {
-            equipo: cols[0], condicion: cols[1] || 'Nuevo', bateria: cols[2] || null,
-            imei: cols[3] || null, costo_usd: Number(cols[4]) || 0, 
-            precio_venta_usd: Number(cols[5]) || 0, precio_minorista_usd: Number(cols[6]) || 0,
-            estado: 'Disponible', ingresado_por: usuarioActual.nombre
+            equipo: nombreEquipo,
+            condicion: condicion,
+            bateria: bateria,
+            imei: imei,
+            costo_usd: costo_usd, 
+            precio_venta_usd: precio_venta_usd,
+            precio_minorista_usd: precio_minorista_usd,
+            estado: estado,
+            observaciones: observaciones,
+            ingresado_por: usuarioActual.nombre
           }
         })
+
         if (payload.length > 0) {
           const { error } = await supabase.from("stock_mayorista").insert(payload)
           if (error) throw error
@@ -158,13 +197,17 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           setShowImportModal(false)
           fetchData()
         }
-      } catch (error) { alert("❌ Error al importar. Revisá el formato CSV.") } 
-      finally { setIsImporting(false); if (fileInputRef.current) fileInputRef.current.value = "" }
+      } catch (error: any) { 
+        alert("❌ Error al importar. Asegurate de usar el formato de la plantilla CSV descargable.") 
+      } 
+      finally { 
+        setIsImporting(false)
+        if (fileInputRef.current) fileInputRef.current.value = "" 
+      }
     }
     reader.readAsText(file)
   }
 
-  // LÓGICAS DE ABM
   const abrirNuevo = () => {
     setEditingId(null)
     setFormUI({ tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "", estado: "Disponible", stock_inicial: 1, comentarios: "" })
@@ -177,7 +220,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       tipo: "iPhone", modelo: eq.equipo,
       capacidad: "N/A", color: "N/A", bateria: eq.bateria || "", condicion: eq.condicion || "A", 
       imei: eq.imei || "", costo_usd: eq.costo_usd, precio_venta_usd: eq.precio_venta_usd, precio_minorista_usd: eq.precio_minorista_usd || "",
-      estado: eq.estado || "Disponible", stock_inicial: 1, comentarios: "" 
+      estado: eq.estado || "Disponible", stock_inicial: 1, comentarios: eq.observaciones || "" 
     })
     setShowAddModal(true)
   }
@@ -207,6 +250,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           precio_venta_usd: Number(formUI.precio_venta_usd),
           precio_minorista_usd: Number(formUI.precio_minorista_usd),
           estado: formUI.estado,
+          observaciones: formUI.comentarios,
           ingresado_por: usuarioActual.nombre
         })
       }
@@ -226,11 +270,11 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // LÓGICAS DE COTIZACIÓN WHATSAPP
+  // COTIZACIÓN WHATSAPP
   const abrirCotizacion = (eq: any) => {
     setCotizarItem(eq)
     setFormCotizacion({
-      precio: eq.precio_minorista_usd || eq.precio_venta_usd, // Por defecto carga el minorista para WhatsApp
+      precio: eq.precio_minorista_usd || eq.precio_venta_usd,
       moneda: "USD", actualizarPrecio: false,
       condicion: eq.condicion || "A+", disponibilidad: "Disponible",
       garantia: "30 días", observacion: "", incluirImei: true
@@ -273,14 +317,12 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     window.open(url, "_blank")
   }
 
-  // 🚀 Chequeo si puede ver costos
   const puedeVerCosto = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
-
 
   return (
     <div className="p-6">
       
-      {/* 🚀 CABECERA Y SUB-PESTAÑAS */}
+      {/* CABECERA Y SUB-PESTAÑAS */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-4 mb-6">
         <div>
           <h3 className="text-xl font-black text-white flex items-center gap-2 mb-4"><Package className="size-5 text-emerald-500"/> Gestión de Inventario</h3>
@@ -302,7 +344,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* BARRA DE FILTROS INTELIGENTES */}
+      {/* FILTROS */}
       <div className="bg-[#161B22] border border-zinc-800 p-4 rounded-2xl mb-6 shadow-inner">
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-1.5"><Filter className="size-3"/> Filtros de Búsqueda ({equiposFiltrados.length} resultados)</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -338,7 +380,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span></td>
                   <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
                   
-                  {/* 🚀 CELDA DE COSTO PRORRATEADO CON FLETE */}
                   {puedeVerCosto && (
                     <td className="p-4 text-right">
                       <p className="font-black text-zinc-300">U$D {eq.costo_usd}</p>
@@ -376,7 +417,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL: CREAR / EDITAR EQUIPO */}
+      {/* MODAL: CREAR / EDITAR EQUIPO */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-auto">
@@ -493,7 +534,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL 1: COTIZAR PRODUCTO */}
+      {/* MODAL 1: COTIZAR PRODUCTO */}
       {showCotizarModal && cotizarItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
@@ -518,7 +559,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   </div>
                   <input type="number" value={formCotizacion.precio} onChange={e => setFormCotizacion({...formCotizacion, precio: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
                   
-                  {/* Botones rápidos para autocompletar precio */}
                   <div className="flex gap-2 mt-2">
                     <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_venta_usd})} className="text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-500 hover:text-black transition-colors">Usar Mayorista</button>
                     <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_minorista_usd})} className="text-[9px] font-bold uppercase bg-sky-500/10 text-sky-400 px-2 py-1 rounded hover:bg-sky-500 hover:text-black transition-colors">Usar Minorista</button>
@@ -609,7 +649,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
               <button onClick={() => setShowExportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
             <div className="p-6 space-y-4 bg-[#161B22]">
-              <p className="text-xs text-zinc-400 mb-4 font-medium">Elegí qué datos querés incluir en tu archivo Excel/CSV. (El Nombre, la Condición y los Precios siempre se incluyen).</p>
+              <p className="text-xs text-zinc-400 mb-4 font-medium">Elegí qué datos querés incluir en tu archivo Excel/CSV.</p>
               
               <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-800 transition-colors">
                 <input type="checkbox" checked={exportOptions.bateria} onChange={e => setExportOptions({...exportOptions, bateria: e.target.checked})} className="size-5 accent-sky-500 rounded bg-zinc-950 border-zinc-700" />
@@ -634,44 +674,58 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL: IMPORTAR MASIVO */}
+      {/* 🚀 MODAL ACTUALIZADO: IMPORTAR MASIVO CON PLANTILLA DESCARGABLE */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
               <h3 className="text-xl font-black text-white flex items-center gap-2"><FileSpreadsheet className="size-5 text-sky-400"/> Importar Stock Masivo</h3>
               <button onClick={() => setShowImportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
+            
             <div className="p-6 space-y-6">
-              <div className="bg-sky-500/10 border border-sky-500/20 p-4 rounded-2xl">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-sky-500 mb-2 flex items-center gap-1.5"><Info className="size-4"/> Instrucciones de Excel</h4>
-                <p className="text-xs text-zinc-300 leading-relaxed">Para subir muchos equipos a la vez, armá una tabla en Excel con <strong>exactamente este orden de columnas</strong>:</p>
-                <div className="mt-3 overflow-x-auto bg-black/50 border border-zinc-800 rounded-lg p-2">
-                  <table className="text-[10px] text-zinc-400 w-full text-left whitespace-nowrap">
-                    <thead className="text-white font-bold border-b border-zinc-800">
-                      <tr><th className="pr-2 pb-1">Equipo</th><th className="pr-2 pb-1">Condicion</th><th className="pr-2 pb-1">Bateria</th><th className="pr-2 pb-1">IMEI</th><th className="pr-2 pb-1">Costo_USD</th><th className="pr-2 pb-1">Precio_Mayorista_USD</th><th className="pb-1">Precio_Minorista_USD</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr><td className="pr-2 pt-1">iPhone 13 - 128 GB - Midnight</td><td className="pr-2 pt-1">A</td><td className="pr-2 pt-1">85</td><td className="pr-2 pt-1">351234...</td><td className="pr-2 pt-1">450</td><td className="pr-2 pt-1">500</td><td className="pt-1">550</td></tr>
-                    </tbody>
-                  </table>
+              
+              {/* BOTÓN DESCARGAR PLANTILLA */}
+              <div className="bg-sky-500/10 border border-sky-500/20 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-sky-400 flex items-center gap-1.5 mb-1">
+                    <Download className="size-4"/> Plantilla de Ejemplo
+                  </h4>
+                  <p className="text-xs text-zinc-300">Descargá el archivo con la estructura exacta de columnas para evitar errores.</p>
                 </div>
-                <p className="text-xs text-zinc-400 mt-3 font-bold italic">💡 Guardá como <strong>CSV (delimitado por comas)</strong>.</p>
+                <button 
+                  onClick={descargarPlantillaCSV}
+                  className="bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider px-4 py-3 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95 shadow-lg shadow-sky-500/20"
+                >
+                  <Download className="size-4"/> Descargar CSV Ejemplo
+                </button>
               </div>
+
+              {/* DETALLE DE COLUMNAS */}
+              <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Estructura requerida de columnas en el CSV:</p>
+                <p className="text-[11px] font-mono text-zinc-300 break-all bg-zinc-900 p-2.5 rounded-xl border border-zinc-800">
+                  Tipo, Modelo, Capacidad, Color, Bateria, Condicion, IMEI, Costo_Base_USD, Precio_Mayorista_USD, Precio_Minorista_USD, Estado, Comentarios
+                </p>
+              </div>
+
+              {/* ÁREA DE SUBA DE ARCHIVO */}
               <div>
                 <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportarCSV} className="hidden" id="csvUpload" />
                 <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950 hover:bg-sky-500/5")}>
                   {isImporting ? (
-                    <><Loader2 className="size-10 text-sky-500 animate-spin mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Procesando Archivo...</span></>
+                    <><Loader2 className="size-10 text-sky-500 animate-spin mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Procesando Importación...</span></>
                   ) : (
-                    <><Upload className="size-10 text-zinc-500 mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Seleccionar archivo .CSV</span><span className="text-xs text-zinc-500 mt-1">Haz clic aquí para buscar en tu PC</span></>
+                    <><Upload className="size-10 text-zinc-500 mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Seleccionar tu archivo .CSV</span><span className="text-xs text-zinc-500 mt-1">Haz clic aquí para cargar el archivo desde tu PC</span></>
                   )}
                 </label>
               </div>
+
             </div>
           </div>
         </div>
       )}
+
     </div>
   )
 }
