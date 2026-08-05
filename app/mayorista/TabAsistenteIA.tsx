@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Bot, Settings, Play, Save, Sparkles, Key } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
@@ -70,7 +70,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         parts: [{ text: m.texto }]
       }))
 
-      // Llamada directa a Gemini 1.5 Flash (Gratuito y rápido)
+      // 🚀 LLAMADA A LA API CON ENDPOINT CORREGIDO (models/gemini-1.5-flash)
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
