@@ -2,18 +2,18 @@ import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import { createClient } from '@supabase/supabase-js';
 
-const MI_WHATSAPP_PERSONAL = '549381XXXXXXX@s.whatsapp.net'; // Poné tu número real
+const MI_WHATSAPP_PERSONAL = '5493815944101@s.whatsapp.net'; // Tu número real
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // 1. Ignorar mensajes del propio bot
+    // 1. Ignorar mensajes enviados por el propio bot
     if (body.data?.key?.fromMe) {
       return NextResponse.json({ status: 'ignored' });
     }
 
-    // 2. Extraer texto y datos del cliente
+    // 2. Extraer el texto y el número del cliente
     const messageText = body.data?.message?.conversation || 
                         body.data?.message?.extendedTextMessage?.text;
     const remoteJid = body.data?.key?.remoteJid;
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 3. Traer prompt configurado en el panel
+    // 3. Traer la configuración del System Prompt desde Supabase
     const { data: config } = await supabase
       .from('configuracion_ia')
       .select('*')
@@ -44,12 +44,29 @@ export async function POST(req: Request) {
 
     const groqKeyToUse = config?.groq_api_key || fallbackGroqKey;
     if (!groqKeyToUse) {
-      return NextResponse.json({ error: 'No se encontró API Key de Groq' }, { status: 500 });
+      return NextResponse.json({ error: 'No se encontró la API Key de Groq' }, { status: 500 });
     }
 
     const groq = new Groq({ apiKey: groqKeyToUse });
 
-    // 4. Traer stock
+    // 4. Guardar el mensaje entrante del cliente en la base de datos
+    await supabase.from('mensajes_whatsapp').insert({
+      remote_jid: remoteJid,
+      role: 'user',
+      content: messageText
+    });
+
+    // 5. Cargar los últimos 6 mensajes de la conversación previa para darle MEMORIA
+    const { data: historialPrevio } = await supabase
+      .from('mensajes_whatsapp')
+      .select('role, content')
+      .eq('remote_jid', remoteJid)
+      .order('id', { ascending: false })
+      .limit(6);
+
+    const mensajesOrdenados = (historialPrevio || []).reverse();
+
+    // 6. Consultar el stock disponible
     const { data: stockActual } = await supabase
       .from('stock_mayorista')
       .select('*')
@@ -60,27 +77,34 @@ export async function POST(req: Request) {
     ).join("\n");
 
     const promptBase = config?.system_prompt || `Sos el vendedor de Electro·Nic. INVENTARIO:\n{STOCK_DATA}`;
-    const systemPromptFinal = promptBase.replace("{STOCK_DATA}", stockFormateado || "Sin stock disponible.");
+    const systemPromptFinal = promptBase.replace("{STOCK_DATA}", stockFormateado || "Sin stock disponible por el momento.");
 
-    // 5. MEMORIA: Enviar la conversación con el nombre del cliente para dar contexto a la IA
+    // 7. Armar la estructura del chat con el contexto completo
     const messagesForGroq = [
       { role: 'system', content: systemPromptFinal },
-      { 
-        role: 'user', 
-        content: `[Nombre en WhatsApp del cliente: "${pushName}" | ID: ${remoteJid}]\nMensaje recibido: "${messageText}"` 
-      }
+      ...mensajesOrdenados.map(m => ({
+        role: m.role === 'ia' ? 'assistant' : 'user',
+        content: m.content
+      }))
     ];
 
-    // 6. Consultar a Groq
+    // 8. Generar respuesta con Groq
     const chatCompletion = await groq.chat.completions.create({
       messages: messagesForGroq as any,
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.5, // Temperatura más baja para que siga reglas y no sea tan repetitivo
+      temperature: 0.4, // Temperatura moderada para respuestas coherentes
     });
 
-    let aiReply = chatCompletion.choices[0]?.message?.content || "¡Hola! En un toque te atendemos.";
+    let aiReply = chatCompletion.choices[0]?.message?.content || "Hola, en un momento te atendemos.";
 
-    // 7. Detectar si agendó cita
+    // 9. Guardar la respuesta de la IA en la base de datos
+    await supabase.from('mensajes_whatsapp').insert({
+      remote_jid: remoteJid,
+      role: 'ia',
+      content: aiReply
+    });
+
+    // 10. Detectar si agendó cita
     const matchCita = aiReply.match(/\[AGENDAR_CITA:\s*(.*?)\]/);
     let detalleCita = '';
 
@@ -89,7 +113,7 @@ export async function POST(req: Request) {
       aiReply = aiReply.replace(/\[AGENDAR_CITA:\s*.*?\]/, '').trim();
     }
 
-    // 8. Responder a WhatsApp
+    // 11. Enviar mensaje por WhatsApp vía Evolution API
     if (evolutionUrl && evolutionApiKey) {
       const INSTANCE_NAME = 'electro-nic-cel-bot';
 
@@ -105,10 +129,10 @@ export async function POST(req: Request) {
         })
       });
 
-      // 9. Notificar a tu WhatsApp si se agendó cita
-      if (detalleCita && MI_WHATSAPP_PERSONAL !== '549381XXXXXXX@s.whatsapp.net') {
+      // 12. Notificar a tu teléfono personal
+      if (detalleCita && MI_WHATSAPP_PERSONAL !== '5493815944101@s.whatsapp.net') {
         const numeroCliente = remoteJid.replace('@s.whatsapp.net', '');
-        const mensajeAviso = `🚨 *¡NUEVA CITA REGISTRADA!* 🚨\n\n👤 *Cliente:* ${pushName} (+${numeroCliente})\n📝 *Detalle:* ${detalleCita}\n\n⚠️ _Por favor confirmale al cliente por este chat._`;
+        const mensajeAviso = `🚨 *¡NUEVA CITA REGISTRADA!* 🚨\n\n👤 *Cliente:* ${pushName} (+${numeroCliente})\n📝 *Detalle:* ${detalleCita}\n\n⚠️ _Por favor confirmale la cita al cliente._`;
 
         await fetch(`${evolutionUrl}/message/sendText/${INSTANCE_NAME}`, {
           method: 'POST',
