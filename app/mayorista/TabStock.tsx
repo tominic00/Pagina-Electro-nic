@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +11,7 @@ const CONDICIONES = ["Nuevo Sellado", "A+", "A", "A-", "B", "C"]
 
 export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [equipos, setEquipos] = useState<any[]>([])
+  const [costoEnvioPromedio, setCostoEnvioPromedio] = useState<number>(0) // 🚀 NUEVO: Costo de flete
   const [loading, setLoading] = useState(true)
   
   // 🚀 SUB-PESTAÑAS DE INVENTARIO
@@ -30,7 +31,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [isImporting, setIsImporting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
-  // ESTADO DE FORMULARIO ESTRUCTURADO (Ahorra con precio minorista)
+  // ESTADO DE FORMULARIO ESTRUCTURADO
   const [formUI, setFormUI] = useState({
     tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", 
     bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "",
@@ -52,14 +53,30 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [exportOptions, setExportOptions] = useState({ bateria: true, imei: false, costo: false })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const fetchStock = async () => {
+  const fetchData = async () => {
     setLoading(true)
-    const { data } = await supabase.from("stock_mayorista").select("*").order("created_at", { ascending: false })
-    if (data) setEquipos(data)
+    const { data: stockData } = await supabase.from("stock_mayorista").select("*").order("created_at", { ascending: false })
+    
+    // 🚀 OBTENER COSTO DE ENVÍO PROMEDIO (PRORRATEO LOGÍSTICO)
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*")
+    if (pedidosData && pedidosData.length > 0) {
+      let totalGastadoEnFletes = 0
+      let totalEquiposTraidos = 0
+      pedidosData.forEach(p => {
+        // Asumiendo que tenés columnas de costo_envio o que sacas un %
+        totalGastadoEnFletes += Number(p.costo_envio_usd || 0)
+        totalEquiposTraidos += Number(p.cantidad_equipos || 1) // o el campo que use pedidos
+      })
+      if (totalEquiposTraidos > 0) {
+        setCostoEnvioPromedio(totalGastadoEnFletes / totalEquiposTraidos)
+      }
+    }
+
+    if (stockData) setEquipos(stockData)
     setLoading(false)
   }
 
-  useEffect(() => { fetchStock() }, [])
+  useEffect(() => { fetchData() }, [])
 
   // 🚀 FILTRADO INTELIGENTE (Incluye el estado de venta)
   const equiposFiltrados = equipos.filter(eq => {
@@ -139,7 +156,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           if (error) throw error
           alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`)
           setShowImportModal(false)
-          fetchStock()
+          fetchData()
         }
       } catch (error) { alert("❌ Error al importar. Revisá el formato CSV.") } 
       finally { setIsImporting(false); if (fileInputRef.current) fileInputRef.current.value = "" }
@@ -168,7 +185,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const eliminarEquipo = async (id: string) => {
     if(!confirm("¿Seguro que querés eliminar este equipo del stock definitivamente?")) return
     await supabase.from("stock_mayorista").delete().eq("id", id)
-    fetchStock()
+    fetchData()
   }
 
   const handleGuardar = async (e: React.FormEvent) => {
@@ -201,7 +218,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       }
       
       setShowAddModal(false)
-      fetchStock()
+      fetchData()
     } catch (error) {
       alert("Error al guardar")
     } finally {
@@ -223,9 +240,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   const avanzarAPrevisualizacion = async () => {
     if (formCotizacion.actualizarPrecio && Number(formCotizacion.precio) !== cotizarItem.precio_minorista_usd) {
-      // Si eligió actualizar, actualizamos el precio minorista (que es el de WhatsApp)
       await supabase.from("stock_mayorista").update({ precio_minorista_usd: Number(formCotizacion.precio) }).eq("id", cotizarItem.id)
-      fetchStock() 
+      fetchData() 
     }
     setShowCotizarModal(false)
     setShowPrevisualizarModal(true)
@@ -256,6 +272,9 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     const url = `https://wa.me/?text=${encodeURIComponent(generarTextoWhatsapp())}`
     window.open(url, "_blank")
   }
+
+  // 🚀 Chequeo si puede ver costos
+  const puedeVerCosto = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
 
   return (
@@ -306,7 +325,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 <th className="p-4 rounded-tl-xl">Equipo & IMEI</th>
                 <th className="p-4 text-center">Condición</th>
                 <th className="p-4 text-center">% Batería</th>
-                <th className="p-4 text-right">Costo</th>
+                {puedeVerCosto && <th className="p-4 text-right">Costo (Landed)</th>}
                 <th className="p-4 text-right">Precios (May / Min)</th>
                 <th className="p-4 text-center">Estado</th>
                 <th className="p-4 text-center rounded-tr-xl">Acciones</th>
@@ -318,7 +337,19 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   <td className="p-4"><p className={cn("font-black text-base", eq.estado === "Vendido" ? "text-zinc-400" : "text-white")}>{eq.equipo}</p><p className="text-[10px] text-zinc-500 font-mono mt-0.5">IMEI: {eq.imei || "S/N"}</p></td>
                   <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span></td>
                   <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
-                  <td className="p-4 text-right font-black text-zinc-300">U$D {eq.costo_usd}</td>
+                  
+                  {/* 🚀 CELDA DE COSTO PRORRATEADO CON FLETE */}
+                  {puedeVerCosto && (
+                    <td className="p-4 text-right">
+                      <p className="font-black text-zinc-300">U$D {eq.costo_usd}</p>
+                      {costoEnvioPromedio > 0 && (
+                        <p className="text-[9px] text-zinc-500 flex items-center justify-end gap-1 mt-0.5" title="Flete Promedio Logístico Estimado">
+                          <Truck className="size-3"/> + U$D {costoEnvioPromedio.toFixed(1)}
+                        </p>
+                      )}
+                    </td>
+                  )}
+
                   <td className="p-4 text-right">
                     <p className="font-black text-emerald-400 text-sm">May: U$D {eq.precio_venta_usd}</p>
                     <p className="font-bold text-sky-400 text-[10px] mt-0.5">Min: U$D {eq.precio_minorista_usd || "0"}</p>
@@ -410,10 +441,13 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   <p className="text-[10px] text-zinc-500 mt-1">Completalo únicamente si el equipo lo tiene. Cada IMEI corresponde a una sola unidad.</p>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1.5 flex items-center gap-1"><DollarSign className="size-3 text-zinc-500"/> Costo Base (USD)</label>
-                  <input required type="number" value={formUI.costo_usd} onChange={e => setFormUI({...formUI, costo_usd: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
-                </div>
+                {puedeVerCosto && (
+                  <div>
+                    <label className="text-xs font-bold text-white block mb-1.5 flex items-center gap-1"><DollarSign className="size-3 text-zinc-500"/> Costo Base (USD)</label>
+                    <input required type="number" value={formUI.costo_usd} onChange={e => setFormUI({...formUI, costo_usd: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
+                    {costoEnvioPromedio > 0 && <p className="text-[10px] text-sky-400 mt-1 flex items-center gap-1"><Info className="size-3"/> Al costo base se le estiman U$D {costoEnvioPromedio.toFixed(1)} de flete prorrateado.</p>}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

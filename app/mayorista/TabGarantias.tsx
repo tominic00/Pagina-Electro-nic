@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShieldAlert, Plus, X, Search, Loader2, ArrowRightLeft, Undo2, Wrench, CheckCircle2 } from "lucide-react"
+import { ShieldAlert, Plus, X, Search, Loader2, ArrowRightLeft, Undo2, Wrench, CheckCircle2, Edit3, Trash2 } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -14,11 +14,12 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
   const [showSolucionModal, setShowSolucionModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [filtroTexto, setFiltroTexto] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
 
-  // ESTADO NUEVA GARANTÍA
+  // ESTADO FORMULARIO GARANTÍA
   const [form, setForm] = useState({
     cliente: "",
-    venta_id: "", // Para vincular a una venta anterior (opcional)
+    venta_id: "", 
     equipo_nombre: "",
     imei: "",
     problema: "",
@@ -30,8 +31,8 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
 
   // ESTADO SOLUCIÓN GARANTÍA
   const [solucionGarantiaId, setSolucionGarantiaId] = useState("")
-  const [tipoSolucion, setTipoSolucion] = useState("reparacion") // reparacion, cambio, devolucion
-  const [equipoCambioId, setEquipoCambioId] = useState("") // Para cuando se cambia por otro
+  const [tipoSolucion, setTipoSolucion] = useState("reparacion") 
+  const [equipoCambioId, setEquipoCambioId] = useState("") 
 
   const fetchData = async () => {
     setLoading(true)
@@ -56,15 +57,44 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
   )
 
   const abrirNuevaGarantia = () => {
+    setEditingId(null)
     setForm({ cliente: "", venta_id: "", equipo_nombre: "", imei: "", problema: "", estado_fisico: "", fecha_estimada: "", accesorios: "", observaciones: "" })
     setShowModal(true)
   }
 
-  // Si seleccionan una venta previa, autocompletamos los datos del equipo
+  const abrirEdicion = (garantia: any) => {
+    setEditingId(garantia.id)
+    setForm({
+      cliente: garantia.cliente || "",
+      venta_id: garantia.venta_id || "",
+      equipo_nombre: garantia.equipo_nombre || "",
+      imei: garantia.imei || "",
+      problema: garantia.problema || "",
+      estado_fisico: garantia.estado_fisico || "",
+      fecha_estimada: garantia.fecha_estimada || "",
+      accesorios: garantia.accesorios || "",
+      observaciones: garantia.observaciones || ""
+    })
+    setShowModal(true)
+  }
+
+  const eliminarGarantia = async (garantia: any) => {
+    if (!confirm("⚠️ ¿Estás seguro de eliminar esta garantía permanentemente?")) return
+    try {
+      if (garantia.venta_id) {
+        await supabase.from("ventas_mayorista").update({ estado: 'Completada' }).eq("id", garantia.venta_id)
+      }
+      await supabase.from("garantias_mayorista").delete().eq("id", garantia.id)
+      fetchData()
+    } catch (error) {
+      alert("Error al eliminar la garantía.")
+    }
+  }
+
   const handleSelectVenta = (ventaId: string) => {
     const venta = ventasDb.find(v => v.id === ventaId)
     if (venta) {
-      setForm({ ...form, venta_id: venta.id, cliente: venta.cliente, equipo_nombre: venta.equipo_nombre })
+      setForm({ ...form, venta_id: venta.id, cliente: venta.cliente, equipo_nombre: venta.equipo_nombre, imei: venta.imei || "" })
     } else {
       setForm({ ...form, venta_id: "" })
     }
@@ -86,21 +116,24 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         fecha_estimada: form.fecha_estimada || null,
         accesorios: form.accesorios,
         observaciones: form.observaciones,
-        estado: 'Iniciada',
-        ingresado_por: usuarioActual.nombre
+        ...(editingId ? {} : { estado: 'Iniciada', ingresado_por: usuarioActual.nombre })
       }
 
-      const { error: errGar } = await supabase.from("garantias_mayorista").insert([payload])
-      if (errGar) throw new Error(errGar.message)
+      if (editingId) {
+        const { error: errUpdate } = await supabase.from("garantias_mayorista").update(payload).eq("id", editingId)
+        if (errUpdate) throw new Error(errUpdate.message)
+      } else {
+        const { error: errGar } = await supabase.from("garantias_mayorista").insert([payload])
+        if (errGar) throw new Error(errGar.message)
 
-      // Si vinculó una venta, le cambiamos el estado para que se sepa que ese equipo entró en garantía
-      if (form.venta_id) {
-        await supabase.from("ventas_mayorista").update({ estado: 'En Garantía' }).eq("id", form.venta_id)
+        if (form.venta_id) {
+          await supabase.from("ventas_mayorista").update({ estado: 'En Garantía' }).eq("id", form.venta_id)
+        }
       }
 
       setShowModal(false)
       fetchData()
-      alert("✅ Garantía iniciada con éxito.")
+      alert(editingId ? "✅ Garantía actualizada." : "✅ Garantía iniciada con éxito.")
     } catch (error: any) {
       alert("Error: " + error.message)
     } finally {
@@ -108,7 +141,6 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 LÓGICA DE SOLUCIONES (REPARACIÓN, CAMBIO, DEVOLUCIÓN)
   const abrirSolucion = (garantiaId: string) => {
     setSolucionGarantiaId(garantiaId)
     setTipoSolucion("reparacion")
@@ -116,6 +148,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     setShowSolucionModal(true)
   }
 
+  // 🚀 ACA ESTÁ LA MAGIA CORREGIDA CON CAPTURA DE ERRORES ESTRICTA
   const handleAplicarSolucion = async () => {
     setIsSaving(true)
     try {
@@ -123,56 +156,82 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
       if (!garantia) throw new Error("Garantía no encontrada")
 
       if (tipoSolucion === "reparacion") {
-        // Se reparó, vuelve al cliente. Se cierra la garantía y la venta vuelve a Completada.
-        await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Reparada)' }).eq("id", garantia.id)
-        if (garantia.venta_id) await supabase.from("ventas_mayorista").update({ estado: 'Completada' }).eq("id", garantia.venta_id)
+        const { error: err1 } = await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Reparada)' }).eq("id", garantia.id)
+        if (err1) throw new Error("Fallo al actualizar garantía: " + err1.message)
+
+        if (garantia.venta_id) {
+          const { error: err2 } = await supabase.from("ventas_mayorista").update({ estado: 'Completada' }).eq("id", garantia.venta_id)
+          if (err2) throw new Error("Fallo al restaurar la venta: " + err2.message)
+        }
       
       } else if (tipoSolucion === "cambio") {
         if (!equipoCambioId) throw new Error("Debes seleccionar el nuevo equipo a entregar.")
         
-        // 1. Marcar garantía como Resuelta (Cambio)
-        await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Cambio de Equipo)' }).eq("id", garantia.id)
+        const { error: err3 } = await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Cambio de Equipo)' }).eq("id", garantia.id)
+        if (err3) throw new Error("Fallo al cerrar garantía: " + err3.message)
+
+        if (garantia.venta_id) {
+          const { error: err4 } = await supabase.from("ventas_mayorista").update({ estado: 'Anulada por Cambio', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
+          if (err4) throw new Error("Fallo al anular la venta original: " + err4.message)
+        }
         
-        // 2. Anular la venta original (porque ese equipo específico vuelve)
-        if (garantia.venta_id) await supabase.from("ventas_mayorista").update({ estado: 'Anulada por Cambio', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
-        
-        // 3. Crear una venta nueva a coste 0 con el nuevo equipo
         const equipoNuevo = stockDb.find(e => e.id === equipoCambioId)
         if (equipoNuevo) {
-           await supabase.from("ventas_mayorista").insert([{
+           const { error: err5 } = await supabase.from("ventas_mayorista").insert([{
              equipo_id: equipoNuevo.id, equipo_nombre: equipoNuevo.equipo, cliente: garantia.cliente,
              monto_vendido_usd: 0, ganancia_usd: 0, vendedor: usuarioActual.nombre, forma_pago: "Cambio por Garantía", estado: 'Completada'
            }])
-           // Descontar el nuevo equipo del stock
-           await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).eq("id", equipoNuevo.id)
+           if (err5) throw new Error("Fallo al registrar la nueva venta de cambio: " + err5.message)
+
+           const { error: err6 } = await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).eq("id", equipoNuevo.id)
+           if (err6) throw new Error("Fallo al descontar el equipo nuevo del stock: " + err6.message)
         }
 
-        // 🚀 4. El equipo original roto, lo metemos al stock como "En Reparación"
-        await supabase.from("stock_mayorista").insert([{
-           equipo: garantia.equipo_nombre, condicion: "Para reparar", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'En Reparación', observaciones: "Ingreso por cambio de garantía. Pendiente de arreglo."
+        // 🚀 SE ENVÍA AL STOCK COMO "EN REPARACIÓN" CON TODOS LOS DATOS
+        const { error: err7 } = await supabase.from("stock_mayorista").insert([{
+           equipo: garantia.equipo_nombre, 
+           condicion: "Para reparar", 
+           imei: garantia.imei || null, 
+           costo_usd: 0, 
+           precio_venta_usd: 0, 
+           estado: 'En Reparación', 
+           observaciones: "Ingreso por cambio de garantía.",
+           ingresado_por: usuarioActual.nombre // Fundamental para evitar errores de base de datos
         }])
+        if (err7) throw new Error("Fallo al ingresar el equipo roto al Stock: " + err7.message)
 
       } else if (tipoSolucion === "devolucion") {
-        // Se le devuelve la plata.
-        await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Devolución de Dinero)' }).eq("id", garantia.id)
-        if (garantia.venta_id) await supabase.from("ventas_mayorista").update({ estado: 'Anulada (Devolución)', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
+        const { error: err8 } = await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Devolución de Dinero)' }).eq("id", garantia.id)
+        if (err8) throw new Error("Fallo al cerrar garantía: " + err8.message)
+
+        if (garantia.venta_id) {
+          const { error: err9 } = await supabase.from("ventas_mayorista").update({ estado: 'Anulada (Devolución)', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
+          if (err9) throw new Error("Fallo al anular la venta original: " + err9.message)
+        }
         
-        // 🚀 El equipo roto entra al stock como "En Reparación"
-        await supabase.from("stock_mayorista").insert([{
-           equipo: garantia.equipo_nombre, condicion: "Para reparar", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'En Reparación', observaciones: "Ingreso por devolución de garantía. Pendiente de arreglo."
+        // 🚀 SE ENVÍA AL STOCK COMO "EN REPARACIÓN"
+        const { error: err10 } = await supabase.from("stock_mayorista").insert([{
+           equipo: garantia.equipo_nombre, 
+           condicion: "Para reparar", 
+           imei: garantia.imei || null, 
+           costo_usd: 0, 
+           precio_venta_usd: 0, 
+           estado: 'En Reparación', 
+           observaciones: "Ingreso por devolución de garantía.",
+           ingresado_por: usuarioActual.nombre
         }])
+        if (err10) throw new Error("Fallo al ingresar el equipo roto al Stock: " + err10.message)
       }
 
       setShowSolucionModal(false)
       fetchData()
-      alert("✅ Solución aplicada correctamente.")
+      alert("✅ Solución aplicada. El equipo roto se envió a la pestaña 'En Reparación' de tu Inventario.")
     } catch (error: any) {
       alert(error.message)
     } finally {
       setIsSaving(false)
     }
   }
-
 
   return (
     <div className="p-6">
@@ -223,7 +282,11 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                   </td>
                   <td className="p-4 text-center">
                     {g.estado === 'Iniciada' ? (
-                      <button onClick={() => abrirSolucion(g.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black font-bold text-[10px] uppercase rounded-lg transition-all border border-emerald-500/30">Dar Solución</button>
+                      <div className="flex justify-center gap-2 items-center">
+                        <button onClick={() => abrirSolucion(g.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black font-bold text-[10px] uppercase rounded-lg transition-all border border-emerald-500/30">Dar Solución</button>
+                        <button onClick={() => abrirEdicion(g)} className="p-1.5 text-zinc-400 hover:text-sky-400 bg-zinc-950 rounded-lg transition-colors border border-zinc-800" title="Editar"><Edit3 className="size-3.5"/></button>
+                        <button onClick={() => eliminarGarantia(g)} className="p-1.5 text-zinc-400 hover:text-red-400 bg-zinc-950 rounded-lg transition-colors border border-zinc-800" title="Eliminar"><Trash2 className="size-3.5"/></button>
+                      </div>
                     ) : (
                       <span className="text-[10px] text-zinc-600 font-bold uppercase italic">Cerrada</span>
                     )}
@@ -238,12 +301,12 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL INICIAR GARANTÍA */}
+      {/* 🚀 MODAL INICIAR/EDITAR GARANTÍA */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-auto">
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
-              <h3 className="text-xl font-black text-white flex items-center gap-2"><ShieldAlert className="size-5 text-emerald-400"/> Iniciar garantía</h3>
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><ShieldAlert className="size-5 text-emerald-400"/> {editingId ? "Editar Garantía" : "Iniciar garantía"}</h3>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
             </div>
             
@@ -260,14 +323,16 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                 </div>
               </div>
 
-              <div className="bg-sky-500/5 border border-sky-500/20 p-4 rounded-xl">
-                <label className="text-[10px] font-black uppercase text-sky-400 block mb-1.5">Vincular a venta en inventario (Opcional)</label>
-                <select value={form.venta_id} onChange={e => handleSelectVenta(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500 transition-all">
-                  <option value="">Sin vincular a un equipo vendido del inventario</option>
-                  {ventasDb.map(v => <option key={v.id} value={v.id}>{v.equipo_nombre} - Cliente: {v.cliente} ({new Date(v.fecha).toLocaleDateString()})</option>)}
-                </select>
-                <p className="text-[10px] text-zinc-500 mt-1">Si elegís una venta, la marcamos como "En Garantía" en la caja.</p>
-              </div>
+              {!editingId && (
+                <div className="bg-sky-500/5 border border-sky-500/20 p-4 rounded-xl">
+                  <label className="text-[10px] font-black uppercase text-sky-400 block mb-1.5">Vincular a venta en inventario (Opcional)</label>
+                  <select value={form.venta_id} onChange={e => handleSelectVenta(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-sky-500 transition-all">
+                    <option value="">Sin vincular a un equipo vendido del inventario</option>
+                    {ventasDb.map(v => <option key={v.id} value={v.id}>{v.equipo_nombre} - Cliente: {v.cliente} ({new Date(v.fecha).toLocaleDateString()})</option>)}
+                  </select>
+                  <p className="text-[10px] text-zinc-500 mt-1">Si elegís una venta, la marcamos como "En Garantía" en el historial.</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -304,7 +369,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                 <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className="px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 shadow-lg shadow-emerald-500/20">
-                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : "Iniciar garantía"}
+                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : "Guardar Garantía"}
                 </button>
               </div>
 
@@ -347,14 +412,14 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                     <option value="">-- Elegí un equipo disponible --</option>
                     {stockDb.map(eq => <option key={eq.id} value={eq.id}>{eq.equipo} (IMEI: {eq.imei || "S/N"})</option>)}
                   </select>
-                  <p className="text-[10px] text-zinc-400 mt-2">Al confirmar: Se anulará la venta original, se generará una venta nueva costo 0 por este equipo para que se descuente del stock, y el equipo original roto volverá a tu stock como Falla/Garantía.</p>
+                  <p className="text-[10px] text-zinc-400 mt-2">Al confirmar: Se anulará la venta original, se generará una venta nueva costo 0 por este equipo para que se descuente del stock, y el equipo original roto volverá a tu stock como "En Reparación".</p>
                 </div>
               )}
 
               {/* OPCIÓN: DEVOLUCIÓN DE DINERO */}
               {tipoSolucion === "devolucion" && (
                 <div className="bg-red-500/5 border border-red-500/20 p-4 rounded-xl animate-in slide-in-from-top-2">
-                  <p className="text-[10px] text-zinc-400">Al confirmar: Se anulará la venta original y el equipo roto volverá a tu stock como "Falla/Garantía" para que luego puedas mandarlo a arreglar o usar de repuesto.</p>
+                  <p className="text-[10px] text-zinc-400">Al confirmar: Se anulará la venta original y el equipo roto volverá a tu stock como "En Reparación" para que luego puedas mandarlo a arreglar o usar de repuesto.</p>
                 </div>
               )}
 
