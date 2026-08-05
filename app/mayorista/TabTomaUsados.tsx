@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { RefreshCcw, Plus, X, Search, CheckCircle2, Ban, Loader2, Eye, ArrowRightLeft, DollarSign } from "lucide-react"
+import { RefreshCcw, Plus, X, Search, CheckCircle2, Ban, Loader2, Eye, ArrowRightLeft, DollarSign, Edit3, Trash2 } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -20,7 +20,7 @@ const MODELOS = [
   "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max",
   "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max",
   "iPhone 16", "iPhone 16e", "iPhone 16 Pro", "iPhone 16 Pro Max",
-    "iPhone 17", "iPhone 17 air", "iPhone 17 Pro", "iPhone 17 Pro Max",
+  "iPhone 17", "iPhone 17 air", "iPhone 17 Pro", "iPhone 17 Pro Max",
   "Apple Watch", "iPad", "MacBook", "Otro"
 ]
 
@@ -39,6 +39,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null) // Para saber si editamos
 
   // ESTADO DEL FORMULARIO
   const [form, setForm] = useState({
@@ -70,6 +71,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
   const ofertaMaxima = Math.max(0, reventa - rep - otros - gananciaEsperada)
 
   const abrirNuevaToma = () => {
+    setEditingId(null)
     setForm({
       cliente: "", marca: "Apple", modelo: "", almacenamiento: "", color: "", imei: "",
       bateria: "", condicion_general: "Bueno", accesorios: "", observaciones: "",
@@ -80,6 +82,40 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
     CAMPOS_INSPECCION.forEach(c => inspInicial[c] = "OK")
     setInspeccion(inspInicial)
     setShowModal(true)
+  }
+
+  // 🚀 ABRIR EDICIÓN
+  const abrirEdicion = (toma: any) => {
+    setEditingId(toma.id)
+    setForm({
+      cliente: toma.cliente, 
+      marca: toma.marca || "Apple", 
+      modelo: toma.modelo || "", 
+      almacenamiento: toma.almacenamiento || "", 
+      color: toma.color || "", 
+      imei: toma.imei || "",
+      bateria: toma.bateria || "", 
+      condicion_general: toma.condicion_general || "Bueno", 
+      accesorios: toma.accesorios || "", 
+      observaciones: toma.observaciones || "",
+      precio_reventa: toma.precio_reventa_usd?.toString() || "", 
+      costo_reparacion: toma.costo_reparacion_usd || 0, 
+      otros_costos: toma.otros_costos_usd || 0, 
+      margen_objetivo: toma.margen_objetivo_pct || 20
+    })
+    setInspeccion(toma.inspeccion || {})
+    setShowModal(true)
+  }
+
+  // 🚀 ELIMINAR COTIZACIÓN
+  const eliminarToma = async (id: string) => {
+    if(!confirm("⚠️ ¿Estás seguro de eliminar esta cotización permanentemente?")) return
+    try {
+      await supabase.from("tomas_usados").delete().eq("id", id)
+      fetchData()
+    } catch (error) {
+      alert("Error al eliminar.")
+    }
   }
 
   const handleGuardar = async (e: React.FormEvent) => {
@@ -108,10 +144,15 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
         otros_costos_usd: otros,
         margen_objetivo_pct: margen,
         oferta_maxima_usd: ofertaMaxima,
-        estado: 'Cotizada'
+        estado: 'Cotizada' // Si se edita una aceptada, se debería controlar, acá asumimos que solo se editan las Cotizadas o vuelve a estado Cotizada.
       }
 
-      await supabase.from("tomas_usados").insert([payload])
+      if (editingId) {
+        await supabase.from("tomas_usados").update(payload).eq("id", editingId)
+      } else {
+        await supabase.from("tomas_usados").insert([payload])
+      }
+      
       setShowModal(false)
       fetchData()
     } catch (error: any) {
@@ -190,8 +231,11 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
                   </td>
                   <td className="p-4 text-center">
                     {t.estado === 'Cotizada' ? (
-                      <div className="flex justify-center gap-2">
-                        <button onClick={() => aceptarIngresoStock(t)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black font-bold uppercase text-[9px] rounded-lg transition-all border border-emerald-500/30 flex items-center gap-1.5" title="Aceptar oferta e ingresar al stock"><ArrowRightLeft className="size-3"/> Ingresar Stock</button>
+                      <div className="flex justify-center gap-2 items-center">
+                        <button onClick={() => aceptarIngresoStock(t)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black font-bold uppercase text-[9px] rounded-lg transition-all border border-emerald-500/30 flex items-center gap-1.5" title="Aceptar oferta e ingresar al stock"><ArrowRightLeft className="size-3"/> Ingresar</button>
+                        {/* 🚀 BOTONES EDITAR Y ELIMINAR */}
+                        <button onClick={() => abrirEdicion(t)} className="p-1.5 text-zinc-400 hover:text-sky-400 bg-zinc-950 rounded-lg transition-colors border border-zinc-800" title="Editar Cotización"><Edit3 className="size-3.5"/></button>
+                        <button onClick={() => eliminarToma(t.id)} className="p-1.5 text-zinc-400 hover:text-red-400 bg-zinc-950 rounded-lg transition-colors border border-zinc-800" title="Eliminar"><Trash2 className="size-3.5"/></button>
                       </div>
                     ) : (
                       <span className="text-[10px] text-zinc-600 font-bold uppercase italic">Cerrada</span>
@@ -207,13 +251,13 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL NUEVA TOMA DE USADOS (ESTILO OSCURO / ESTRUCTURADO) */}
+      {/* 🚀 MODAL NUEVA/EDITAR TOMA DE USADOS */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl my-auto">
             
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950 sticky top-0 z-10">
-              <h3 className="text-xl font-black text-white flex items-center gap-2"><RefreshCcw className="size-5 text-emerald-400"/> Nueva toma de usado</h3>
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><RefreshCcw className="size-5 text-emerald-400"/> {editingId ? "Editar Cotización" : "Nueva toma de usado"}</h3>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
             </div>
             
@@ -231,7 +275,7 @@ export function TabTomaUsados({ usuarioActual }: { usuarioActual: any }) {
                 </div>
               </div>
 
-              {/* 2. EQUIPO (CON LISTAS DESPLEGABLES) */}
+              {/* 2. EQUIPO */}
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-800 pb-1">2. Equipo</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

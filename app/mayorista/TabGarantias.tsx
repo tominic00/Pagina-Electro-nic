@@ -136,7 +136,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         // 2. Anular la venta original (porque ese equipo específico vuelve)
         if (garantia.venta_id) await supabase.from("ventas_mayorista").update({ estado: 'Anulada por Cambio', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
         
-        // 3. Crear una venta nueva a coste 0 (o como decidas manejarlo contablemente) con el nuevo equipo
+        // 3. Crear una venta nueva a coste 0 con el nuevo equipo
         const equipoNuevo = stockDb.find(e => e.id === equipoCambioId)
         if (equipoNuevo) {
            await supabase.from("ventas_mayorista").insert([{
@@ -147,9 +147,9 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
            await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).eq("id", equipoNuevo.id)
         }
 
-        // 4. El equipo original roto, lo metemos al stock como "Para repuestos/reparar" (opcional pero recomendado)
+        // 🚀 4. El equipo original roto, lo metemos al stock como "En Reparación"
         await supabase.from("stock_mayorista").insert([{
-           equipo: garantia.equipo_nombre, condicion: "Falla/Garantía", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'Disponible', observaciones: "Ingreso por cambio de garantía."
+           equipo: garantia.equipo_nombre, condicion: "Para reparar", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'En Reparación', observaciones: "Ingreso por cambio de garantía. Pendiente de arreglo."
         }])
 
       } else if (tipoSolucion === "devolucion") {
@@ -157,9 +157,9 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         await supabase.from("garantias_mayorista").update({ estado: 'Resuelta (Devolución de Dinero)' }).eq("id", garantia.id)
         if (garantia.venta_id) await supabase.from("ventas_mayorista").update({ estado: 'Anulada (Devolución)', fecha_anulacion: new Date().toISOString() }).eq("id", garantia.venta_id)
         
-        // El equipo roto entra al stock
+        // 🚀 El equipo roto entra al stock como "En Reparación"
         await supabase.from("stock_mayorista").insert([{
-           equipo: garantia.equipo_nombre, condicion: "Falla/Garantía", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'Disponible', observaciones: "Ingreso por devolución de garantía."
+           equipo: garantia.equipo_nombre, condicion: "Para reparar", imei: garantia.imei, costo_usd: 0, precio_venta_usd: 0, estado: 'En Reparación', observaciones: "Ingreso por devolución de garantía. Pendiente de arreglo."
         }])
       }
 
@@ -238,7 +238,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL INICIAR GARANTÍA (DISEÑO OSCURO ESTRUCTURADO) */}
+      {/* 🚀 MODAL INICIAR GARANTÍA */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-auto">

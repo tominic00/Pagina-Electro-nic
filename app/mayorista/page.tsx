@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard } from "lucide-react"
+import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet } from "lucide-react"
 import  supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -98,20 +98,22 @@ export default function PortalMayorista() {
 
   const esDueñoOAdmin = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
+// DATOS DEL MENÚ LATERAL (Mapeados con los nuevos accesos granulares)
   const menuItems = [
-    { id: "resumen", label: "Dashboard", icon: LayoutDashboard, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white" },
-    { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white" },
-    { id: "ventas", label: "Caja POS", icon: ShoppingCart, color: "hover:bg-emerald-500/10 hover:text-emerald-400", activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-    { id: "reservas", label: "Reservas", icon: Calendar, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/20" },
-    { id: "usados", label: "Toma Usados", icon: RefreshCcw, color: "hover:bg-teal-500/10 hover:text-teal-400", activeBg: "bg-teal-500/10 text-teal-400 border-teal-500/20" },
-    { id: "garantias", label: "Garantías", icon: ShieldCheck, color: "hover:bg-red-500/10 hover:text-red-400", activeBg: "bg-red-500/10 text-red-400 border-red-500/20" },
-    { id: "proveedores", label: "Proveedores", icon: Briefcase, color: "hover:bg-fuchsia-500/10 hover:text-fuchsia-400", activeBg: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20" },
-    { id: "pedidos", label: "Pedidos", icon: Truck, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
-    { id: "listas", label: "Listas WP", icon: Share2, color: "hover:bg-orange-500/10 hover:text-orange-400", activeBg: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
-    { id: "clientes", label: "Clientes", icon: Users, color: "hover:bg-purple-500/10 hover:text-purple-400", activeBg: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-    { id: "equipo", label: "Equipo", icon: Users, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" },
-    { id: "analiticas", label: "Analíticas", icon: LineChart, color: "hover:bg-sky-500/10 hover:text-sky-400", activeBg: "bg-sky-500/10 text-sky-400 border-sky-500/20" },
-  ]
+    { id: "resumen", label: "Dashboard", icon: LayoutDashboard, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white", ver: true },
+    { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white", ver: usuarioActual?.accesos?.stock ?? true },
+    { id: "ventas", label: "Caja POS", icon: ShoppingCart, color: "hover:bg-emerald-500/10 hover:text-emerald-400", activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", ver: usuarioActual?.accesos?.ventas ?? true },
+    { id: "caja", label: "Caja Diaria", icon: Wallet, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/20", ver: usuarioActual?.accesos?.caja ?? false },
+    { id: "reservas", label: "Reservas", icon: Calendar, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/20", ver: usuarioActual?.accesos?.reservas ?? true },
+    { id: "usados", label: "Toma Usados", icon: RefreshCcw, color: "hover:bg-teal-500/10 hover:text-teal-400", activeBg: "bg-teal-500/10 text-teal-400 border-teal-500/20", ver: usuarioActual?.accesos?.usados ?? true },
+    { id: "garantias", label: "Garantías", icon: ShieldCheck, color: "hover:bg-red-500/10 hover:text-red-400", activeBg: "bg-red-500/10 text-red-400 border-red-500/20", ver: usuarioActual?.accesos?.garantias ?? true },
+    { id: "proveedores", label: "Proveedores", icon: Briefcase, color: "hover:bg-fuchsia-500/10 hover:text-fuchsia-400", activeBg: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20", ver: usuarioActual?.accesos?.proveedores ?? false },
+    { id: "pedidos", label: "Pedidos", icon: Truck, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/20", ver: usuarioActual?.accesos?.pedidos ?? false },
+    { id: "listas", label: "Listas WP", icon: Share2, color: "hover:bg-orange-500/10 hover:text-orange-400", activeBg: "bg-orange-500/10 text-orange-400 border-orange-500/20", ver: usuarioActual?.accesos?.listas ?? true },
+    { id: "clientes", label: "Clientes", icon: Users, color: "hover:bg-purple-500/10 hover:text-purple-400", activeBg: "bg-purple-500/10 text-purple-400 border-purple-500/20", ver: usuarioActual?.accesos?.clientes ?? false },
+    { id: "equipo", label: "Equipo", icon: Users, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20", ver: usuarioActual?.accesos?.equipo ?? false },
+    { id: "analiticas", label: "Analíticas", icon: LineChart, color: "hover:bg-sky-500/10 hover:text-sky-400", activeBg: "bg-sky-500/10 text-sky-400 border-sky-500/20", ver: usuarioActual?.accesos?.analiticas ?? false },
+  ].filter(item => item.ver) // 🚀 ESTO ES CLAVE: Filtra la lista para que no renderice el botón si no tiene permiso
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-white font-sans overflow-hidden">

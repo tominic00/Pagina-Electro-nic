@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Tag, Wallet, Banknote, Ban, CalendarDays } from "lucide-react"
+import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers } from "lucide-react"
 import  supabase  from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
@@ -16,10 +16,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [clienteId, setClienteId] = useState("") 
   const [clienteNombreNuevo, setClienteNombreNuevo] = useState("")
 
-  // ESTADOS DEL CARRITO
+  // ESTADOS DEL CARRITO Y COBRO
   const [carrito, setCarrito] = useState<any[]>([])
   const [equipoSeleccionadoId, setEquipoSeleccionadoId] = useState("")
   const [precioItem, setPrecioItem] = useState("")
+  const [montoAbonado, setMontoAbonado] = useState<number | "">("") // NUEVO: Cuánto paga realmente
 
   // ESTADOS DE DESCUENTO GLOBAL
   const [ajusteGlobal, setAjusteGlobal] = useState<number | "">("")
@@ -30,15 +31,14 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [cotizacionUsd, setCotizacionUsd] = useState<number>(0)
   const [loadingDolar, setLoadingDolar] = useState(false)
 
-  // 🚀 ESTADOS DE FILTROS DEL HISTORIAL
+  // ESTADOS DE FILTROS DEL HISTORIAL
   const [filtroHistorialCliente, setFiltroHistorialCliente] = useState("")
   const [filtroHistorialFecha, setFiltroHistorialFecha] = useState("")
 
   const fetchData = async () => {
     setLoading(true)
     const { data: stockData } = await supabase.from("stock_mayorista").select("*").eq("estado", "Disponible")
-    // Ampliamos el límite a 100 para que los filtros tengan más datos para buscar
-    const { data: ventasData } = await supabase.from("ventas_mayorista").select("*").order("fecha", { ascending: false }).limit(100)
+    const { data: ventasData } = await supabase.from("ventas_mayorista").select("*").order("fecha", { ascending: false }).limit(200)
     const { data: clientesData } = await supabase.from("clientes_mayorista").select("*").order("nombre")
     
     if (stockData) setStock(stockData)
@@ -65,46 +65,76 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     fetchCotizacion()
   }, [])
 
-  // FILTRO INTELIGENTE PARA EL HISTORIAL
+  // MATEMÁTICAS DEL CARRITO
+  const totalCosto = carrito.reduce((acc, item) => acc + (Number(item.costo_usd) || 0), 0)
+  const totalVentaBase = carrito.reduce((acc, item) => acc + (Number(item.precio_cerrado_usd) || 0), 0)
+
+  let montoAjusteGlobal = 0
+  const valorAjuste = Number(ajusteGlobal) || 0
+  if (tipoAjuste === "monto") montoAjusteGlobal = valorAjuste
+  else montoAjusteGlobal = totalVentaBase * (valorAjuste / 100)
+
+  const totalVentaFinal = totalVentaBase + montoAjusteGlobal
+  const gananciaNeta = totalVentaFinal - totalCosto
+  
+  const isPagoPesos = formaPago.includes("ARS")
+  const totalPesos = isPagoPesos ? totalVentaFinal * cotizacionUsd : 0
+
+  // Auto-completar el monto abonado con el total si no se tocó
+  useEffect(() => {
+    setMontoAbonado(totalVentaFinal > 0 ? totalVentaFinal : "")
+  }, [totalVentaFinal])
+
+  // LÓGICA DEL HISTORIAL (AGRUPACIÓN POR LOTE)
   const ventasFiltradas = ventas.filter(v => {
     const matchClienteOEquipo = filtroHistorialCliente === "" || 
                                 (v.cliente?.toLowerCase().includes(filtroHistorialCliente.toLowerCase())) || 
                                 (v.equipo_nombre?.toLowerCase().includes(filtroHistorialCliente.toLowerCase()))
-    
-    // v.fecha suele ser YYYY-MM-DDTHH:mm:ss, con startsWith buscamos la fecha exacta YYYY-MM-DD
     const matchFecha = filtroHistorialFecha === "" || (v.fecha && v.fecha.startsWith(filtroHistorialFecha))
-    
     return matchClienteOEquipo && matchFecha
   })
 
-  // 🚀 FUNCIÓN PARA ANULAR UNA VENTA
+  // Agrupamos las ventas que tienen el mismo lote_id
+  const lotesAgrupados = Object.values(ventasFiltradas.reduce((acc: any, v) => {
+    const key = v.lote_id || v.id // Si no tiene lote (venta vieja o individual), usa su propio ID
+    if (!acc[key]) {
+      acc[key] = { 
+        lote_id: key, 
+        fecha: v.fecha, 
+        cliente: v.cliente, 
+        forma_pago: v.forma_pago, 
+        cotizacion_usd: v.cotizacion_usd,
+        items: [], 
+        total_lote: 0,
+        es_lote_real: !!v.lote_id
+      }
+    }
+    acc[key].items.push(v)
+    // Sumamos al total del lote solo si el item no está anulado
+    if (v.estado !== 'Anulada' && !v.estado.includes('Anulada')) {
+      acc[key].total_lote += Number(v.monto_vendido_usd || 0)
+    }
+    return acc
+  }, {})).sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+
+
+  // 🚀 FUNCIÓN PARA ANULAR UNA VENTA (INDIVIDUAL)
   const handleAnularVenta = async (venta: any) => {
-    if (!confirm(`⚠️ ¿Estás seguro de anular esta venta de ${venta.cliente}?\n\nEl equipo (${venta.equipo_nombre}) volverá a estar "Disponible" en tu stock automáticamente.`)) return
+    if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en tu stock automáticamente.`)) return
 
     try {
       setIsProcessing(true)
-      
-      // 1. Marcamos la venta como Anulada y le ponemos la fecha de hoy
-      const { error: errorVenta } = await supabase.from("ventas_mayorista").update({
-        estado: 'Anulada',
-        fecha_anulacion: new Date().toISOString()
-      }).eq("id", venta.id)
-      
-      if (errorVenta) throw new Error("Error al actualizar la venta: " + errorVenta.message)
+      const { error: errorVenta } = await supabase.from("ventas_mayorista").update({ estado: 'Anulada', fecha_anulacion: new Date().toISOString() }).eq("id", venta.id)
+      if (errorVenta) throw new Error(errorVenta.message)
 
-      // 2. Devolvemos el equipo al stock disponible
       if (venta.equipo_id) {
-        const { error: errorStock } = await supabase.from("stock_mayorista").update({
-          estado: 'Disponible'
-        }).eq("id", venta.equipo_id)
-        
-        if (errorStock) throw new Error("Error al devolver el equipo al stock: " + errorStock.message)
+        await supabase.from("stock_mayorista").update({ estado: 'Disponible' }).eq("id", venta.equipo_id)
       }
 
-      alert("✅ Venta anulada correctamente. El equipo ya está disponible en el stock de nuevo.")
+      alert("✅ Venta anulada correctamente.")
       fetchData()
     } catch (error: any) {
-      alert(error.message)
+      alert("Error: " + error.message)
     } finally {
       setIsProcessing(false)
     }
@@ -122,20 +152,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   }
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
-
-  const totalCosto = carrito.reduce((acc, item) => acc + (Number(item.costo_usd) || 0), 0)
-  const totalVentaBase = carrito.reduce((acc, item) => acc + (Number(item.precio_cerrado_usd) || 0), 0)
-
-  let montoAjusteGlobal = 0
-  const valorAjuste = Number(ajusteGlobal) || 0
-  if (tipoAjuste === "monto") montoAjusteGlobal = valorAjuste
-  else montoAjusteGlobal = totalVentaBase * (valorAjuste / 100)
-
-  const totalVentaFinal = totalVentaBase + montoAjusteGlobal
-  const gananciaNeta = totalVentaFinal - totalCosto
-  
-  const isPagoPesos = formaPago.includes("ARS")
-  const totalPesos = isPagoPesos ? totalVentaFinal * cotizacionUsd : 0
 
   const generarPDF = (tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", listaItems: any[], nombreCliente: string, totalFacturado: number, ajuste: number, fPago: string, cotizacion: number) => {
     try {
@@ -161,7 +177,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       if (fPago) { doc.text(`Forma de pago: ${fPago}`, 14, offsetY); offsetY += 6 }
       if (fPago && fPago.includes("ARS") && cotizacion > 0) {
         doc.text(`Cotización aplicada: $${cotizacion} ARS/USD`, 14, offsetY); offsetY += 6
-        doc.setFont("helvetica", "bold"); doc.text(`Total equivalente abonado: $ ${(totalFacturado * cotizacion).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 14, offsetY)
+        doc.setFont("helvetica", "bold"); doc.text(`Total equivalente: $ ${(totalFacturado * cotizacion).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 14, offsetY)
       }
 
       if (tipoDocumento === "PRESUPUESTO") {
@@ -184,41 +200,88 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd)
   }
 
+  // 🚀 CERRAR VENTA, IMPACTAR CAJA Y ACTUALIZAR SALDOS
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
     setIsProcessing(true)
+    
     try {
       let clienteIdFinal = clienteId
       const nombreCliente = getNombreCliente()
+      
+      // 1. Si es nuevo, lo creamos
       if (clienteId === "NUEVO") {
-        const { data: newClient, error: errClient } = await supabase.from("clientes_mayorista").insert([{ nombre: nombreCliente }]).select().single()
+        const { data: newClient, error: errClient } = await supabase.from("clientes_mayorista").insert([{ nombre: nombreCliente, saldo_usd: 0 }]).select().single()
         if (errClient) throw new Error("No se pudo registrar al nuevo cliente: " + errClient.message)
         clienteIdFinal = newClient.id
       }
+
+      // 2. Gestionamos Deuda / Saldo a Favor del cliente
+      const pagoReal = Number(montoAbonado) || 0
+      const diferencia = pagoReal - totalVentaFinal
+
+      if (clienteIdFinal && clienteIdFinal !== "" && diferencia !== 0) {
+        // Traemos el saldo actual del cliente
+        const { data: cliActual } = await supabase.from("clientes_mayorista").select("saldo_usd").eq("id", clienteIdFinal).single()
+        const saldoAnterior = Number(cliActual?.saldo_usd || 0)
+        // Actualizamos (Si diferencia es negativa, debe plata. Si es positiva, tiene saldo a favor)
+        await supabase.from("clientes_mayorista").update({ saldo_usd: saldoAnterior + diferencia }).eq("id", clienteIdFinal)
+      }
+
+      // 3. Generamos el ID único del LOTE
+      const loteId = `LOTE-${Date.now()}`
       const ajustePorItem = montoAjusteGlobal / carrito.length
+
+      // 4. Armamos y guardamos las ventas
       const nuevasVentas = carrito.map(item => {
         const precioItemConAjuste = item.precio_cerrado_usd + ajustePorItem
         const costoItem = Number(item.costo_usd) || 0
         return {
-          equipo_id: item.id, equipo_nombre: item.equipo, cliente: nombreCliente,
-          monto_vendido_usd: precioItemConAjuste, ganancia_usd: precioItemConAjuste - costoItem,
-          vendedor: usuarioActual.nombre, forma_pago: formaPago,
-          cotizacion_usd: isPagoPesos ? cotizacionUsd : null, monto_vendido_ars: isPagoPesos ? (precioItemConAjuste * cotizacionUsd) : null,
-          estado: 'Completada' // Por defecto completada
+          lote_id: loteId, // 🚀 AGRUPADOR
+          equipo_id: item.id, 
+          equipo_nombre: item.equipo, 
+          cliente: nombreCliente,
+          monto_vendido_usd: precioItemConAjuste, 
+          ganancia_usd: precioItemConAjuste - costoItem,
+          vendedor: usuarioActual.nombre, 
+          forma_pago: formaPago,
+          cotizacion_usd: isPagoPesos ? cotizacionUsd : null, 
+          monto_vendido_ars: isPagoPesos ? (precioItemConAjuste * cotizacionUsd) : null,
+          estado: 'Completada'
         }
       })
       const { error: errVentas } = await supabase.from("ventas_mayorista").insert(nuevasVentas)
       if (errVentas) throw new Error("Fallo al guardar la venta: " + errVentas.message)
+
+      // 5. Descontar Stock
       const idsVendidos = carrito.map(item => item.id)
-      const { error: errStock } = await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
-      if (errStock) throw new Error("Fallo al descontar el stock: " + errStock.message)
+      await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
+
+      // 🚀 6. ENVIAR PLATA A LA CAJA (Solo lo que pagó hoy)
+      if (pagoReal > 0) {
+        await supabase.from("caja_mayorista").insert([{
+          tipo: "Ingreso",
+          categoria: "Venta",
+          monto: pagoReal,
+          metodo_pago: formaPago === "Efectivo USD" ? "Efectivo" : (formaPago === "USDT" ? "USDT" : "Transferencia"),
+          descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
+          usuario: usuarioActual.nombre,
+          referencia_id: null // Podrías guardar el lote_id acá si en el futuro cruzás tablas
+        }])
+      }
+
       generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd)
-      alert(`✅ ¡Venta registrada y Remito generado!`)
-      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD")
+      alert(`✅ ¡Venta registrada exitosamente!\n${diferencia < 0 ? `El cliente quedó con una deuda de USD ${Math.abs(diferencia).toFixed(2)}.` : diferencia > 0 ? `El cliente quedó con un saldo a favor de USD ${diferencia.toFixed(2)}.` : 'El pago fue exacto.'}`)
+      
+      // Limpiar Formulario
+      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonado("")
       fetchData()
-    } catch (error: any) { alert("Error en el sistema: " + error.message) } 
-    finally { setIsProcessing(false) }
+    } catch (error: any) { 
+      alert("Error en el sistema: " + error.message) 
+    } finally { 
+      setIsProcessing(false) 
+    }
   }
 
   return (
@@ -289,37 +352,49 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <div className="relative flex items-center"><span className="absolute left-3 text-xs text-zinc-500 font-bold">1 USD = $</span><input type="number" value={cotizacionUsd} onChange={e => setCotizacionUsd(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-700 text-sky-400 font-bold rounded-xl pl-20 pr-3 py-2.5 text-sm outline-none focus:border-sky-500" />{loadingDolar && <Loader2 className="absolute right-3 size-4 animate-spin text-sky-500"/>}</div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-3 border-b border-zinc-800 pb-3">
                 <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value as any)} className="bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-xs outline-none focus:border-sky-500"><option value="monto">Monto USD</option><option value="porcentaje">%</option></select>
                 <input type="number" value={ajusteGlobal} onChange={e => setAjusteGlobal(e.target.value ? Number(e.target.value) : "")} placeholder="Ajuste Global (- Descuento)" className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
+              </div>
+              
+              {/* 🚀 NUEVO: CONTROL DE COBRO / DEUDA */}
+              <div>
+                <label className="text-[10px] font-black uppercase text-emerald-500 block mb-1">Monto que abona el cliente (USD)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
+                  <input type="number" step="0.01" value={montoAbonado} onChange={e => setMontoAbonado(e.target.value ? Number(e.target.value) : "")} className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" />
+                </div>
+                <p className="text-[9px] text-zinc-500 mt-1.5 leading-tight">
+                  Si paga menos del total, la diferencia se anotará como deuda en la cuenta del cliente. Si no se selecciona un cliente registrado, no se guardará la deuda.
+                </p>
               </div>
             </div>
 
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl animate-in slide-in-from-bottom-4">
               <div className="flex justify-between items-end mb-4 border-b border-emerald-500/20 pb-4">
-                <div><p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Total a Cobrar</p><p className="text-3xl font-black text-emerald-400">U$D {totalVentaFinal.toFixed(2)}</p></div>
-                <div className="text-right"><p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Ganancia</p><p className="text-lg font-black text-emerald-500">+ U$D {gananciaNeta.toFixed(2)}</p></div>
+                <div><p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Total Factura</p><p className="text-3xl font-black text-emerald-400">U$D {totalVentaFinal.toFixed(2)}</p></div>
+                <div className="text-right"><p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">A Caja</p><p className="text-lg font-black text-emerald-500">U$D {Number(montoAbonado || 0).toFixed(2)}</p></div>
               </div>
               {isPagoPesos && (
                 <div className="flex justify-between items-center bg-emerald-500/20 p-3 rounded-xl mb-4">
-                  <div className="flex items-center gap-2"><Banknote className="size-5 text-emerald-400"/><span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Total en Pesos</span></div>
+                  <div className="flex items-center gap-2"><Banknote className="size-5 text-emerald-400"/><span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Equivalente Pesos</span></div>
                   <p className="text-xl font-black text-emerald-400">$ {totalPesos.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-3">
-                <button onClick={handlePresupuesto} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-sky-400 border border-sky-500/30 font-black uppercase tracking-widest py-3.5 rounded-xl transition-all active:scale-95 flex justify-center items-center gap-2 text-xs"><FileText className="size-4"/> Bajar Presupuesto</button>
-                <button onClick={handleCerrarVentaMultiple} disabled={isProcessing} className="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="size-5 animate-spin"/> : <><CheckCircle2 className="size-5"/> Confirmar Venta</>}</button>
+                <button onClick={handlePresupuesto} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-sky-400 border border-sky-500/30 font-black uppercase tracking-widest py-3.5 rounded-xl transition-all active:scale-95 flex justify-center items-center gap-2 text-xs"><FileText className="size-4"/> Presupuesto</button>
+                <button onClick={handleCerrarVentaMultiple} disabled={isProcessing} className="flex-[2] bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50">{isProcessing ? <Loader2 className="size-5 animate-spin"/> : <><CheckCircle2 className="size-5"/> Confirmar Pago</>}</button>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* 🧾 PANEL DERECHO: HISTORIAL DINÁMICO */}
+      {/* 🧾 PANEL DERECHO: HISTORIAL DINÁMICO AGRUPADO */}
       <div className="p-6">
         <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2"><History className="size-5 text-zinc-500"/> Historial de Operaciones</h3>
         
-        {/* 🚀 FILTROS DEL HISTORIAL */}
+        {/* FILTROS */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
@@ -331,53 +406,66 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           </div>
         </div>
 
-        <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2 hide-scrollbar">
-          {ventasFiltradas.map(v => (
-            <div key={v.id} className={cn("p-4 rounded-2xl flex justify-between items-center transition-colors border", v.estado === 'Anulada' ? "bg-red-500/5 border-red-500/20 opacity-70" : "bg-zinc-900/50 hover:bg-zinc-900 border-zinc-800")}>
-              
-              <div>
-                <p className={cn("font-bold text-sm leading-tight", v.estado === 'Anulada' ? "text-red-400 line-through" : "text-white")}>{v.equipo_nombre}</p>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1.5 flex items-center gap-1.5">
-                  <span className="text-sky-400">👤 {v.cliente}</span>
-                </p>
-                <p className="text-[9px] text-zinc-500 font-mono mt-1">
-                  {v.forma_pago} {v.cotizacion_usd ? `(Cot: $${v.cotizacion_usd})` : ""}
-                </p>
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 hide-scrollbar">
+          {lotesAgrupados.map((lote: any) => {
+            const todosAnulados = lote.items.every((i: any) => i.estado === 'Anulada')
+            return (
+              <div key={lote.lote_id} className={cn("p-4 rounded-2xl transition-colors border", todosAnulados ? "bg-red-500/5 border-red-500/20 opacity-70" : "bg-zinc-900/30 border-zinc-800")}>
                 
-                {/* Fechas dinámicas */}
-                <div className="mt-2 space-y-0.5">
-                  <p className="text-[9px] text-zinc-600 font-bold uppercase flex items-center gap-1">✅ Vendido el {new Date(v.fecha || v.created_at).toLocaleDateString()}</p>
-                  {v.estado === 'Anulada' && v.fecha_anulacion && (
-                    <p className="text-[9px] text-red-400 font-bold uppercase flex items-center gap-1">❌ Anulado el {new Date(v.fecha_anulacion).toLocaleDateString()}</p>
-                  )}
+                {/* CABECERA DEL LOTE */}
+                <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      {lote.es_lote_real && <Layers className="size-4 text-sky-500"/>}
+                      <p className="font-black text-white text-sm">Venta {lote.es_lote_real ? "en Lote" : "Individual"}</p>
+                    </div>
+                    <p className="text-[11px] font-bold text-sky-400 uppercase tracking-widest">👤 {lote.cliente}</p>
+                    <p className="text-[9px] text-zinc-500 font-mono mt-1">{new Date(lote.fecha).toLocaleString()}</p>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                    <p className={cn("font-black text-lg", todosAnulados ? "text-zinc-600 line-through" : "text-emerald-400")}>U$D {lote.total_lote.toFixed(2)}</p>
+                    <p className="text-[9px] text-zinc-500 font-mono">{lote.forma_pago}</p>
+                    {/* Botón Imprimir Lote Completo */}
+                    {!todosAnulados && (
+                      <button onClick={() => generarPDF("REMITO OFICIAL", lote.items, lote.cliente, lote.total_lote, 0, lote.forma_pago, lote.cotizacion_usd)} className="mt-2 bg-zinc-950 border border-zinc-800 hover:border-sky-500 hover:text-sky-400 text-zinc-400 p-1.5 px-3 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold uppercase">
+                        <Printer className="size-3" /> Remito
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="text-right flex items-center gap-3">
-                <div className="text-right">
-                  <p className={cn("font-black text-sm", v.estado === 'Anulada' ? "text-zinc-600 line-through" : "text-white")}>U$D {v.monto_vendido_usd}</p>
-                  {v.estado !== 'Anulada' && <p className="text-[10px] text-emerald-500 font-black uppercase mt-1 bg-emerald-500/10 px-2 py-0.5 rounded inline-block">Neto: U$D {v.ganancia_usd}</p>}
+                {/* ITEMS DENTRO DEL LOTE */}
+                <div className="space-y-2">
+                  {lote.items.map((v: any) => (
+                    <div key={v.id} className="flex justify-between items-center bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/50">
+                      <div className="flex-1">
+                        <p className={cn("text-xs font-bold", v.estado === 'Anulada' || v.estado?.includes('Anulada') ? "text-red-400 line-through" : "text-zinc-300")}>- {v.equipo_nombre}</p>
+                        <p className="text-[9px] text-zinc-600 mt-0.5">IMEI: {v.imei || "S/N"}</p>
+                      </div>
+                      <div className="flex items-center gap-3 text-right">
+                        <div className="flex flex-col items-end">
+                          <span className={cn("text-[9px] font-black uppercase px-1.5 py-0.5 rounded", 
+                            v.estado === 'Completada' ? "bg-emerald-500/10 text-emerald-500" :
+                            v.estado === 'En Garantía' ? "bg-amber-500/10 text-amber-500" :
+                            "bg-red-500/10 text-red-500"
+                          )}>{v.estado}</span>
+                          <span className="text-xs font-bold text-zinc-400 mt-1">U$D {v.monto_vendido_usd}</span>
+                        </div>
+                        {/* Botón anular ITEM INDIVIDUAL */}
+                        {(v.estado === 'Completada' || v.estado === 'En Garantía') && (
+                          <button onClick={() => handleAnularVenta(v)} disabled={isProcessing} className="text-zinc-600 hover:text-red-400 p-1 rounded-lg transition-colors" title="Anular este equipo">
+                            <Ban className="size-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                
-                <div className="flex flex-col gap-1.5">
-                  {/* Botón Imprimir (Solo si no está anulada) */}
-                  {v.estado !== 'Anulada' && (
-                    <button onClick={() => generarPDF("REMITO OFICIAL", [v], v.cliente, Number(v.monto_vendido_usd), 0, v.forma_pago, v.cotizacion_usd)} className="bg-zinc-950 border border-zinc-800 hover:border-sky-500 hover:text-sky-400 text-zinc-400 p-2 rounded-lg transition-all" title="Reimprimir Remito">
-                      <Printer className="size-4" />
-                    </button>
-                  )}
-                  {/* Botón Anular */}
-                  {v.estado !== 'Anulada' && (
-                    <button onClick={() => handleAnularVenta(v)} disabled={isProcessing} className="bg-zinc-950 border border-zinc-800 hover:border-red-500 hover:bg-red-500/10 hover:text-red-400 text-zinc-500 p-2 rounded-lg transition-all disabled:opacity-50" title="Anular Venta">
-                      <Ban className="size-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
 
-            </div>
-          ))}
-          {ventasFiltradas.length === 0 && <div className="text-center py-10 text-zinc-600 font-bold italic">No se encontraron ventas con esos filtros.</div>}
+              </div>
+            )
+          })}
+          {lotesAgrupados.length === 0 && <div className="text-center py-10 text-zinc-600 font-bold italic">No se encontraron ventas con esos filtros.</div>}
         </div>
       </div>
 
