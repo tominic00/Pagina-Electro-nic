@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react"
-import { Bot, Settings, Play, Save, Sparkles, Key } from "lucide-react"
-import supabase from "@/lib/supabase"
+import { Bot, Settings, Play, Save, Sparkles, Key, Crown } from "lucide-react"
+import { GoogleGenerativeAI } from "@google/generative-ai"
+import  supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
   const [apiKey, setApiKey] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [mensajes, setMensajes] = useState<{rol: "user" | "ia", texto: string}[]>([
-    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Google Gemini (100% Gratis). Configurá tu API Key a la izquierda y probemos." }
+    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Google Gemini Pro. Configurá tu API Key a la izquierda y probemos." }
   ])
   const [inputMensaje, setInputMensaje] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -49,7 +50,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
     e.preventDefault()
     if (!inputMensaje.trim()) return
     const keyLimpia = apiKey.trim()
-    if (!keyLimpia) return alert("⚠️ Necesitás pegar tu API Key GRATIS de Google Gemini para probar el simulador.")
+    if (!keyLimpia) return alert("⚠️ Necesitás pegar tu API Key de Google Gemini para probar el simulador.")
 
     const nuevoMensajeUsuario = { rol: "user" as const, texto: inputMensaje }
     const historial = [...mensajes, nuevoMensajeUsuario]
@@ -65,35 +66,32 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // Formato de historial para Google Gemini API
-      const contentsForGemini = historial.slice(1).map(m => ({
+      // 🚀 SDK OFICIAL CON TU CUENTA PRO
+      const genAI = new GoogleGenerativeAI(keyLimpia)
+      
+      // Podés usar "gemini-1.5-pro" o "gemini-1.5-flash"
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        systemInstruction: promptConStock
+      })
+
+      const historyForSdk = historial.slice(1, -1).map(m => ({
         role: m.rol === "user" ? "user" : "model",
         parts: [{ text: m.texto }]
       }))
 
-      // 🚀 LLAMADA A LA API DE GEMINI
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyLimpia}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: promptConStock }]
-          },
-          contents: contentsForGemini
-        })
+      const chat = model.startChat({
+        history: historyForSdk
       })
 
-      const data = await res.json()
+      const result = await chat.sendMessage(inputMensaje)
+      const responseText = result.response.text()
 
-      if (data.error) throw new Error(data.error.message)
-
-      const respuestaIA = data.candidates?.[0]?.content?.parts?.[0]?.text || "No pude generar una respuesta."
-
-      setMensajes([...historial, { rol: "ia", texto: respuestaIA }])
+      setMensajes([...historial, { rol: "ia", texto: responseText }])
 
     } catch (error: any) {
-      console.error(error)
-      setMensajes([...historial, { rol: "ia", texto: `❌ Error de conexión con Gemini: ${error.message}` }])
+      console.error("Error SDK Gemini:", error)
+      setMensajes([...historial, { rol: "ia", texto: `❌ Error: ${error.message || 'Error al conectar con Gemini SDK'}` }])
     } finally {
       setIsTyping(false)
     }
@@ -102,16 +100,16 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Gratis)</h2>
+        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Gemini Pro)</h2>
         <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Google Gemini.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* PANEL IZQUIERDO: CONFIGURACIÓN DEL CEREBRO */}
+        {/* PANEL IZQUIERDO: CONFIGURACIÓN */}
         <div className="space-y-6">
           <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Key className="size-4"/> Conexión Google Gemini (100% Gratis)</h3>
+            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Crown className="size-4 text-amber-400"/> Conexión Google Gemini Pro</h3>
             
             <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de Gemini</label>
             <input 
@@ -122,7 +120,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
               className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono mb-2" 
             />
             <p className="text-[10px] text-zinc-500 leading-relaxed mb-4">
-              Obtené tu clave gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Google AI Studio</a>. No requiere tarjeta.
+              Obtené tu clave en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Google AI Studio</a> asegurándote de estar con tu cuenta Pro.
             </p>
 
             <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 mt-8 flex items-center gap-2"><Settings className="size-4"/> Comportamiento (System Prompt)</h3>
