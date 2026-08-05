@@ -27,22 +27,51 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 {STOCK_DATA}`
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("electro_groq_key") || ""
-    const savedPrompt = localStorage.getItem("electro_ai_prompt") || defaultPrompt
-    setApiKey(savedKey)
-    setSystemPrompt(savedPrompt)
+    // Carga la configuración desde Supabase para que coincida con WhatsApp
+    const fetchConfig = async () => {
+      try {
+        const { data } = await supabase.from("configuracion_ia").select("*").eq("id", 1).single()
+        if (data) {
+          setSystemPrompt(data.system_prompt || defaultPrompt)
+          setApiKey(data.groq_api_key || "")
+        } else {
+          setSystemPrompt(defaultPrompt)
+        }
+      } catch (err) {
+        setSystemPrompt(defaultPrompt)
+      }
+    }
 
     const fetchStock = async () => {
       const { data } = await supabase.from("stock_mayorista").select("*").eq("estado", "Disponible")
       if (data) setStockActual(data)
     }
+
+    fetchConfig()
     fetchStock()
   }, [])
 
-  const guardarConfig = () => {
-    localStorage.setItem("electro_groq_key", apiKey.trim())
-    localStorage.setItem("electro_ai_prompt", systemPrompt)
-    alert("✅ Configuración de Groq guardada correctamente.")
+  const guardarConfig = async () => {
+    try {
+      const keyLimpia = apiKey.trim()
+      const { error } = await supabase.from("configuracion_ia").upsert({
+        id: 1,
+        system_prompt: systemPrompt,
+        groq_api_key: keyLimpia,
+        updated_at: new Date().toISOString()
+      })
+
+      if (error) throw error
+
+      // También guardamos en localStorage por respaldo local
+      localStorage.setItem("electro_groq_key", keyLimpia)
+      localStorage.setItem("electro_ai_prompt", systemPrompt)
+
+      alert("✅ Configuración de Groq guardada correctamente en Supabase y aplicada a WhatsApp.")
+    } catch (error: any) {
+      console.error("Error al guardar configuración:", error)
+      alert("❌ Error al guardar en base de datos: " + error.message)
+    }
   }
 
   const enviarMensaje = async (e: React.FormEvent) => {
