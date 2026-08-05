@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { TabResumen } from "./TabResumen"
 import { TabStock } from "./TabStock"
 import { TabVentas } from "./TabVentas"
-import { TabCaja } from "./TabCaja" // Agregado
+import { TabCaja } from "./TabCaja" 
 import { TabPedidos } from "./TabPedidos"
 import { TabReservas } from "./TabReservas"
 import { TabTomaUsados } from "./TabTomaUsados"
@@ -20,11 +20,11 @@ import { TabEquipo } from "./TabEquipo"
 import { TabNotificaciones } from "./TabNotificaciones"
 import { TabConfiguracion } from "./TabConfiguracion"
 import { TabClientesB2B } from "./TabClientesB2B"
-import { TabAsistenteIA } from "./TabAsistenteIA"
 import { TabAnaliticas } from "./TabAnaliticas"
+import { TabAsistenteIA } from "./TabAsistenteIA" // 🚀 IA IMPORTADA
 
-// Agregamos "caja" a los tipos permitidos
-type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion"
+// Agregamos "ia" a los tipos permitidos
+type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion" | "ia"
 
 export default function PortalMayorista() {
   const [usuarioActual, setUsuarioActual] = useState<any | null>(null)
@@ -101,7 +101,7 @@ export default function PortalMayorista() {
 
   const esDueñoOAdmin = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
-// 🚀 MENÚ LATERAL: Si sos Dueño/Admin ves TODO. Si sos vendedor, lee los accesos.
+  // 🚀 MENÚ LATERAL
   const menuItems = [
     { id: "resumen", label: "Dashboard", icon: LayoutDashboard, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white border-zinc-600 shadow-md", ver: true },
     { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white border-zinc-600 shadow-md", ver: esDueñoOAdmin || (usuarioActual?.accesos?.stock ?? true) },
@@ -223,6 +223,10 @@ export default function PortalMayorista() {
             {activeTab === "listas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabListas /></div>}
             {activeTab === "clientes" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabClientesB2B usuarioActual={usuarioActual} /></div>}
             {activeTab === "equipo" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabEquipo usuarioActual={usuarioActual} /></div>}
+            
+            {/* 🚀 EL MÓDULO IA AHORA SE RENDERIZA ACÁ */}
+            {activeTab === "ia" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabAsistenteIA usuarioActual={usuarioActual} /></div>}
+            
             {activeTab === "notificaciones" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabNotificaciones /></div>}
             {activeTab === "configuracion" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabConfiguracion usuarioActual={usuarioActual} /></div>}
             
