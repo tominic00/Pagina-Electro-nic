@@ -64,8 +64,9 @@ Determina qué decidió el dueño:
         const decision = resGroq.choices[0]?.message?.content || '';
 
         if (decision.includes('CONFIRMAR')) {
-          // Actualizar estado en Supabase
+          // Actualizar estado en la tabla citas y actividades
           await supabase.from('citas').update({ estado: 'confirmada' }).eq('id', ultimaCita.id);
+          await supabase.from('actividades').update({ estado: 'Completado' }).eq('cliente_telefono', ultimaCita.cliente_telefono);
 
           // Avisar al cliente
           const mensajeCliente = `¡Hola ${ultimaCita.cliente_nombre}! 👋 Te confirmo que quedó agendada la cita para ver el ${ultimaCita.equipo}. Te esperamos en el local (Florida Sur 24 local 2, Yerba Buena). ¡Nos vemos!`;
@@ -174,13 +175,23 @@ Determina qué decidió el dueño:
       detalleCita = matchCita[1];
       aiReply = aiReply.replace(/\[AGENDAR_CITA:\s*.*?\]/i, '').trim();
 
-      // Guardar cita pendiente en Supabase
+      // 1. Guardar cita pendiente en la tabla 'citas'
       await supabase.from('citas').insert({
         cliente_nombre: pushName,
         cliente_telefono: remoteJid,
         equipo: detalleCita,
-        fecha_hora: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Ajustable según parseo de fecha
+        fecha_hora: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         estado: 'pendiente'
+      });
+
+      // 2. Guardar automáticamente en la tabla 'actividades' (Para tu nuevo Calendario)
+      await supabase.from('actividades').insert({
+        titulo: `Cita con ${pushName} (${detalleCita})`,
+        tipo: 'Cita',
+        descripcion: `Solicitado vía WhatsApp por +${remoteJid.replace('@s.whatsapp.net', '')}`,
+        fecha: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        estado: 'Pendiente',
+        cliente_telefono: remoteJid
       });
     }
 
