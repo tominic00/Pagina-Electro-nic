@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, BatteryMedium } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, BatteryMedium, Users, Store, Truck, PackageCheck } from "lucide-react"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabListas() {
@@ -8,42 +8,70 @@ export function TabListas() {
   const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
-  // Opciones de formato
-  const [mostrarBateria, setMostrarBateria] = useState(true)
+  // 🚀 NUEVOS CONTROLES DE LISTA
+  const [tipoPrecio, setTipoPrecio] = useState<"mayorista" | "minorista">("minorista")
+  const [origenStock, setOrigenStock] = useState<"disponible" | "ingresando">("disponible")
   
-  // Selección de equipos
+  const [mostrarBateria, setMostrarBateria] = useState(true)
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
 
   // Textos editables
-  const [encabezado, setEncabezado] = useState("🚀 ¡Llegó stock fresquito a Electro·Nic! 🚀\nSeparamos las mejores naves para vos. Chequeá los precios de hoy:")
-  const [piePagina, setPiePagina] = useState("💳 Aceptamos USDT, Dólares y Pesos al cambio del día.\n\nEscribime y reservá el tuyo antes de que vuelen! 🏃‍♂️💨")
+  const [encabezado, setEncabezado] = useState("")
+  const [piePagina, setPiePagina] = useState("")
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: stockData } = await supabase.from("stock_mayorista").select("*").eq("estado", "Disponible")
+    // Traemos tanto lo disponible como lo que viene en camino
+    const { data: stockData } = await supabase.from("stock_mayorista")
+      .select("*")
+      .in("estado", ["Disponible", "En Tránsito", "En Camino"])
+    
     if (stockData) setStockCrudo(stockData)
     setLoading(false)
   }
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 AGRUPACIÓN DINÁMICA (Depende de si mostramos o no la batería)
+  // 🚀 CAMBIO AUTOMÁTICO DE TEXTOS SEGÚN EL TIPO DE LISTA
   useEffect(() => {
-    const grupos = stockCrudo.reduce((acc: any, item: any) => {
-      // Si el equipo es nuevo, nunca importa la batería. 
-      // Si es usado y está tildado "mostrarBateria", separamos por batería. Si no, los juntamos.
+    if (origenStock === "ingresando") {
+      setEncabezado("⏳ ¡Atención! Naves en camino ⏳\nReservá el tuyo antes de que ingresen. Mirá lo que está llegando:")
+      setPiePagina("💳 Tomamos señas para congelar precio (USDT / Dólares / Pesos).\n\n¡Escribime y asegurá tu equipo! 🏃‍♂️💨")
+    } else if (tipoPrecio === "minorista") {
+      setEncabezado("🚀 ¡Llegó stock fresquito a Electro·Nic! 🚀\nEquipos testeados y garantizados. Precios de hoy:")
+      setPiePagina("💳 Aceptamos USDT, Dólares y Pesos al cambio del día.\n\nEscribime y reservá el tuyo antes de que vuelen! 🏃‍♂️💨")
+    } else {
+      setEncabezado("🚀 ¡Lista Mayorista B2B! 🚀\nStock físico para entrega inmediata. Precios gremio:")
+      setPiePagina("💳 Solo USDT / USD Billete.\n\nCantidades limitadas. Consultar stock antes de confirmar a cliente final.")
+    }
+  }, [tipoPrecio, origenStock])
+
+  // 🚀 AGRUPACIÓN DINÁMICA (Depende del precio, batería y disponibilidad)
+  useEffect(() => {
+    // 1. Filtramos según origen de stock
+    const filtrados = stockCrudo.filter(item => {
+      if (origenStock === "disponible") return item.estado === "Disponible"
+      return item.estado === "En Tránsito" || item.estado === "En Camino"
+    })
+
+    // 2. Agrupamos
+    const grupos = filtrados.reduce((acc: any, item: any) => {
       const esNuevo = item.condicion?.toLowerCase().includes("nuevo")
       const bateriaKey = (mostrarBateria && !esNuevo) ? (item.bateria || 'N/A') : 'MIXTA'
       
-      // Clave única para agrupar
-      const key = `${item.equipo}-${item.condicion}-${item.precio_venta_usd}-${bateriaKey}`
+      // Elegimos el precio correcto
+      const precioAsignado = tipoPrecio === "minorista" 
+        ? (item.precio_minorista_usd || item.precio_venta_usd) 
+        : item.precio_venta_usd
+      
+      const key = `${item.equipo}-${item.condicion}-${precioAsignado}-${bateriaKey}`
       
       if (!acc[key]) {
         acc[key] = {
           id_group: key,
           equipo: item.equipo,
           condicion: item.condicion || "Nuevo",
-          precio: item.precio_venta_usd,
+          precio: precioAsignado,
           bateria: (mostrarBateria && !esNuevo) ? item.bateria : null,
           cantidad: 1
         }
@@ -58,7 +86,7 @@ export function TabListas() {
     
     setStockAgrupado(arrayAgrupado)
     setSeleccionados(new Set(arrayAgrupado.map(g => g.id_group)))
-  }, [stockCrudo, mostrarBateria])
+  }, [stockCrudo, mostrarBateria, tipoPrecio, origenStock])
 
   const toggleSeleccion = (id_group: string) => {
     const nuevos = new Set(seleccionados)
@@ -114,9 +142,31 @@ export function TabListas() {
 
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Share2 className="size-5 text-emerald-500"/> Listas para WhatsApp</h2>
-        <p className="text-xs text-zinc-500 mt-1">Generá una lista comercial atractiva lista para mandar por difusión.</p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white flex items-center gap-2"><Share2 className="size-5 text-emerald-500"/> Creador de Listas</h2>
+          <p className="text-xs text-zinc-500 mt-1">Generá listas comerciales al instante para WhatsApp o Instagram.</p>
+        </div>
+        
+        {/* 🚀 SELECTORES DE TIPO DE LISTA */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            <button onClick={() => setTipoPrecio("minorista")} className={cn("px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5", tipoPrecio === "minorista" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              <Users className="size-3"/> Público
+            </button>
+            <button onClick={() => setTipoPrecio("mayorista")} className={cn("px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5", tipoPrecio === "mayorista" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              <Store className="size-3"/> Mayoristas
+            </button>
+          </div>
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            <button onClick={() => setOrigenStock("disponible")} className={cn("px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5", origenStock === "disponible" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              <PackageCheck className="size-3"/> En Stock
+            </button>
+            <button onClick={() => setOrigenStock("ingresando")} className={cn("px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5", origenStock === "ingresando" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              <Truck className="size-3"/> Ingresando
+            </button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -138,7 +188,7 @@ export function TabListas() {
 
             <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
               <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Equipos en Stock ({stockAgrupado.length})</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Equipos ({stockAgrupado.length})</label>
                 
                 {/* 🚀 TOGGLE DE BATERÍA MÁGICO */}
                 <label className="flex items-center gap-2 cursor-pointer bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-emerald-500/50 transition-colors">
@@ -176,7 +226,7 @@ export function TabListas() {
                     </div>
                   )
                 })}
-                {stockAgrupado.length === 0 && <p className="text-xs text-zinc-500 italic text-center py-4">No hay equipos disponibles en stock.</p>}
+                {stockAgrupado.length === 0 && <p className="text-xs text-zinc-500 italic text-center py-4">No hay equipos de esta categoría en la base de datos.</p>}
               </div>
             </div>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2, Plus } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2, Plus, Edit3, Check, X } from "lucide-react"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any, setActiveTab: (tab: any) => void }) {
@@ -20,7 +20,11 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
 
   const [ventasRecientes, setVentasRecientes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<any[]>([])
-  const [objetivo] = useState(50000) // Objetivo fijo de ejemplo
+  
+  // 🚀 ESTADOS PARA EL OBJETIVO MENSUAL
+  const [objetivo, setObjetivo] = useState(50000)
+  const [isEditingObjetivo, setIsEditingObjetivo] = useState(false)
+  const [nuevoObjetivo, setNuevoObjetivo] = useState("")
 
   const saludo = () => {
     const hora = new Date().getHours()
@@ -31,6 +35,10 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
 
   const fetchData = async () => {
     setLoading(true)
+
+    // Cargar objetivo guardado
+    const objGuardado = localStorage.getItem("electro_objetivo_mensual")
+    if (objGuardado) setObjetivo(Number(objGuardado))
 
     const startOfMonth = new Date()
     startOfMonth.setDate(1)
@@ -94,6 +102,16 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
 
   // Solo Dueños y Admins ven plata
   const puedeVerPlata = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
+
+  // 🚀 FUNCIÓN PARA GUARDAR EL OBJETIVO
+  const handleGuardarObjetivo = () => {
+    const val = Number(nuevoObjetivo)
+    if (val > 0) {
+      setObjetivo(val)
+      localStorage.setItem("electro_objetivo_mensual", val.toString())
+    }
+    setIsEditingObjetivo(false)
+  }
 
   if (loading) return <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div>
 
@@ -208,10 +226,27 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl">
             <div className="flex justify-between items-start mb-2">
               <h3 className="text-sm font-black text-white flex items-center gap-2"><TrendingUp className="size-4 text-sky-500"/> Objetivo del mes</h3>
+              {/* 🚀 BOTÓN EDITAR OBJETIVO */}
+              {puedeVerPlata && !isEditingObjetivo && (
+                <button onClick={() => { setNuevoObjetivo(objetivo.toString()); setIsEditingObjetivo(true); }} className="text-[10px] font-bold text-zinc-500 hover:text-white flex items-center gap-1 transition-colors">
+                  <Edit3 className="size-3"/> Editar
+                </button>
+              )}
             </div>
-            <p className="text-2xl font-black text-white mb-6">
-              {puedeVerPlata ? `USD ${metricas.ventasMes.toLocaleString()}` : '***'} <span className="text-sm text-zinc-500 font-medium">de USD {objetivo.toLocaleString()}</span>
-            </p>
+
+            {/* 🚀 INPUT EDITAR OBJETIVO */}
+            {isEditingObjetivo ? (
+              <div className="flex items-center gap-2 mb-6 mt-1">
+                 <span className="text-zinc-500 font-bold text-sm">USD</span>
+                 <input type="number" value={nuevoObjetivo} onChange={e => setNuevoObjetivo(e.target.value)} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-1.5 outline-none focus:border-sky-500 w-32 text-lg font-black" autoFocus />
+                 <button onClick={handleGuardarObjetivo} className="p-2 bg-sky-500 text-black rounded-lg hover:bg-sky-400 transition-colors"><Check className="size-4 font-black"/></button>
+                 <button onClick={() => setIsEditingObjetivo(false)} className="p-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"><X className="size-4"/></button>
+              </div>
+            ) : (
+              <p className="text-2xl font-black text-white mb-6 mt-1">
+                {puedeVerPlata ? `USD ${metricas.ventasMes.toLocaleString()}` : '***'} <span className="text-sm text-zinc-500 font-medium">de USD {objetivo.toLocaleString()}</span>
+              </p>
+            )}
             
             <div className="w-full bg-zinc-900 rounded-full h-3 mb-2 overflow-hidden">
               <div className="bg-gradient-to-r from-sky-500 to-emerald-400 h-3 rounded-full" style={{ width: `${Math.min((metricas.ventasMes / objetivo) * 100, 100)}%` }}></div>
