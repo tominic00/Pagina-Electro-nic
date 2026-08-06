@@ -5,26 +5,25 @@ import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, 
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-// 🚀 Importamos ABSOLUTAMENTE TODAS las pestañas creadas
+// 🚀 Importaciones corregidas sin solapar exportaciones
 import { TabResumen } from "./TabResumen"
 import { TabStock } from "./TabStock"
 import { TabVentas } from "./TabVentas"
 import { TabCaja } from "./TabCaja" 
-import { TabListas as TabPedidos } from "./TabPedidos"
+import { TabPedidos } from "./TabPedidos" // 👈 CORREGIDO: Importación limpia desde TabPedidos
 import { TabReservas } from "./TabReservas"
 import { TabTomaUsados } from "./TabTomaUsados"
 import { TabGarantias } from "./TabGarantias"
 import { TabProveedores } from "./TabProveedores"
-import { TabListas } from "./TabListas"
+import { TabListas } from "./TabListas" // 👈 CORREGIDO: Importación limpia desde TabListas
 import { TabEquipo } from "./TabEquipo"
 import { TabNotificaciones } from "./TabNotificaciones"
 import { TabConfiguracion } from "./TabConfiguracion"
 import { TabClientesB2B } from "./TabClientesB2B"
 import { TabAnaliticas } from "./TabAnaliticas"
 import { TabAsistenteIA } from "./TabAsistenteIA"
-import { TabCalendario } from "./TabCalendario" // 🚀 TAB CALENDARIO IMPORTADA
+import { TabCalendario } from "./TabCalendario"
 
-// Agregamos "calendario" e "ia" a los tipos permitidos
 type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion" | "ia" | "calendario"
 
 export default function PortalMayorista() {
@@ -34,7 +33,6 @@ export default function PortalMayorista() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   
   const [activeTab, setActiveTab] = useState<TabType>("resumen")
-  
   const [hayNotifNoLeidas, setHayNotifNoLeidas] = useState(false)
 
   useEffect(() => {
@@ -210,17 +208,14 @@ export default function PortalMayorista() {
            </button>
         </div>
 
-        {/* 🚀 CONTENEDOR DE PESTAÑAS (MÓDULOS ACTIVOS) */}
+        {/* CONTENEDOR DE PESTAÑAS */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-[#0A0A0A]">
           <div className="max-w-[1400px] mx-auto h-full">
             {activeTab === "resumen" && <TabResumen usuarioActual={usuarioActual} setActiveTab={setActiveTab} />}
             {activeTab === "stock" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabStock usuarioActual={usuarioActual} /></div>}
             {activeTab === "ventas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabVentas usuarioActual={usuarioActual} /></div>}
             {activeTab === "caja" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabCaja usuarioActual={usuarioActual} /></div>}
-            
-            {/* 🚀 EL MÓDULO DE AGENDA & CALENDARIO RENDERIZADO ACÁ */}
             {activeTab === "calendario" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabCalendario usuarioActual={usuarioActual} /></div>}
-            
             {activeTab === "reservas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabReservas usuarioActual={usuarioActual} /></div>}
             {activeTab === "usados" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabTomaUsados usuarioActual={usuarioActual} /></div>}
             {activeTab === "garantias" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabGarantias usuarioActual={usuarioActual} /></div>}
