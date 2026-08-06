@@ -23,31 +23,37 @@ export function TabListas() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Stock individual
-    const { data: stockData } = await supabase.from("stock_mayorista").select("*")
+    // 1. Traer pedidos
+    const { data: pedidosData, error: errPedidos } = await supabase.from("pedidos_mayorista").select("*")
     
-    // 2. Intento A: Pedidos_mayorista
-    const { data: pedidosData, error: errA } = await supabase.from("pedidos_mayorista").select("*")
+    // 2. Traer stock
+    const { data: stockData, error: errStock } = await supabase.from("stock_mayorista").select("*")
+
+    // 🚀 ALERTA DE EMERGENCIA EN PANTALLA
+    let mensaje = "🔍 ALERTA DE DIAGNÓSTICO:\n\n"
     
-    // 3. Intento B: Si se llamaba distinto (pedidos)
-    const { data: pedidosDataB, error: errB } = await supabase.from("pedidos").select("*")
+    if (errPedidos) {
+      mensaje += `❌ ERROR EN PEDIDOS: ${errPedidos.message}\n`
+    } else {
+      mensaje += `📦 Pedidos encontrados en BD: ${pedidosData?.length || 0}\n`
+      if (pedidosData && pedidosData.length > 0) {
+        mensaje += `Ejemplo primer pedido: ${JSON.stringify(pedidosData[0].items || pedidosData[0].titulo)}\n`
+      }
+    }
 
-    console.log("🔍 DIAGNÓSTICO DE BASE DE DATOS:")
-    console.log("1. Stock crudo traído:", stockData)
-    console.log("2. Pedidos_mayorista traídos:", pedidosData, "Error A:", errA)
-    console.log("3. Pedidos (tabla simple) traídos:", pedidosDataB, "Error B:", errB)
+    if (errStock) {
+      mensaje += `❌ ERROR EN STOCK: ${errStock.message}\n`
+    } else {
+      mensaje += `📱 Equipos en Stock encontrados: ${stockData?.length || 0}\n`
+    }
 
-    // Fusionamos los pedidos que hayan devuelto datos
-    const pedidosReales = (pedidosData && pedidosData.length > 0) ? pedidosData : (pedidosDataB || [])
+    alert(mensaje)
 
-    // 🚀 FILTRO IMPORTANTE: Ignoramos el ítem basura "Equipo en Camino" de $0 que está en el stock
-    const stockLimpio = (stockData || []).filter(eq => eq.equipo !== "Equipo en Camino" && eq.precio_venta_usd !== 0)
-
-    setStockCrudo(stockLimpio)
-    setPedidosCrudos(pedidosReales)
+    if (stockData) setStockCrudo(stockData)
+    if (pedidosData) setPedidosCrudos(pedidosData)
     setLoading(false)
   }
-  
+
   useEffect(() => { fetchData() }, [])
 
   // CAMBIO AUTOMÁTICO DE TEXTOS SEGÚN EL TIPO DE LISTA
