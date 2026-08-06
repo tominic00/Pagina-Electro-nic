@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShieldAlert, Plus, X, Search, Loader2, ArrowRightLeft, Undo2, Wrench, CheckCircle2, Edit3, Trash2, DollarSign, Printer, Filter, Calendar } from "lucide-react"
+import { ShieldAlert, Plus, X, Search, Loader2, ArrowRightLeft, Undo2, Wrench, CheckCircle2, Edit3, Trash2, DollarSign, Printer, Filter } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -62,7 +62,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // 🔍 LÓGICA DE FILTRADO AVANZADO
+  // FILTRADO AVANZADO
   const garantiasFiltradas = garantias.filter(g => {
     const textoMatch = g.equipo_nombre.toLowerCase().includes(filtroTexto.toLowerCase()) || 
                        g.imei?.toLowerCase().includes(filtroTexto.toLowerCase()) ||
@@ -104,23 +104,47 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     setShowModal(true)
   }
 
+  // 🚀 ELIMINAR GARANTÍA INDIVIDUAL
   const eliminarGarantia = async (garantia: any) => {
-    if (!confirm("⚠️ ¿Estás seguro de eliminar esta garantía permanentemente?")) return
+    if (!confirm(`⚠️ ¿Estás seguro de eliminar la garantía del equipo "${garantia.equipo_nombre}"?`)) return
     try {
-      if (garantia.venta_id) {
+      if (garantia.venta_id && garantia.estado === 'Iniciada') {
         await supabase.from("ventas_mayorista").update({ estado: 'Completada' }).eq("id", garantia.venta_id)
       }
       await supabase.from("garantias_mayorista").delete().eq("id", garantia.id)
       fetchData()
+      alert("✅ Garantía eliminada correctamente.")
     } catch (error) {
       alert("Error al eliminar la garantía.")
+    }
+  }
+
+  // 🚀 VACIAR TODAS LAS GARANTÍAS (OPCIÓN DE LIMPIEZA TOTAL)
+  const vaciarTodasLasGarantias = async () => {
+    if (!confirm("🚨 ATENCIÓN: ¿Querés BORRAR ABSOLUTAMENTE TODAS las garantías del historial?\n\nEsta acción no se puede deshacer.")) return
+    try {
+      setIsSaving(true)
+      const { error } = await supabase.from("garantias_mayorista").delete().neq("id", "00000000-0000-0000-0000-000000000000")
+      if (error) throw error
+      fetchData()
+      alert("✅ Historial de garantías vaciado con éxito.")
+    } catch (error: any) {
+      alert("Error al vaciar garantías: " + error.message)
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleSelectVenta = (ventaId: string) => {
     const venta = ventasDb.find(v => v.id === ventaId)
     if (venta) {
-      setForm({ ...form, venta_id: venta.id, cliente: venta.cliente, equipo_nombre: venta.equipo_nombre, imei: venta.imei || "" })
+      setForm({ 
+        ...form, 
+        venta_id: venta.id, 
+        cliente: venta.cliente, 
+        equipo_nombre: venta.equipo_nombre, 
+        imei: venta.imei || "" 
+      })
     } else {
       setForm({ ...form, venta_id: "" })
     }
@@ -191,14 +215,14 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     if (eqNuevo) {
       const pNuevo = Number(eqNuevo.precio_venta_usd || eqNuevo.precio_minorista_usd || 0)
       setPrecioNuevo(pNuevo)
-      setDiferenciaUsd(pNuevo - precioOriginal)
+      setDiferenciaUsd(Number((pNuevo - precioOriginal).toFixed(2)))
     } else {
       setPrecioNuevo(0)
       setDiferenciaUsd(0)
     }
   }
 
-  // 🖨️ REMITO OFICIAL DE GARANTÍA / CAMBIO (ESTRUCTURA TIPO VENTA)
+  // 🖨️ IMPRESIÓN INTELIGENTE DEL REMITO CON DETALLE COMPLETO DEL NUEVO EQUIPO
   const imprimirRemito = (garantia: any, datosAdicionales?: any) => {
     const fecha = new Date(garantia.created_at || Date.now()).toLocaleDateString("es-AR")
     const cliente = garantia.cliente || "Cliente"
@@ -206,11 +230,28 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     const imeiRecibido = garantia.imei || "N/A"
     const estado = datosAdicionales?.tipoSolucion || garantia.estado || "Resuelta"
 
-    const equipoEntregado = datosAdicionales?.equipoNuevo?.equipo || "-"
-    const imeiEntregado = datosAdicionales?.equipoNuevo?.imei || "N/A"
-    const pOrig = datosAdicionales?.precioOriginal ?? 0
-    const pNuev = datosAdicionales?.precioNuevo ?? 0
-    const dif = datosAdicionales?.diferenciaUsd ?? 0
+    // Intentar rescatar precio original de la venta vinculada
+    let pOrig = datosAdicionales?.precioOriginal ?? 0
+    if (pOrig === 0 && garantia.venta_id) {
+      const vOrig = ventasDb.find(v => v.id === garantia.venta_id)
+      if (vOrig) pOrig = Number(vOrig.monto_vendido_usd || vOrig.precio_venta_usd || 0)
+    }
+
+    // Parsear datos de cambio desde las observaciones si venimos del historial directo
+    let equipoEntregadoNombre = datosAdicionales?.equipoNuevo?.equipo || ""
+    let imeiEntregado = datosAdicionales?.equipoNuevo?.imei || "N/A"
+    let dif = datosAdicionales?.diferenciaUsd ?? 0
+    let pNuev = datosAdicionales?.precioNuevo ?? 0
+
+    if (!equipoEntregadoNombre && garantia.observaciones?.includes("Cambio por")) {
+      const matchEquipo = garantia.observaciones.match(/Cambio por (.*?)\. Dif:/)
+      if (matchEquipo) equipoEntregadoNombre = matchEquipo[1]
+
+      const matchDif = garantia.observaciones.match(/Dif: USD ([\d.-]+)/)
+      if (matchDif) dif = parseFloat(matchDif[1])
+      
+      if (pOrig > 0 && dif !== 0) pNuev = pOrig + dif
+    }
 
     const ventanaRemito = window.open("", "_blank")
     if (!ventanaRemito) return alert("Por favor activa las ventanas emergentes en tu navegador.")
@@ -219,7 +260,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Remito Oficial de Cambio / Garantía - Electro·Nic</title>
+          <title>Remito Oficial de Cambio - Electro·Nic</title>
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #111; font-size: 12px; line-height: 1.4; }
             .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 20px; }
@@ -255,7 +296,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
             <tr>
               <td width="50%" class="info-box">
                 <strong>DATOS DEL CLIENTE:</strong><br/>
-                Nombre / Razon Social: <strong>${cliente}</strong><br/>
+                Nombre / Razón Social: <strong>${cliente}</strong><br/>
                 Operación: <strong>${estado}</strong>
               </td>
               <td width="50%" class="info-box" style="text-align: right;">
@@ -283,21 +324,21 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                 <td>${equipoRecibido}</td>
                 <td>${imeiRecibido}</td>
                 <td>Falla: ${garantia.problema || 'N/A'}</td>
-                <td style="text-align: right;"><strong>USD $${pOrig}</strong></td>
+                <td style="text-align: right;"><strong>USD $${pOrig.toFixed(2)}</strong></td>
               </tr>
-              ${datosAdicionales?.equipoNuevo ? `
+              ${equipoEntregadoNombre ? `
               <tr>
                 <td><strong style="color: #047857;">[ENTREGA]</strong> Reemplazo Directo</td>
-                <td>${equipoEntregado}</td>
+                <td>${equipoEntregadoNombre}</td>
                 <td>${imeiEntregado}</td>
-                <td>Unidad Nueva de Stock</td>
-                <td style="text-align: right;"><strong>USD $${pNuev}</strong></td>
+                <td>Unidad Entregada de Stock</td>
+                <td style="text-align: right;"><strong>USD $${(pNuev || (pOrig + dif)).toFixed(2)}</strong></td>
               </tr>
               ` : ''}
             </tbody>
           </table>
 
-          ${datosAdicionales?.equipoNuevo ? `
+          ${equipoEntregadoNombre ? `
           <h3>2. Estado Financiero y Liquidación de Cambio</h3>
           <div class="resumen-box">
             <div class="resumen-row">
@@ -306,7 +347,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
             </div>
             <div class="resumen-row">
               <span>Precio del equipo nuevo entregado:</span>
-              <span><strong>USD $${pNuev.toFixed(2)}</strong></span>
+              <span><strong>USD $${(pNuev || (pOrig + dif)).toFixed(2)}</strong></span>
             </div>
             
             <div class="resumen-total">
@@ -325,7 +366,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           ` : ''}
 
           <div style="margin-top: 20px; background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px;">
-            <p style="margin: 0;"><strong>Observaciones adicionales:</strong> ${garantia.observaciones || 'Se realiza la entrega y recepción de las unidades en conformidad de las partes.'}</p>
+            <p style="margin: 0;"><strong>Observaciones adicionales:</strong> ${garantia.observaciones || 'Entrega y recepción conforme de las unidades.'}</p>
           </div>
 
           <div class="firmas">
@@ -365,17 +406,19 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         const equipoNuevo = stockDb.find(e => e.id === equipoCambioId)
         if (!equipoNuevo) throw new Error("Equipo nuevo no encontrado en stock")
 
+        const difRedondeada = Number(diferenciaUsd.toFixed(2))
+
         datosRemito = {
           tipoSolucion: 'Resuelta (Cambio de Equipo)',
           equipoNuevo,
           precioOriginal,
           precioNuevo,
-          diferenciaUsd
+          diferenciaUsd: difRedondeada
         }
 
         const { error: err3 } = await supabase.from("garantias_mayorista").update({ 
           estado: 'Resuelta (Cambio de Equipo)',
-          observaciones: `Cambio por ${equipoNuevo.equipo}. Dif: USD ${diferenciaUsd}`
+          observaciones: `Cambio por ${equipoNuevo.equipo}. Dif: USD ${difRedondeada}`
         }).eq("id", garantia.id)
         if (err3) throw new Error("Fallo al cerrar garantía: " + err3.message)
 
@@ -387,10 +430,10 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           if (err4) throw new Error("Fallo al anular la venta original: " + err4.message)
         }
         
-        const conceptoFormaPago = diferenciaUsd > 0 
-          ? `Garantía + Cobro Dif. USD ${diferenciaUsd}` 
-          : diferenciaUsd < 0 
-          ? `Garantía + Devolución Dif. USD ${Math.abs(diferenciaUsd)}` 
+        const conceptoFormaPago = difRedondeada > 0 
+          ? `Garantía + Cobro Dif. USD ${difRedondeada}` 
+          : difRedondeada < 0 
+          ? `Garantía + Devolución Dif. USD ${Math.abs(difRedondeada)}` 
           : "Cambio Mano a Mano (Garantía)"
 
         const { error: err5 } = await supabase.from("ventas_mayorista").insert([{
@@ -399,11 +442,11 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           imei: equipoNuevo.imei || null,
           cliente: garantia.cliente,
           monto_vendido_usd: precioNuevo,
-          ganancia_usd: diferenciaUsd > 0 ? diferenciaUsd : 0,
+          ganancia_usd: difRedondeada > 0 ? difRedondeada : 0,
           vendedor: usuarioActual.nombre,
           forma_pago: conceptoFormaPago,
           estado: 'Completada',
-          observaciones: `Reemplazo de garantía. Original: USD ${precioOriginal}, Entregado: USD ${precioNuevo}. Diferencia: USD ${diferenciaUsd}`
+          observaciones: `Reemplazo de garantía. Original: USD ${precioOriginal}, Entregado: USD ${precioNuevo}. Diferencia: USD ${difRedondeada}`
         }])
         if (err5) throw new Error("Fallo al registrar la nueva venta: " + err5.message)
 
@@ -465,19 +508,26 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           <h2 className="text-xl font-black text-white flex items-center gap-2"><ShieldAlert className="size-5 text-emerald-500"/> Garantías y Cambios</h2>
           <p className="text-xs text-zinc-500 mt-1">Reparaciones, cambios y devoluciones conectadas al inventario.</p>
         </div>
-        <button onClick={abrirNuevaGarantia} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
-          <Plus className="size-4 font-black" /> Iniciar garantía
-        </button>
+        
+        <div className="flex items-center gap-2">
+          {garantias.length > 0 && (
+            <button onClick={vaciarTodasLasGarantias} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-2.5 rounded-xl text-xs font-bold uppercase flex items-center gap-1.5 transition-all">
+              <Trash2 className="size-4" /> Vaciar Historial
+            </button>
+          )}
+          <button onClick={abrirNuevaGarantia} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+            <Plus className="size-4 font-black" /> Iniciar garantía
+          </button>
+        </div>
       </div>
 
-      {/* 🔍 PANEL DE FILTROS AVANZADOS */}
+      {/* PANEL DE FILTROS AVANZADOS */}
       <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-3">
         <div className="flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
           <Filter className="size-4 text-emerald-400" /> Filtros de Búsqueda
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Búsqueda por Texto */}
           <div className="relative col-span-1 sm:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
             <input 
@@ -489,7 +539,6 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
             />
           </div>
 
-          {/* Filtro Estado */}
           <div>
             <select 
               value={filtroEstado} 
@@ -502,7 +551,6 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
             </select>
           </div>
 
-          {/* Filtro Cliente */}
           <div>
             <select 
               value={filtroCliente} 
@@ -514,7 +562,6 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
             </select>
           </div>
 
-          {/* Rango de Fechas */}
           <div className="flex items-center gap-2">
             <input 
               type="date" 
@@ -576,6 +623,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                           <button onClick={() => imprimirRemito(g)} className="px-3 py-1.5 bg-zinc-800 text-zinc-300 hover:text-white font-bold text-[10px] uppercase rounded-lg transition-all border border-zinc-700 flex items-center gap-1">
                             <Printer className="size-3" /> Remito
                           </button>
+                          <button onClick={() => eliminarGarantia(g)} className="p-1.5 text-zinc-400 hover:text-red-400 bg-zinc-950 rounded-lg transition-colors border border-zinc-800" title="Eliminar"><Trash2 className="size-3.5"/></button>
                         </>
                       )}
                     </div>
@@ -633,7 +681,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                 </div>
                 <div>
                   <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">IMEI / N.° de serie</label>
-                  <input type="text" value={form.imei} onChange={e => setForm({...form, imei: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
+                  <input type="text" value={form.imei} onChange={e => setForm({...form, imei: e.target.value})} placeholder="Se autocompleta si vinculas venta" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500 transition-all" />
                 </div>
               </div>
 
@@ -718,11 +766,11 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                     <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-xl space-y-3">
                       <div className="flex justify-between text-xs">
                         <span className="text-zinc-400">Valor del Equipo Devuelto:</span>
-                        <span className="font-mono font-bold text-white">USD ${precioOriginal}</span>
+                        <span className="font-mono font-bold text-white">USD ${precioOriginal.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-zinc-400">Precio del Equipo Entregado:</span>
-                        <span className="font-mono font-bold text-sky-400">USD ${precioNuevo}</span>
+                        <span className="font-mono font-bold text-sky-400">USD ${precioNuevo.toFixed(2)}</span>
                       </div>
 
                       <div className="pt-2 border-t border-zinc-800">
@@ -737,8 +785,8 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
                           />
                         </div>
 
-                        {diferenciaUsd > 0 && <p className="text-[10px] text-emerald-400 font-bold mt-2">💰 El cliente paga USD ${diferenciaUsd} de diferencia.</p>}
-                        {diferenciaUsd < 0 && <p className="text-[10px] text-amber-400 font-bold mt-2">💸 Le devolvemos USD ${Math.abs(diferenciaUsd)} al cliente.</p>}
+                        {diferenciaUsd > 0 && <p className="text-[10px] text-emerald-400 font-bold mt-2">💰 El cliente paga USD ${diferenciaUsd.toFixed(2)} de diferencia.</p>}
+                        {diferenciaUsd < 0 && <p className="text-[10px] text-amber-400 font-bold mt-2">💸 Le devolvemos USD ${Math.abs(diferenciaUsd).toFixed(2)} al cliente.</p>}
                         {diferenciaUsd === 0 && <p className="text-[10px] text-zinc-400 font-bold mt-2">🤝 Cambio mano a mano.</p>}
                       </div>
                     </div>
