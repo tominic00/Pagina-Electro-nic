@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Users, DollarSign, ArrowUpRight, ArrowDownRight, History, CheckCircle2, Loader2, PieChart, Wallet } from "lucide-react"
+import { Users, DollarSign, History, Loader2, Edit3, Trash2, X, CheckCircle2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -9,12 +9,19 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
   const [loading, setLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // ESTADOS DE MODAL DE PAGO / EDICIÓN
+  const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [socioAbonar, setSocioAbonar] = useState("")
+  const [montoPagoInput, setMontoPagoInput] = useState("")
+  const [conceptoPagoInput, setConceptoPagoInput] = useState("")
+
   const fetchData = async () => {
     setLoading(true)
     // 1. Traer todos los movimientos de caja
     const { data: cajaData } = await supabase.from("caja_mayorista").select("*").order("fecha", { ascending: false })
-    // 2. Traer ventas para utilidades
-    const { data: ventasData } = await supabase.from("ventas_mayorista").select("*")
+    // 2. Traer ventas completadas para utilidades
+    const { data: ventasData } = await supabase.from("ventas_mayorista").select("*").eq("estado", "Completada")
 
     if (cajaData) setMovimientosCaja(cajaData)
     if (ventasData) setVentas(ventasData)
@@ -43,7 +50,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
     }
   })
 
-  // 🚀 CÁLCULO DE GANANCIA NETO TOTAL DE LA EMPRESA
+  // 🚀 CÁLCULO DE GANANCIA NETA TOTAL
   const utilidadBrutaVentas = ventas.reduce((acc, v) => acc + Number(v.ganancia_usd || 0), 0)
   const gastosOperativos = movimientosCaja
     .filter(m => m.tipo === 'Egreso' && m.categoria === 'Gasto Operativo')
@@ -54,39 +61,75 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
   // 🚀 HISTORIAL DE LIQUIDACIONES / PAGOS A SOCIOS
   const historialLiquidaciones = movimientosCaja.filter(m => m.categoria === 'Pago Utilidad Socio' || m.categoria === 'Retiro Socio')
 
-  // 🚀 REGISTRAR PAGO DE UTILIDAD / RETIRO
-  const handlePagarSocio = async (nombreSocio: string, montoAPagar: number) => {
-    if (montoAPagar <= 0) return alert("No hay ganancias pendientes para pagar a este socio.")
-    if (!confirm(`¿Confirmás el pago de USD ${montoAPagar.toLocaleString()} a ${nombreSocio}? Se descontará de la Caja Diaria y quedará registrado en el historial.`)) return
+  // 🚀 ABRIR MODAL PARA NUEVO PAGO PERSONALIZADO
+  const abrirModalPago = (socio: string, montoSugerido: number) => {
+    setEditingId(null)
+    setSocioAbonar(socio)
+    setMontoPagoInput(montoSugerido > 0 ? String(montoSugerido) : "")
+    setConceptoPagoInput(`Liquidación / Pago de Utilidad a ${socio}`)
+    setShowModal(true)
+  }
+
+  // 🚀 ABRIR MODAL PARA EDITAR PAGO EXISTENTE
+  const abrirModalEditar = (liquid: any) => {
+    setEditingId(liquid.id)
+    setSocioAbonar(liquid.socio || "Socio")
+    setMontoPagoInput(String(liquid.monto_usd || liquid.monto || ""))
+    setConceptoPagoInput(liquid.concepto || liquid.descripcion || "")
+    setShowModal(true)
+  }
+
+  // 🚀 GUARDAR PAGO (CREAR O EDITAR)
+  const handleGuardarPago = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const montoNumerico = Number(montoPagoInput)
+    if (!montoNumerico || montoNumerico <= 0) return alert("Ingresá un monto válido mayor a 0.")
 
     setIsProcessing(true)
     try {
-      const fechaHoy = new Date().toISOString()
-
-      // 1. Descontar de la caja registrando un egreso de liquidación
       const payload = {
         tipo: 'Egreso',
         categoria: 'Pago Utilidad Socio',
-        monto_usd: montoAPagar,
-        monto: montoAPagar,
+        monto_usd: montoNumerico,
+        monto: montoNumerico,
         metodo_pago: 'USD Billete',
-        concepto: `Liquidación / Pago de Utilidad a ${nombreSocio}`,
-        descripcion: `Pago de Ganancias a ${nombreSocio}`,
-        socio: nombreSocio,
+        concepto: conceptoPagoInput || `Liquidación a ${socioAbonar}`,
+        descripcion: conceptoPagoInput || `Pago de Ganancias a ${socioAbonar}`,
+        socio: socioAbonar,
         realizado_por: usuarioActual?.nombre || 'Admin',
-        usuario: usuarioActual?.nombre || 'Admin',
-        fecha: fechaHoy
+        usuario: usuarioActual?.nombre || 'Admin'
       }
 
-      const { error } = await supabase.from("caja_mayorista").insert([payload])
-      if (error) throw new Error(error.message)
+      if (editingId) {
+        const { error } = await supabase.from("caja_mayorista").update(payload).eq("id", editingId)
+        if (error) throw new Error(error.message)
+        alert("✅ Pago actualizado correctamente.")
+      } else {
+        const { error } = await supabase.from("caja_mayorista").insert([{ ...payload, fecha: new Date().toISOString() }])
+        if (error) throw new Error(error.message)
+        alert(`✅ Pago de USD ${montoNumerico.toLocaleString()} registrado a ${socioAbonar}`)
+      }
 
-      alert(`✅ Pago registrado exitosamente para ${nombreSocio}`)
+      setShowModal(false)
       fetchData()
     } catch (error: any) {
-      alert("Error al registrar el pago: " + error.message)
+      alert("Error al procesar el pago: " + error.message)
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  // 🚀 ELIMINAR PAGO DEL HISTORIAL
+  const handleEliminarPago = async (id: string) => {
+    if (!confirm("¿Estás seguro de eliminar este pago? La deuda pendiente del socio se volverá a sumar automáticamente.")) return
+
+    try {
+      const { error } = await supabase.from("caja_mayorista").delete().eq("id", id)
+      if (error) throw new Error(error.message)
+      alert("🗑️ Pago eliminado e historial actualizado.")
+      fetchData()
+    } catch (error: any) {
+      alert("Error al eliminar el pago: " + error.message)
     }
   }
 
@@ -136,9 +179,8 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
                   </div>
 
                   <button
-                    onClick={() => handlePagarSocio(socio, gananciaPendienteDePago)}
-                    disabled={isProcessing || gananciaPendienteDePago <= 0}
-                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex justify-center items-center gap-2"
+                    onClick={() => abrirModalPago(socio, gananciaPendienteDePago)}
+                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex justify-center items-center gap-2"
                   >
                     <DollarSign className="size-4"/> Pagar Utilidad
                   </button>
@@ -147,7 +189,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
             })}
             {Object.keys(aportesPorSocio).length === 0 && (
               <div className="col-span-full py-12 text-center text-zinc-500 italic bg-zinc-900/50 rounded-3xl border border-zinc-800">
-                Aún no hay capitales de socios registrados en la Caja. Registra un ingreso bajo la categoría "Inversión Socio".
+                Aún no hay capitales de socios registrados en la Caja. Registrá un ingreso bajo la categoría "Inversión Socio".
               </div>
             )}
           </div>
@@ -167,6 +209,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
                     <th className="p-3">Concepto</th>
                     <th className="p-3 text-right">Monto Pagado</th>
                     <th className="p-3 text-center">Registrado Por</th>
+                    <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
@@ -177,10 +220,20 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
                       <td className="p-3 text-zinc-300">{h.concepto || h.descripcion}</td>
                       <td className="p-3 font-black text-right text-emerald-400">USD {Number(h.monto_usd || h.monto).toLocaleString()}</td>
                       <td className="p-3 text-center text-[10px] text-zinc-500 font-bold">{h.realizado_por || h.usuario}</td>
+                      <td className="p-3 text-center">
+                        <div className="flex justify-center gap-2">
+                          <button onClick={() => abrirModalEditar(h)} title="Editar" className="p-1.5 bg-zinc-900 hover:bg-sky-500/20 text-zinc-400 hover:text-sky-400 rounded-lg transition-colors">
+                            <Edit3 className="size-4" />
+                          </button>
+                          <button onClick={() => handleEliminarPago(h.id)} title="Eliminar" className="p-1.5 bg-zinc-900 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-lg transition-colors">
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {historialLiquidaciones.length === 0 && (
-                    <tr><td colSpan={5} className="py-8 text-center text-zinc-500 italic">No se realizaron pagos de utilidades aún.</td></tr>
+                    <tr><td colSpan={6} className="py-8 text-center text-zinc-500 italic">No se realizaron pagos de utilidades aún.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -189,6 +242,60 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
 
         </div>
       )}
+
+      {/* 🚀 MODAL PARA PAGAR O EDITAR UTILIDAD DE SOCIO */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
+            
+            <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <DollarSign className="size-5 text-indigo-400"/> {editingId ? "Editar Pago" : `Pagar Utilidades a ${socioAbonar}`}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
+            </div>
+
+            <form onSubmit={handleGuardarPago} className="p-6 bg-[#161B22] space-y-5">
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Monto a Pagar (USD) *</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-400" />
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01" 
+                    value={montoPagoInput} 
+                    onChange={e => setMontoPagoInput(e.target.value)} 
+                    placeholder="0.00" 
+                    className="w-full bg-zinc-950 border border-zinc-800 text-emerald-400 font-black text-lg rounded-xl pl-9 pr-4 py-3 outline-none focus:border-emerald-500 transition-all" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Concepto / Detalle *</label>
+                <input 
+                  required 
+                  type="text" 
+                  value={conceptoPagoInput} 
+                  onChange={e => setConceptoPagoInput(e.target.value)} 
+                  placeholder="Ej: Pago parcial ganancias semana 1" 
+                  className="w-full bg-zinc-950 border border-zinc-800 text-white font-medium rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 transition-all" 
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                <button type="button" onClick={() => setShowModal(false)} className="px-5 py-3 bg-zinc-900 text-zinc-400 font-bold rounded-xl hover:bg-zinc-800 transition-colors">Cancelar</button>
+                <button type="submit" disabled={isProcessing} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
+                  {isProcessing ? <Loader2 className="size-4 animate-spin"/> : editingId ? "Guardar Cambios" : "Confirmar Pago"}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

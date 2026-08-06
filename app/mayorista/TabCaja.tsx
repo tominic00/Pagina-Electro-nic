@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Wallet, ArrowDownRight, ArrowUpRight, Search, Loader2, DollarSign, Building, PiggyBank, Bitcoin, X, Users, PieChart } from "lucide-react"
+import { Wallet, ArrowDownRight, ArrowUpRight, Search, Loader2, DollarSign, Building, PiggyBank, Bitcoin, X, Users, PieChart, Edit3, Trash2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -12,16 +12,19 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Lista de socios frecuentes (incluyéndote como Dueño)
-  const sociosFrecuentes = ["Tomas (Dueño)", "Socio 2", "Socio 3"]
+  // ESTADO DE EDICIÓN
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  // ESTADOS INDEPENDIENTES PARA MANEJO DE SOCIO
+  const [socioSeleccionado, setSocioSeleccionado] = useState("")
+  const [socioTextoNuevo, setSocioTextoNuevo] = useState("")
 
   const [form, setForm] = useState({
     tipo: "Ingreso",
     categoria: "Inversión Socio",
     monto: "",
     metodo_pago: "USDT",
-    descripcion: "",
-    socio: usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
+    descripcion: ""
   })
 
   const fetchData = async () => {
@@ -33,6 +36,15 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
+  // Extraer socios históricos de la BD
+  const sociosHistoricos = Array.from(
+    new Set(
+      movimientos
+        .filter(m => m.socio)
+        .map(m => m.socio)
+    )
+  )
+
   // 🚀 MATEMÁTICA Y BALANCES EN TIEMPO REAL
   let balanceTotal = 0
   let totalUSDT = 0
@@ -40,11 +52,9 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   let totalBanco = 0
   let capitalSocios = 0
 
-  // Objeto para calcular cuánto aportó cada socio individualmente
   const aportesPorSocio: Record<string, number> = {}
 
   movimientos.forEach(m => {
-    // Compatibilidad para monto o monto_usd
     const monto = Number(m.monto_usd || m.monto || 0)
     const esIngreso = m.tipo === 'Ingreso'
 
@@ -65,7 +75,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
       if (m.metodo_pago === 'Efectivo' || m.metodo_pago === 'USD Billete') totalEfectivo -= monto
       if (m.metodo_pago === 'Transferencia') totalBanco -= monto
       
-      if (m.categoria === 'Retiro Socio') {
+      if (m.categoria === 'Retiro Socio' || m.categoria === 'Pago Utilidad Socio') {
         capitalSocios -= monto
         const nombreSocio = m.socio || "Socio Anónimo"
         aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) - monto
@@ -79,16 +89,67 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     const cat = m.categoria || ""
     const soc = m.socio || ""
     
-    const matchTexto = desc.toLowerCase().includes(filtroTexto.toLowerCase()) || 
-                       cat.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-                       soc.toLowerCase().includes(filtroTexto.toLowerCase())
-    return matchTipo && matchTexto
+    return matchTipo && (
+      desc.toLowerCase().includes(filtroTexto.toLowerCase()) || 
+      cat.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+      soc.toLowerCase().includes(filtroTexto.toLowerCase())
+    )
   })
 
+  // 🚀 ABRIR MODAL PARA NUEVO MOVIMIENTO
+  const abrirNuevoMovimiento = (tipoDefecto: string) => {
+    setEditingId(null)
+    const miNombre = usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
+    
+    setForm({
+      tipo: tipoDefecto,
+      categoria: tipoDefecto === 'Ingreso' ? 'Inversión Socio' : 'Gasto Operativo',
+      monto: "",
+      metodo_pago: "USDT",
+      descripcion: ""
+    })
+    setSocioSeleccionado(miNombre)
+    setSocioTextoNuevo("")
+    setShowModal(true)
+  }
+
+  // 🚀 ABRIR MODAL PARA EDITAR MOVIMIENTO
+  const abrirEditarMovimiento = (mov: any) => {
+    setEditingId(mov.id)
+    setForm({
+      tipo: mov.tipo || "Ingreso",
+      categoria: mov.categoria || "Otro",
+      monto: String(mov.monto_usd || mov.monto || ""),
+      metodo_pago: mov.metodo_pago || "USDT",
+      descripcion: mov.concepto || mov.descripcion || ""
+    })
+
+    if (mov.socio) {
+      setSocioSeleccionado(mov.socio)
+      setSocioTextoNuevo("")
+    } else {
+      const miNombre = usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
+      setSocioSeleccionado(miNombre)
+      setSocioTextoNuevo("")
+    }
+
+    setShowModal(true)
+  }
+
+  // 🚀 GUARDAR (CREAR O EDITAR)
   const handleGuardar = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.monto || Number(form.monto) <= 0) return alert("El monto debe ser mayor a 0.")
     if (!form.descripcion) return alert("Agregá una descripción.")
+
+    const esCategoriaSocio = form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio' || form.categoria === 'Pago Utilidad Socio'
+    let socioFinal = null
+
+    if (esCategoriaSocio) {
+      socioFinal = socioSeleccionado === "Otro" ? socioTextoNuevo.trim() : socioSeleccionado
+      if (!socioFinal) return alert("Por favor ingresá o seleccioná el nombre del socio.")
+    }
+
     setIsSaving(true)
 
     try {
@@ -100,13 +161,17 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         metodo_pago: form.metodo_pago,
         concepto: form.descripcion,
         descripcion: form.descripcion,
-        socio: (form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio') ? form.socio : null,
+        socio: socioFinal,
         realizado_por: usuarioActual?.nombre || 'Admin',
-        usuario: usuarioActual?.nombre || 'Admin',
-        fecha: new Date().toISOString()
+        usuario: usuarioActual?.nombre || 'Admin'
       }
 
-      await supabase.from("caja_mayorista").insert([payload])
+      if (editingId) {
+        await supabase.from("caja_mayorista").update(payload).eq("id", editingId)
+      } else {
+        await supabase.from("caja_mayorista").insert([{ ...payload, fecha: new Date().toISOString() }])
+      }
+
       setShowModal(false)
       fetchData()
     } catch (error) {
@@ -116,21 +181,21 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  const abrirNuevoMovimiento = (tipoDefecto: string) => {
-    setForm({
-      tipo: tipoDefecto,
-      categoria: tipoDefecto === 'Ingreso' ? 'Inversión Socio' : 'Gasto Operativo',
-      monto: "",
-      metodo_pago: "USDT",
-      descripcion: "",
-      socio: usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
-    })
-    setShowModal(true)
+  // 🚀 ELIMINAR MOVIMIENTO
+  const handleEliminar = async (id: string) => {
+    if (!confirm("¿Estás seguro de que querés eliminar este movimiento? Esta acción recalculará los saldos.")) return
+
+    try {
+      const { error } = await supabase.from("caja_mayorista").delete().eq("id", id)
+      if (error) throw new Error(error.message)
+      fetchData()
+    } catch (error: any) {
+      alert("Error al eliminar el movimiento: " + error.message)
+    }
   }
 
-  // Opciones dinámicas de categoría
   const categoriasIngreso = ["Inversión Socio", "Venta", "Cobro Deuda", "Otro"]
-  const categoriasEgreso = ["Compra Stock", "Retiro Socio", "Toma Usado", "Gasto Operativo", "Otro"]
+  const categoriasEgreso = ["Compra Stock", "Retiro Socio", "Pago Utilidad Socio", "Toma Usado", "Gasto Operativo", "Otro"]
 
   return (
     <div className="p-6">
@@ -151,10 +216,8 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* 🚀 TARJETAS DE SALDOS */}
+      {/* TARJETAS DE SALDOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        
-        {/* Balance Total */}
         <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl relative overflow-hidden">
           <div className="absolute -right-4 -bottom-4 size-24 bg-amber-500/10 rounded-full blur-2xl"></div>
           <div className="flex justify-between items-start mb-4">
@@ -164,7 +227,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
           <h3 className="text-3xl font-black text-white">USD {balanceTotal.toLocaleString()}</h3>
         </div>
 
-        {/* USDT */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-emerald-500/10 rounded-xl"><Bitcoin className="size-5 text-emerald-500"/></div>
@@ -173,7 +235,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
           <h3 className="text-2xl font-black text-white">USD {totalUSDT.toLocaleString()}</h3>
         </div>
 
-        {/* Efectivo Físico */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-sky-500/10 rounded-xl"><PiggyBank className="size-5 text-sky-500"/></div>
@@ -182,7 +243,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
           <h3 className="text-2xl font-black text-white">USD {totalEfectivo.toLocaleString()}</h3>
         </div>
 
-        {/* Capital de Socios */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl border-l-4 border-l-indigo-500">
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-indigo-500/10 rounded-xl"><Building className="size-5 text-indigo-500"/></div>
@@ -193,7 +253,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* 🚀 DESGLOSE DE CAPITAL INVERTIDO POR CADA SOCIO */}
+      {/* DESGLOSE DE CAPITAL POR SOCIO */}
       {Object.keys(aportesPorSocio).length > 0 && (
         <div className="bg-zinc-900/60 border border-zinc-800 p-5 rounded-3xl mb-8">
           <div className="flex items-center gap-2 mb-3">
@@ -244,7 +304,8 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                 <th className="p-4 text-center">Categoría</th>
                 <th className="p-4 text-center">Método</th>
                 <th className="p-4 text-right">Monto</th>
-                <th className="p-4 text-center rounded-tr-xl">Usuario</th>
+                <th className="p-4 text-center">Usuario</th>
+                <th className="p-4 text-center rounded-tr-xl">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
@@ -266,18 +327,30 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                       {m.tipo === 'Ingreso' ? '+' : '-'} USD {montoMostrar.toLocaleString()}
                     </td>
                     <td className="p-4 text-center text-[10px] text-zinc-500 font-bold">{m.realizado_por || m.usuario}</td>
+                    
+                    {/* BOTONES DE EDICIÓN Y ELIMINACIÓN */}
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => abrirEditarMovimiento(m)} title="Editar" className="p-1.5 bg-zinc-900 hover:bg-sky-500/20 text-zinc-400 hover:text-sky-400 rounded-lg transition-colors">
+                          <Edit3 className="size-4" />
+                        </button>
+                        <button onClick={() => handleEliminar(m.id)} title="Eliminar" className="p-1.5 bg-zinc-900 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-lg transition-colors">
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
               {filtrados.length === 0 && (
-                <tr><td colSpan={6} className="py-16 text-center text-zinc-500 font-bold italic">No hay movimientos registrados.</td></tr>
+                <tr><td colSpan={7} className="py-16 text-center text-zinc-500 font-bold italic">No hay movimientos registrados.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* 🚀 MODAL REGISTRO DE MOVIMIENTO / INVERSIÓN */}
+      {/* 🚀 MODAL CREAR / EDITAR MOVIMIENTO */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl my-auto">
@@ -285,7 +358,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
               <h3 className="text-xl font-black text-white flex items-center gap-2">
                 {form.tipo === 'Ingreso' ? <ArrowUpRight className="size-5 text-emerald-400"/> : <ArrowDownRight className="size-5 text-red-400"/>}
-                Registrar {form.tipo}
+                {editingId ? `Editar ${form.tipo}` : `Registrar ${form.tipo}`}
               </h3>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
             </div>
@@ -310,26 +383,31 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               </div>
 
               {/* SECCIÓN DE IDENTIFICACIÓN DE SOCIO */}
-              {(form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio') && (
+              {(form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio' || form.categoria === 'Pago Utilidad Socio') && (
                 <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
                   <label className="text-[10px] font-black uppercase text-indigo-400 block">Socio Aportante / Titular *</label>
-                  <div className="flex gap-2">
-                    <select 
-                      value={form.socio} 
-                      onChange={e => setForm({...form, socio: e.target.value})} 
-                      className="w-full bg-zinc-950 border border-indigo-500/50 text-white font-bold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
-                    >
-                      {sociosFrecuentes.map(s => <option key={s} value={s}>{s}</option>)}
-                      <option value="Otro">Otro socio (Escribir abajo...)</option>
-                    </select>
-                  </div>
+                  
+                  <select 
+                    value={socioSeleccionado} 
+                    onChange={e => setSocioSeleccionado(e.target.value)} 
+                    className="w-full bg-zinc-950 border border-indigo-500/50 text-white font-bold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    <option value={usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"}>
+                      {usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"}
+                    </option>
+                    {sociosHistoricos.map(s => (
+                      s !== `${usuarioActual?.nombre} (Dueño)` && <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="Otro">➕ Registrar un nuevo socio...</option>
+                  </select>
 
-                  {form.socio === "Otro" && (
+                  {socioSeleccionado === "Otro" && (
                     <input 
                       required 
                       type="text" 
-                      onChange={e => setForm({...form, socio: e.target.value})} 
-                      placeholder="Nombre del nuevo socio..." 
+                      value={socioTextoNuevo}
+                      onChange={e => setSocioTextoNuevo(e.target.value)} 
+                      placeholder="Escribí el nombre del nuevo socio..." 
                       className="w-full bg-zinc-950 border border-indigo-500/50 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-400" 
                     />
                   )}
@@ -352,7 +430,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                 <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className={cn("px-8 py-3 text-black font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50", form.tipo === 'Ingreso' ? "bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20" : "bg-red-500 hover:bg-red-400 shadow-lg shadow-red-500/20")}>
-                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : `Guardar ${form.tipo}`}
+                  {isSaving ? <Loader2 className="size-5 animate-spin" /> : editingId ? "Guardar Cambios" : `Guardar ${form.tipo}`}
                 </button>
               </div>
 
