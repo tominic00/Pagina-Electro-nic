@@ -3,7 +3,10 @@ import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, Ba
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-export function TabListas() {
+
+export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
+  alert("¡ESTOY EN EL ARCHIVO CORRECTO DE LISTAS!")
+
   const [stockCrudo, setStockCrudo] = useState<any[]>([])
   const [pedidosCrudos, setPedidosCrudos] = useState<any[]>([])
   const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
