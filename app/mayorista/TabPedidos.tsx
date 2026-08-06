@@ -28,7 +28,7 @@ export function TabListas() {
       .select("*")
       .in("estado", ["Disponible", "En Tránsito", "En Camino"])
     
-    // 2. Traemos los pedidos en tránsito / ingresando
+    // 2. Traemos las órdenes/lotes de compra pendientes
     const { data: pedidosData } = await supabase.from("pedidos_mayorista")
       .select("*")
       .neq("estado", "Recibido")
@@ -54,43 +54,57 @@ export function TabListas() {
     }
   }, [tipoPrecio, origenStock])
 
-  // AGRUPACIÓN DINÁMICA SIN ERRORES DE SINTAXIS
+  // 🚀 AGRUPACIÓN DINÁMICA: DESGLOSA LOS LOTE DE PEDIDOS Y EXTRAE CADA TELÉFONO
   useEffect(() => {
     let listaAProcesar: any[] = []
 
     if (origenStock === "disponible") {
       listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible")
     } else {
+      // A) Equipos individuales en la tabla stock_mayorista que estén marcados como en camino
       const deStockEnCamino = stockCrudo.filter(item => item.estado === "En Tránsito" || item.estado === "En Camino")
       
+      // B) Ítems empaquetados dentro del arreglo 'items' de la tabla pedidos_mayorista
       const dePedidos: any[] = []
-      
-      pedidosCrudos.forEach((pedido: any) => {
-        if (Array.isArray(pedido.items) && pedido.items.length > 0) {
-          pedido.items.forEach((it: any) => {
-            const mod = it.modelo || it.equipo || "iPhone"
-            const cond = it.condicion || "Usado"
-            const pSugerido = Number(it.precio_sugerido_usd || it.precio_venta_usd || it.precio_minorista_usd || 0)
-            const pMay = Number(it.costo_usd || 0)
-            const cant = Number(it.cantidad) || 1
 
-            for (let i = 0; i < cant; i++) {
+      pedidosCrudos.forEach((lote: any) => {
+        let listaItems = lote.items
+
+        // Si la columna viene como string JSON en la BD, la convertimos a Array
+        if (typeof listaItems === "string") {
+          try { listaItems = JSON.parse(listaItems) } catch (e) { listaItems = [] }
+        }
+
+        if (Array.isArray(listaItems) && listaItems.length > 0) {
+          listaItems.forEach((it: any) => {
+            const modeloNombre = it.modelo || it.equipo || "iPhone"
+            const condicionEquipo = it.condicion || "Usado"
+            
+            // Precios según la orden de compra
+            const costoUnitario = Number(it.costo_usd) || 0
+            const precioVentaSugerido = Number(it.precio_sugerido_usd || it.precio_venta_usd) || costoUnitario
+            
+            const cantidadEnLote = Number(it.cantidad) || 1
+
+            // Duplicamos según la cantidad pedida en la orden para agruparlos correctamente
+            for (let i = 0; i < cantidadEnLote; i++) {
               dePedidos.push({
-                equipo: mod,
-                condicion: cond,
+                equipo: modeloNombre,
+                condicion: condicionEquipo,
                 bateria: it.bateria || null,
-                precio_venta_usd: pMay,
-                precio_minorista_usd: pSugerido > 0 ? pSugerido : pMay
+                precio_venta_usd: costoUnitario,
+                precio_minorista_usd: precioVentaSugerido
               })
             }
           })
-        } else {
+        } else if (lote.equipo || lote.titulo) {
+          // Si es un pedido simple legacy sin arreglo de ítems
           dePedidos.push({
-            equipo: pedido.equipo || pedido.titulo || "Equipo en Camino",
-            condicion: pedido.condicion || "Usado",
-            bateria: pedido.bateria || null,
-            precio_venta_usd: Number(pedido.costo_equipos_usd || 0),
-            precio_minorista_usd: Number(pedido.precio_minorista_usd || pedido.costo_equipos_usd || 0)
+            equipo: lote.equipo || lote.titulo || "Equipo en Camino",
+            condicion: lote.condicion || "Usado",
+            bateria: lote.bateria || null,
+            precio_venta_usd: Number(lote.costo_equipos_usd) || 0,
+            precio_minorista_usd: Number(lote.precio_minorista_usd || lote.costo_equipos_usd) || 0
           })
         }
       })
@@ -98,7 +112,7 @@ export function TabListas() {
       listaAProcesar = [...deStockEnCamino, ...dePedidos]
     }
 
-    // AGRUPACIÓN DE FILAS
+    // 🚀 AGRUPAR EQUIPOS POR MODELO, CONDICIÓN Y PRECIO
     const grupos: Record<string, any> = {}
 
     listaAProcesar.forEach((item: any) => {
@@ -107,8 +121,8 @@ export function TabListas() {
       const bateriaKey = (mostrarBateria && !esNuevo) ? (item.bateria || 'N/A') : 'MIXTA'
       
       const precioAsignado = tipoPrecio === "minorista" 
-        ? (item.precio_minorista_usd || item.precio_venta_usd || 0) 
-        : (item.precio_venta_usd || 0)
+        ? Number(item.precio_minorista_usd || item.precio_venta_usd || 0) 
+        : Number(item.precio_venta_usd || 0)
       
       const key = `${item.equipo}-${cond}-${precioAsignado}-${bateriaKey}`
 
