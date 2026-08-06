@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { Wallet, ArrowDownRight, ArrowUpRight, Plus, Search, Loader2, DollarSign, Building, PiggyBank, Landmark, Bitcoin, X } from "lucide-react"
-import  supabase from "@/lib/supabase"
+import { Wallet, ArrowDownRight, ArrowUpRight, Search, Loader2, DollarSign, Building, PiggyBank, Bitcoin, X, Users, PieChart } from "lucide-react"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
@@ -12,13 +12,16 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Lista de socios frecuentes (incluyéndote como Dueño)
+  const sociosFrecuentes = ["Tomas (Dueño)", "Socio 2", "Socio 3"]
+
   const [form, setForm] = useState({
     tipo: "Ingreso",
-    categoria: "Venta",
+    categoria: "Inversión Socio",
     monto: "",
     metodo_pago: "USDT",
     descripcion: "",
-    socio: ""
+    socio: usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
   })
 
   const fetchData = async () => {
@@ -37,28 +40,48 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   let totalBanco = 0
   let capitalSocios = 0
 
+  // Objeto para calcular cuánto aportó cada socio individualmente
+  const aportesPorSocio: Record<string, number> = {}
+
   movimientos.forEach(m => {
-    const monto = Number(m.monto)
-    if (m.tipo === 'Ingreso') {
+    // Compatibilidad para monto o monto_usd
+    const monto = Number(m.monto_usd || m.monto || 0)
+    const esIngreso = m.tipo === 'Ingreso'
+
+    if (esIngreso) {
       balanceTotal += monto
       if (m.metodo_pago === 'USDT') totalUSDT += monto
-      if (m.metodo_pago === 'Efectivo') totalEfectivo += monto
+      if (m.metodo_pago === 'Efectivo' || m.metodo_pago === 'USD Billete') totalEfectivo += monto
       if (m.metodo_pago === 'Transferencia') totalBanco += monto
-      if (m.categoria === 'Inversión Socio') capitalSocios += monto
+      
+      if (m.categoria === 'Inversión Socio') {
+        capitalSocios += monto
+        const nombreSocio = m.socio || "Socio Anónimo"
+        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) + monto
+      }
     } else {
       balanceTotal -= monto
       if (m.metodo_pago === 'USDT') totalUSDT -= monto
-      if (m.metodo_pago === 'Efectivo') totalEfectivo -= monto
+      if (m.metodo_pago === 'Efectivo' || m.metodo_pago === 'USD Billete') totalEfectivo -= monto
       if (m.metodo_pago === 'Transferencia') totalBanco -= monto
-      if (m.categoria === 'Retiro Socio') capitalSocios -= monto
+      
+      if (m.categoria === 'Retiro Socio') {
+        capitalSocios -= monto
+        const nombreSocio = m.socio || "Socio Anónimo"
+        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) - monto
+      }
     }
   })
 
   const filtrados = movimientos.filter(m => {
     const matchTipo = filtroTipo === "Todos" ? true : m.tipo === filtroTipo
-    const matchTexto = m.descripcion.toLowerCase().includes(filtroTexto.toLowerCase()) || 
-                       m.categoria.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-                       (m.socio && m.socio.toLowerCase().includes(filtroTexto.toLowerCase()))
+    const desc = m.descripcion || m.concepto || ""
+    const cat = m.categoria || ""
+    const soc = m.socio || ""
+    
+    const matchTexto = desc.toLowerCase().includes(filtroTexto.toLowerCase()) || 
+                       cat.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+                       soc.toLowerCase().includes(filtroTexto.toLowerCase())
     return matchTipo && matchTexto
   })
 
@@ -72,18 +95,22 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
       const payload = {
         tipo: form.tipo,
         categoria: form.categoria,
+        monto_usd: Number(form.monto),
         monto: Number(form.monto),
         metodo_pago: form.metodo_pago,
+        concepto: form.descripcion,
         descripcion: form.descripcion,
         socio: (form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio') ? form.socio : null,
-        usuario: usuarioActual.nombre
+        realizado_por: usuarioActual?.nombre || 'Admin',
+        usuario: usuarioActual?.nombre || 'Admin',
+        fecha: new Date().toISOString()
       }
 
       await supabase.from("caja_mayorista").insert([payload])
       setShowModal(false)
       fetchData()
     } catch (error) {
-      alert("Error al guardar el movimiento.")
+      alert("Error al guardar el movimiento en caja.")
     } finally {
       setIsSaving(false)
     }
@@ -92,18 +119,18 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   const abrirNuevoMovimiento = (tipoDefecto: string) => {
     setForm({
       tipo: tipoDefecto,
-      categoria: tipoDefecto === 'Ingreso' ? 'Venta' : 'Gasto Operativo',
+      categoria: tipoDefecto === 'Ingreso' ? 'Inversión Socio' : 'Gasto Operativo',
       monto: "",
       metodo_pago: "USDT",
       descripcion: "",
-      socio: ""
+      socio: usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
     })
     setShowModal(true)
   }
 
   // Opciones dinámicas de categoría
-  const categoriasIngreso = ["Venta", "Inversión Socio", "Cobro Deuda", "Otro"]
-  const categoriasEgreso = ["Compra Stock", "Toma Usado", "Gasto Operativo", "Retiro Socio", "Otro"]
+  const categoriasIngreso = ["Inversión Socio", "Venta", "Cobro Deuda", "Otro"]
+  const categoriasEgreso = ["Compra Stock", "Retiro Socio", "Toma Usado", "Gasto Operativo", "Otro"]
 
   return (
     <div className="p-6">
@@ -111,21 +138,21 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
       {/* CABECERA */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2"><Wallet className="size-5 text-amber-500"/> Caja y Flujo</h2>
-          <p className="text-xs text-zinc-500 mt-1">Control de dinero, métodos de pago y capital de socios.</p>
+          <h2 className="text-xl font-black text-white flex items-center gap-2"><Wallet className="size-5 text-amber-500"/> Caja y Flujo de Capital</h2>
+          <p className="text-xs text-zinc-500 mt-1">Control de aportes de socios, métodos de pago y balance total.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={() => abrirNuevoMovimiento('Egreso')} className="px-4 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-red-500/20">
-            <ArrowDownRight className="size-4" /> Egreso
+            <ArrowDownRight className="size-4" /> Egreso / Retiro
           </button>
           <button onClick={() => abrirNuevoMovimiento('Ingreso')} className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
-            <ArrowUpRight className="size-4" /> Ingreso
+            <ArrowUpRight className="size-4" /> Aporte / Ingreso
           </button>
         </div>
       </div>
 
-      {/* 🚀 TARJETAS DE SALDOS (TIPO HOME-BANKING) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* 🚀 TARJETAS DE SALDOS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         
         {/* Balance Total */}
         <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl relative overflow-hidden">
@@ -150,7 +177,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-sky-500/10 rounded-xl"><PiggyBank className="size-5 text-sky-500"/></div>
-            <span className="text-[10px] font-black uppercase text-zinc-500">Efectivo Físico</span>
+            <span className="text-[10px] font-black uppercase text-zinc-500">USD Billete / Efectivo</span>
           </div>
           <h3 className="text-2xl font-black text-white">USD {totalEfectivo.toLocaleString()}</h3>
         </div>
@@ -159,18 +186,43 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl border-l-4 border-l-indigo-500">
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-indigo-500/10 rounded-xl"><Building className="size-5 text-indigo-500"/></div>
-            <span className="text-[10px] font-black uppercase text-zinc-500">Capital Socios</span>
+            <span className="text-[10px] font-black uppercase text-zinc-500">Capital de Socios</span>
           </div>
           <h3 className="text-2xl font-black text-indigo-400">USD {capitalSocios.toLocaleString()}</h3>
-          <p className="text-[9px] text-zinc-500 mt-1">Total invertido activo</p>
+          <p className="text-[9px] text-zinc-500 mt-1">Total aportes activos</p>
         </div>
       </div>
+
+      {/* 🚀 DESGLOSE DE CAPITAL INVERTIDO POR CADA SOCIO */}
+      {Object.keys(aportesPorSocio).length > 0 && (
+        <div className="bg-zinc-900/60 border border-zinc-800 p-5 rounded-3xl mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart className="size-4 text-indigo-400" />
+            <h4 className="text-xs font-black uppercase tracking-widest text-zinc-300">Participación y Aportes por Socio</h4>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {Object.entries(aportesPorSocio).map(([nombre, monto]) => {
+              const porcentaje = capitalSocios > 0 ? ((monto / capitalSocios) * 100).toFixed(1) : "0"
+              return (
+                <div key={nombre} className="bg-zinc-950 border border-zinc-800/80 p-3.5 rounded-2xl">
+                  <p className="text-xs font-bold text-white truncate">{nombre}</p>
+                  <p className="text-lg font-black text-indigo-400 mt-0.5">USD {monto.toLocaleString()}</p>
+                  <div className="w-full bg-zinc-900 rounded-full h-1.5 mt-2 overflow-hidden">
+                    <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min(Math.max(Number(porcentaje), 0), 100)}%` }}></div>
+                  </div>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase mt-1.5 text-right">{porcentaje}% del capital</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* BUSCADOR Y FILTROS */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-          <input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Buscar por descripción, categoría o socio..." className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-amber-500 transition-all shadow-inner" />
+          <input type="text" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} placeholder="Buscar por concepto, categoría o socio..." className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:border-amber-500 transition-all shadow-inner" />
         </div>
         <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1 overflow-x-auto hide-scrollbar">
           <button onClick={() => setFiltroTipo("Todos")} className={cn("whitespace-nowrap px-4 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", filtroTipo === "Todos" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300")}>Todos</button>
@@ -188,7 +240,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
             <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
               <tr>
                 <th className="p-4 rounded-tl-xl">Fecha</th>
-                <th className="p-4">Descripción</th>
+                <th className="p-4">Concepto / Descripción</th>
                 <th className="p-4 text-center">Categoría</th>
                 <th className="p-4 text-center">Método</th>
                 <th className="p-4 text-right">Monto</th>
@@ -196,23 +248,27 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
-              {filtrados.map(m => (
-                <tr key={m.id} className="hover:bg-zinc-900/50 transition-colors">
-                  <td className="p-4 text-zinc-400 text-xs">{new Date(m.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                  <td className="p-4">
-                    <p className="font-bold text-white">{m.descripcion}</p>
-                    {m.socio && <p className="text-[9px] text-indigo-400 font-bold uppercase mt-0.5">Socio: {m.socio}</p>}
-                  </td>
-                  <td className="p-4 text-center">
-                    <span className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded text-[9px] font-bold uppercase">{m.categoria}</span>
-                  </td>
-                  <td className="p-4 text-center text-xs text-zinc-400 font-medium">{m.metodo_pago}</td>
-                  <td className={cn("p-4 font-black text-right", m.tipo === 'Ingreso' ? "text-emerald-400" : "text-red-400")}>
-                    {m.tipo === 'Ingreso' ? '+' : '-'} USD {Number(m.monto).toLocaleString()}
-                  </td>
-                  <td className="p-4 text-center text-[10px] text-zinc-500 font-bold">{m.usuario}</td>
-                </tr>
-              ))}
+              {filtrados.map(m => {
+                const montoMostrar = Number(m.monto_usd || m.monto || 0)
+                const descMostrar = m.concepto || m.descripcion || "Movimiento"
+                return (
+                  <tr key={m.id} className="hover:bg-zinc-900/50 transition-colors">
+                    <td className="p-4 text-zinc-400 text-xs">{new Date(m.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                    <td className="p-4">
+                      <p className="font-bold text-white">{descMostrar}</p>
+                      {m.socio && <p className="text-[9px] text-indigo-400 font-bold uppercase mt-0.5 flex items-center gap-1"><Users className="size-3"/> Socio: {m.socio}</p>}
+                    </td>
+                    <td className="p-4 text-center">
+                      <span className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded text-[9px] font-bold uppercase">{m.categoria}</span>
+                    </td>
+                    <td className="p-4 text-center text-xs text-zinc-400 font-medium">{m.metodo_pago}</td>
+                    <td className={cn("p-4 font-black text-right", m.tipo === 'Ingreso' ? "text-emerald-400" : "text-red-400")}>
+                      {m.tipo === 'Ingreso' ? '+' : '-'} USD {montoMostrar.toLocaleString()}
+                    </td>
+                    <td className="p-4 text-center text-[10px] text-zinc-500 font-bold">{m.realizado_por || m.usuario}</td>
+                  </tr>
+                )
+              })}
               {filtrados.length === 0 && (
                 <tr><td colSpan={6} className="py-16 text-center text-zinc-500 font-bold italic">No hay movimientos registrados.</td></tr>
               )}
@@ -221,7 +277,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL NUEVO MOVIMIENTO */}
+      {/* 🚀 MODAL REGISTRO DE MOVIMIENTO / INVERSIÓN */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl my-auto">
@@ -239,25 +295,44 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Categoría</label>
-                  <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all">
+                  <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all cursor-pointer">
                     {(form.tipo === 'Ingreso' ? categoriasIngreso : categoriasEgreso).map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Método de Pago / Origen</label>
-                  <select value={form.metodo_pago} onChange={e => setForm({...form, metodo_pago: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all">
-                    <option>USDT</option>
-                    <option>Efectivo</option>
-                    <option>Transferencia</option>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Método de Pago</label>
+                  <select value={form.metodo_pago} onChange={e => setForm({...form, metodo_pago: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all cursor-pointer">
+                    <option value="USDT">USDT</option>
+                    <option value="USD Billete">USD Billete (Efectivo)</option>
+                    <option value="Transferencia">Transferencia Bancaria</option>
                   </select>
                 </div>
               </div>
 
-              {/* SI ES INVERSIÓN O RETIRO DE SOCIO, PEDIMOS EL NOMBRE */}
+              {/* SECCIÓN DE IDENTIFICACIÓN DE SOCIO */}
               {(form.categoria === 'Inversión Socio' || form.categoria === 'Retiro Socio') && (
-                <div className="bg-indigo-500/5 border border-indigo-500/20 p-4 rounded-xl animate-in slide-in-from-top-2">
-                  <label className="text-[10px] font-black uppercase text-indigo-400 block mb-1.5">Nombre del Socio *</label>
-                  <input required type="text" value={form.socio} onChange={e => setForm({...form, socio: e.target.value})} placeholder="Ej: Tomas" className="w-full bg-zinc-950 border border-indigo-500/50 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 transition-all" />
+                <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
+                  <label className="text-[10px] font-black uppercase text-indigo-400 block">Socio Aportante / Titular *</label>
+                  <div className="flex gap-2">
+                    <select 
+                      value={form.socio} 
+                      onChange={e => setForm({...form, socio: e.target.value})} 
+                      className="w-full bg-zinc-950 border border-indigo-500/50 text-white font-bold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
+                    >
+                      {sociosFrecuentes.map(s => <option key={s} value={s}>{s}</option>)}
+                      <option value="Otro">Otro socio (Escribir abajo...)</option>
+                    </select>
+                  </div>
+
+                  {form.socio === "Otro" && (
+                    <input 
+                      required 
+                      type="text" 
+                      onChange={e => setForm({...form, socio: e.target.value})} 
+                      placeholder="Nombre del nuevo socio..." 
+                      className="w-full bg-zinc-950 border border-indigo-500/50 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-400" 
+                    />
+                  )}
                 </div>
               )}
 
@@ -270,8 +345,8 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Descripción *</label>
-                <input required type="text" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} placeholder="Ej: Venta de iPhone 13 a Juan..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all" />
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Descripción / Concepto *</label>
+                <input required type="text" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} placeholder="Ej: Aporte inicial para compra de Lote Agosto..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all" />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">

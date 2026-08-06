@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet, Bot, CalendarDays } from "lucide-react"
+import { Smartphone, Lock, ShieldAlert, LogOut, Loader2, Package, ShoppingCart, Truck, LineChart, UserCheck, Users, Calendar, RefreshCcw, ShieldCheck, Briefcase, Share2, Bell, Settings, LayoutDashboard, Wallet, Bot, CalendarDays, PieChart } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-// 🚀 Importaciones corregidas sin solapar exportaciones
 import { TabResumen } from "./TabResumen"
 import { TabStock } from "./TabStock"
 import { TabVentas } from "./TabVentas"
@@ -15,7 +14,7 @@ import { TabReservas } from "./TabReservas"
 import { TabTomaUsados } from "./TabTomaUsados"
 import { TabGarantias } from "./TabGarantias"
 import { TabProveedores } from "./TabProveedores"
-import { TabListas } from "./TabListas" // 👈 CORREGIDO: Importación limpia desde TabListas
+import { TabListas } from "./TabListas"
 import { TabEquipo } from "./TabEquipo"
 import { TabNotificaciones } from "./TabNotificaciones"
 import { TabConfiguracion } from "./TabConfiguracion"
@@ -23,8 +22,9 @@ import { TabClientesB2B } from "./TabClientesB2B"
 import { TabAnaliticas } from "./TabAnaliticas"
 import { TabAsistenteIA } from "./TabAsistenteIA"
 import { TabCalendario } from "./TabCalendario"
+import { TabSocios } from "./TabSocios" // 🚀 Pestaña Socios agregada
 
-type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion" | "ia" | "calendario"
+type TabType = "resumen" | "stock" | "ventas" | "caja" | "reservas" | "usados" | "garantias" | "proveedores" | "pedidos" | "listas" | "equipo" | "clientes" | "analiticas" | "notificaciones" | "configuracion" | "ia" | "calendario" | "socios"
 
 export default function PortalMayorista() {
   const [usuarioActual, setUsuarioActual] = useState<any | null>(null)
@@ -106,6 +106,7 @@ export default function PortalMayorista() {
     { id: "stock", label: "Inventario", icon: Package, color: "hover:bg-zinc-800 hover:text-white", activeBg: "bg-zinc-800 text-white border-zinc-600 shadow-md", ver: esDueñoOAdmin || (usuarioActual?.accesos?.stock ?? true) },
     { id: "ventas", label: "Caja POS", icon: ShoppingCart, color: "hover:bg-emerald-500/10 hover:text-emerald-400", activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/50 shadow-[0_0_15px_-3px_rgba(16,185,129,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.ventas ?? true) },
     { id: "caja", label: "Caja Diaria", icon: Wallet, color: "hover:bg-amber-500/10 hover:text-amber-400", activeBg: "bg-amber-500/10 text-amber-400 border-amber-500/50 shadow-[0_0_15px_-3px_rgba(245,158,11,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.caja ?? false) },
+    { id: "socios", label: "Socios", icon: PieChart, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_-3px_rgba(99,102,241,0.15)]", ver: esDueñoOAdmin },
     { id: "calendario", label: "Agenda & Citas", icon: CalendarDays, color: "hover:bg-indigo-500/10 hover:text-indigo-400", activeBg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_-3px_rgba(99,102,241,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.reservas ?? true) },
     { id: "reservas", label: "Reservas", icon: Calendar, color: "hover:bg-rose-500/10 hover:text-rose-400", activeBg: "bg-rose-500/10 text-rose-400 border-rose-500/50 shadow-[0_0_15px_-3px_rgba(244,63,94,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.reservas ?? true) },
     { id: "usados", label: "Toma Usados", icon: RefreshCcw, color: "hover:bg-teal-500/10 hover:text-teal-400", activeBg: "bg-teal-500/10 text-teal-400 border-teal-500/50 shadow-[0_0_15px_-3px_rgba(20,184,166,0.15)]", ver: esDueñoOAdmin || (usuarioActual?.accesos?.usados ?? true) },
@@ -215,6 +216,7 @@ export default function PortalMayorista() {
             {activeTab === "stock" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabStock usuarioActual={usuarioActual} /></div>}
             {activeTab === "ventas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabVentas usuarioActual={usuarioActual} /></div>}
             {activeTab === "caja" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabCaja usuarioActual={usuarioActual} /></div>}
+            {activeTab === "socios" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabSocios usuarioActual={usuarioActual} /></div>}
             {activeTab === "calendario" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabCalendario usuarioActual={usuarioActual} /></div>}
             {activeTab === "reservas" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabReservas usuarioActual={usuarioActual} /></div>}
             {activeTab === "usados" && <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in duration-500 min-h-[80vh]"><TabTomaUsados usuarioActual={usuarioActual} /></div>}

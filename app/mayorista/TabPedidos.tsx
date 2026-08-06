@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen } from "lucide-react"
+import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen, Trash2, AlertTriangle } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -61,7 +61,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*").eq("estado", "En Camino").order("fecha_pedido", { ascending: false })
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*").order("fecha_pedido", { ascending: false })
     if (pedidosData) setPedidos(pedidosData)
 
     const { data: stockData } = await supabase.from("stock_mayorista").select("equipo")
@@ -70,7 +70,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     const todosLosNombres = [...(stockData?.map(d => d.equipo) || []), ...(ventasData?.map(d => d.equipo_nombre) || [])]
     const modelosUnicosBD = Array.from(new Set(todosLosNombres.map(nombre => nombre.split(" - ")[0].trim()))).filter(Boolean)
     
-    // Unimos los modelos estáticos + los modelos históricos que haya en la BD para no perder nada
     const combinados = Array.from(new Set([...MODELOS_IPHONE, ...modelosUnicosBD])).sort()
     setModelosDisponibles(combinados)
     
@@ -132,7 +131,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         envio_miami_bsas_usd: Number(envioMiamiBsAs),
         envio_bsas_tuc_usd: Number(envioBsAsTuc),
         estado: 'En Camino',
-        ingresado_por: usuarioActual.nombre
+        ingresado_por: usuarioActual?.nombre || 'Admin'
       }
 
       if (editingId) {
@@ -152,30 +151,55 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 CONTROL DE PAGOS
-  const togglePago = async (pedidoId: string, campoBoolean: string, valorActual: boolean) => {
+  // 🚀 CONTROL DE PAGOS E INYECCIÓN AUTOMÁTICA A CAJA
+  const togglePago = async (pedido: any, campoBoolean: string, valorActual: boolean, conceptoNombre: string, montoUsd: number) => {
+    const nuevoEstado = !valorActual
     const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
+    const fechaHora = new Date().toISOString()
     
     const payload = {
-      [campoBoolean]: !valorActual,
-      [campoFecha]: !valorActual ? new Date().toISOString() : null
+      [campoBoolean]: nuevoEstado,
+      [campoFecha]: nuevoEstado ? fechaHora : null
     }
 
-    await supabase.from("pedidos_mayorista").update(payload).eq("id", pedidoId)
-    fetchData()
+    try {
+      // 1. Actualizar el pedido
+      await supabase.from("pedidos_mayorista").update(payload).eq("id", pedido.id)
+
+      // 2. Si se MARCA como PAGADO -> Impactar Egreso en Caja
+      if (nuevoEstado) {
+        const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
+        
+        await supabase.from("caja_mayorista").insert([{
+          tipo: "Egreso",
+          concepto: detalleMovimiento,
+          monto_usd: montoUsd,
+          monto_pesos: 0,
+          metodo_pago: "USD Billete",
+          categoria: "Inversión / Compras",
+          referencia_id: pedido.id,
+          realizado_por: usuarioActual?.nombre || 'Admin',
+          fecha: fechaHora
+        }])
+      } else {
+        // 3. Si se DESTILDA -> Eliminar el Egreso de la Caja
+        const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
+        await supabase.from("caja_mayorista").delete().eq("referencia_id", pedido.id).eq("concepto", detalleMovimiento)
+      }
+
+      fetchData()
+    } catch (error: any) {
+      alert("Error al actualizar estado de pago: " + error.message)
+    }
   }
 
-  // 🚀 RECIBIR LOTE
+  // 🚀 RECIBIR LOTE E INGRESAR AL STOCK
   const marcarRecibido = async (pedido: any) => {
     if(!confirm(`¿Recibiste el lote completo hoy? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
 
     try {
       const equiposParaStock: any[] = []
       const itemsDelPedido = pedido.items || []
-      
-      if (itemsDelPedido.length === 0 && pedido.modelo) {
-        itemsDelPedido.push({ modelo: pedido.modelo, condicion: pedido.condicion, cantidad: pedido.cantidad, costo_usd: pedido.costo_unitario_usd, precio_sugerido_usd: pedido.precio_venta_sugerido_usd })
-      }
 
       itemsDelPedido.forEach((item: any) => {
         for(let i = 0; i < item.cantidad; i++){
@@ -185,7 +209,8 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
             costo_usd: item.costo_usd,
             precio_venta_usd: item.precio_sugerido_usd,
             estado: 'Disponible',
-            ingresado_por: usuarioActual.nombre
+            id_pedido_origen: pedido.id, // 🔥 Vínculo para poder dar de baja si se anula
+            ingresado_por: usuarioActual?.nombre || 'Admin'
           })
         }
       })
@@ -198,9 +223,38 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date().toISOString() }).eq('id', pedido.id)
       
       fetchData()
-      alert("¡Lote ingresado al stock!")
+      alert("✅ ¡Lote ingresado al stock!")
     } catch (error: any) {
       alert("Error al inyectar equipos al stock: " + error.message)
+    }
+  }
+
+  // 🚀 ELIMINAR O ANULAR LOTE Y DAR DE BAJA STOCK Y EGRESOS
+  const eliminarLote = async (pedido: any) => {
+    const esRecibido = pedido.estado === 'Recibido'
+    const msj = esRecibido 
+      ? `⚠️ ATENCIÓN: Este lote ya fue RECIBIDO en el stock.\n\n¿Deseas ELIMINAR el lote y DAR DE BAJA del inventario los equipos ingresados por este pedido?` 
+      : `¿Estás seguro de eliminar este lote de compra?`
+
+    if (!confirm(msj)) return
+
+    try {
+      // 1. Si el lote fue recibido, eliminamos los equipos que ingresaron a stock desde este lote
+      if (esRecibido) {
+        await supabase.from("stock_mayorista").delete().eq("id_pedido_origen", pedido.id)
+      }
+
+      // 2. Limpiar egresos asociados en la caja
+      await supabase.from("caja_mayorista").delete().eq("referencia_id", pedido.id)
+
+      // 3. Eliminar la orden de compra
+      const { error } = await supabase.from("pedidos_mayorista").delete().eq("id", pedido.id)
+      if (error) throw new Error(error.message)
+
+      fetchData()
+      alert("🗑️ Lote eliminado correctamente (Stock y Caja ajustados).")
+    } catch (error: any) {
+      alert("Error al eliminar lote: " + error.message)
     }
   }
 
@@ -209,83 +263,100 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h3 className="text-xl font-black text-white flex items-center gap-2"><Truck className="size-5 text-amber-500"/> Órdenes de Compra (Lotes)</h3>
-          <p className="text-xs text-zinc-500 mt-1">Seguimiento de logística y pagos de importación.</p>
+          <p className="text-xs text-zinc-500 mt-1">Seguimiento de logística, pagos de importación e impacto en caja.</p>
         </div>
         <button onClick={abrirNuevo} className="bg-amber-500 hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 active:scale-95"><Plus className="size-4"/> Nuevo Lote</button>
       </div>
 
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-amber-500"/></div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {pedidos.map(p => (
-            <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col shadow-lg">
-              
-              {/* Encabezado Lote */}
-              <div className="p-5 border-b border-zinc-800 bg-zinc-950/50 relative">
-                <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[10px] font-black uppercase bg-amber-500/10 text-amber-500 px-2 py-1 rounded">En Tránsito</span>
-                  <button onClick={() => abrirEdicion(p)} className="text-zinc-500 hover:text-sky-400 bg-zinc-900 p-1.5 rounded-lg"><Edit3 className="size-4"/></button>
-                </div>
+          {pedidos.map(p => {
+            const esRecibido = p.estado === "Recibido"
+            return (
+              <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col shadow-lg relative group">
                 
-                <h4 className="text-lg font-black text-white">{p.titulo || p.proveedor || "Lote de Compra"}</h4>
-                <p className="text-xs text-zinc-400 uppercase mt-1 flex items-center gap-1.5"><Box className="size-3"/> {p.proveedor} • {p.cantidad} Uds.</p>
-                
-                {/* Fechas */}
-                <div className="mt-3 flex gap-2 flex-wrap">
-                  <p className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1"><Calendar className="size-3"/> Pedido: {new Date(p.fecha_pedido).toLocaleDateString()}</p>
-                  {p.fecha_estimada_llegada && <p className="text-[10px] text-amber-500 uppercase font-bold flex items-center gap-1"><Truck className="size-3"/> Llega: {new Date(p.fecha_estimada_llegada).toLocaleDateString()}</p>}
-                </div>
-                {p.tracking && <p className="text-[10px] text-sky-400 font-mono mt-2 bg-sky-500/10 px-2 py-1 rounded w-fit">Track: {p.tracking}</p>}
-              </div>
-
-              {/* Finanzas y Pagos */}
-              <div className="p-5 flex-1 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-1">Control de Pagos</p>
-                
-                <button onClick={() => togglePago(p.id, "pagado_equipos", p.pagado_equipos)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
-                    <div>
-                      <p className={cn("text-xs font-bold", p.pagado_equipos ? "text-emerald-400" : "text-zinc-300")}>Costo Equipos</p>
-                      <p className="text-[10px] text-zinc-500">U$D {p.costo_equipos_usd} {p.fecha_pago_equipos && ` • (${new Date(p.fecha_pago_equipos).toLocaleDateString()})`}</p>
+                {/* Encabezado Lote */}
+                <div className="p-5 border-b border-zinc-800 bg-zinc-950/50 relative">
+                  <div className={cn("absolute top-0 left-0 w-full h-1", esRecibido ? "bg-emerald-500" : "bg-amber-500")}></div>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className={cn("text-[10px] font-black uppercase px-2 py-1 rounded", esRecibido ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-500")}>
+                      {esRecibido ? "Recibido en Stock" : "En Tránsito"}
+                    </span>
+                    <div className="flex gap-1">
+                      <button onClick={() => abrirEdicion(p)} className="text-zinc-500 hover:text-sky-400 bg-zinc-900 p-1.5 rounded-lg transition-colors"><Edit3 className="size-4"/></button>
+                      <button onClick={() => eliminarLote(p)} title="Eliminar Lote" className="text-zinc-500 hover:text-red-400 bg-zinc-900 p-1.5 rounded-lg transition-colors"><Trash2 className="size-4"/></button>
                     </div>
                   </div>
-                </button>
+                  
+                  <h4 className="text-lg font-black text-white">{p.titulo || p.proveedor || "Lote de Compra"}</h4>
+                  <p className="text-xs text-zinc-400 uppercase mt-1 flex items-center gap-1.5"><Box className="size-3"/> {p.proveedor} • {p.cantidad} Uds.</p>
+                  
+                  {/* Fechas */}
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1"><Calendar className="size-3"/> Pedido: {new Date(p.fecha_pedido).toLocaleDateString()}</p>
+                    {p.fecha_estimada_llegada && <p className="text-[10px] text-amber-500 uppercase font-bold flex items-center gap-1"><Truck className="size-3"/> Llega: {new Date(p.fecha_estimada_llegada).toLocaleDateString()}</p>}
+                  </div>
+                  {p.tracking && <p className="text-[10px] text-sky-400 font-mono mt-2 bg-sky-500/10 px-2 py-1 rounded w-fit">Track: {p.tracking}</p>}
+                </div>
 
-                {Number(p.envio_miami_bsas_usd) > 0 && (
-                  <button onClick={() => togglePago(p.id, "pagado_miami_bsas", p.pagado_miami_bsas)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_miami_bsas ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
+                {/* Finanzas y Pagos */}
+                <div className="p-5 flex-1 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-1">Control de Pagos (Impacta en Caja)</p>
+                  
+                  {/* PAGO 1: COSTO EQUIPOS */}
+                  <button onClick={() => togglePago(p, "pagado_equipos", p.pagado_equipos, "Costo Equipos", p.costo_equipos_usd)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
-                      <Plane className={cn("size-4", p.pagado_miami_bsas ? "text-emerald-500" : "text-zinc-600")} />
+                      <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
                       <div>
-                        <p className={cn("text-xs font-bold", p.pagado_miami_bsas ? "text-emerald-400" : "text-zinc-300")}>Flete Miami - BsAs</p>
-                        <p className="text-[10px] text-zinc-500">U$D {p.envio_miami_bsas_usd} {p.fecha_pago_miami_bsas && ` • (${new Date(p.fecha_pago_miami_bsas).toLocaleDateString()})`}</p>
+                        <p className={cn("text-xs font-bold", p.pagado_equipos ? "text-emerald-400" : "text-zinc-300")}>Costo Equipos</p>
+                        <p className="text-[10px] text-zinc-500">U$D {p.costo_equipos_usd} {p.fecha_pago_equipos && ` • (${new Date(p.fecha_pago_equipos).toLocaleDateString()})`}</p>
                       </div>
                     </div>
                   </button>
-                )}
 
-                {Number(p.envio_bsas_tuc_usd) > 0 && (
-                  <button onClick={() => togglePago(p.id, "pagado_bsas_tuc", p.pagado_bsas_tuc)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_bsas_tuc ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
-                    <div className="flex items-center gap-2">
-                      <MapPin className={cn("size-4", p.pagado_bsas_tuc ? "text-emerald-500" : "text-zinc-600")} />
-                      <div>
-                        <p className={cn("text-xs font-bold", p.pagado_bsas_tuc ? "text-emerald-400" : "text-zinc-300")}>Envío BsAs - Tucumán</p>
-                        <p className="text-[10px] text-zinc-500">U$D {p.envio_bsas_tuc_usd} {p.fecha_pago_bsas_tuc && ` • (${new Date(p.fecha_pago_bsas_tuc).toLocaleDateString()})`}</p>
+                  {/* PAGO 2: FLETE MIAMI */}
+                  {Number(p.envio_miami_bsas_usd) > 0 && (
+                    <button onClick={() => togglePago(p, "pagado_miami_bsas", p.pagado_miami_bsas, "Flete Miami - BsAs", Number(p.envio_miami_bsas_usd))} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_miami_bsas ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
+                      <div className="flex items-center gap-2">
+                        <Plane className={cn("size-4", p.pagado_miami_bsas ? "text-emerald-500" : "text-zinc-600")} />
+                        <div>
+                          <p className={cn("text-xs font-bold", p.pagado_miami_bsas ? "text-emerald-400" : "text-zinc-300")}>Flete Miami - BsAs</p>
+                          <p className="text-[10px] text-zinc-500">U$D {p.envio_miami_bsas_usd} {p.fecha_pago_miami_bsas && ` • (${new Date(p.fecha_pago_miami_bsas).toLocaleDateString()})`}</p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                )}
-              </div>
+                    </button>
+                  )}
 
-              {/* Acción Recibir */}
-              <div className="p-4 border-t border-zinc-800">
-                <button onClick={() => marcarRecibido(p)} className="w-full bg-zinc-800 hover:bg-emerald-500 hover:text-black text-white font-black uppercase tracking-widest py-3 rounded-xl text-xs transition-colors flex justify-center items-center gap-2">
-                  <PackageOpen className="size-4"/> Lote Recibido (Ingresar Hoy)
-                </button>
+                  {/* PAGO 3: FLETE TUCUMÁN */}
+                  {Number(p.envio_bsas_tuc_usd) > 0 && (
+                    <button onClick={() => togglePago(p, "pagado_bsas_tuc", p.pagado_bsas_tuc, "Envío BsAs - Tucumán", Number(p.envio_bsas_tuc_usd))} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_bsas_tuc ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
+                      <div className="flex items-center gap-2">
+                        <MapPin className={cn("size-4", p.pagado_bsas_tuc ? "text-emerald-500" : "text-zinc-600")} />
+                        <div>
+                          <p className={cn("text-xs font-bold", p.pagado_bsas_tuc ? "text-emerald-400" : "text-zinc-300")}>Envío BsAs - Tucumán</p>
+                          <p className="text-[10px] text-zinc-500">U$D {p.envio_bsas_tuc_usd} {p.fecha_pago_bsas_tuc && ` • (${new Date(p.fecha_pago_bsas_tuc).toLocaleDateString()})`}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                {/* Acción Recibir */}
+                <div className="p-4 border-t border-zinc-800">
+                  {!esRecibido ? (
+                    <button onClick={() => marcarRecibido(p)} className="w-full bg-zinc-800 hover:bg-emerald-500 hover:text-black text-white font-black uppercase tracking-widest py-3 rounded-xl text-xs transition-colors flex justify-center items-center gap-2">
+                      <PackageOpen className="size-4"/> Lote Recibido (Ingresar Hoy)
+                    </button>
+                  ) : (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-center py-2.5 rounded-xl text-xs">
+                      ✅ Equipos Ingresados al Stock
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          {pedidos.length === 0 && <div className="col-span-full py-20 text-center text-zinc-500 font-bold italic">No hay órdenes de compra en tránsito.</div>}
+            )
+          })}
+          {pedidos.length === 0 && <div className="col-span-full py-20 text-center text-zinc-500 font-bold italic">No hay órdenes de compra registradas.</div>}
         </div>
       )}
 
@@ -330,7 +401,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col md:flex-row gap-3 items-end">
                   
-                  {/* 🚀 SELECT DESPLEGABLE CON TODOS LOS MODELOS IPHONE */}
                   <div className="flex-[2] w-full">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo de iPhone</label>
                     <select
