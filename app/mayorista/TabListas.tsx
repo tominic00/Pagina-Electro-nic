@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils"
 
 export function TabListas() {
   const [stockCrudo, setStockCrudo] = useState<any[]>([])
+  const [pedidosCrudos, setPedidosCrudos] = useState<any[]>([])
   const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
-  // 🚀 NUEVOS CONTROLES DE LISTA
+  // CONTROLES DE LISTA
   const [tipoPrecio, setTipoPrecio] = useState<"mayorista" | "minorista">("minorista")
   const [origenStock, setOrigenStock] = useState<"disponible" | "ingresando">("disponible")
   
@@ -21,18 +22,25 @@ export function TabListas() {
 
   const fetchData = async () => {
     setLoading(true)
-    // Traemos tanto lo disponible como lo que viene en camino
+    
+    // 1. Traemos el stock físico disponible
     const { data: stockData } = await supabase.from("stock_mayorista")
       .select("*")
       .in("estado", ["Disponible", "En Tránsito", "En Camino"])
     
+    // 2. 🚀 Traemos los pedidos en tránsito / ingresando
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista")
+      .select("*")
+      .neq("estado", "Recibido") // Trae los que están pendientes o en camino
+
     if (stockData) setStockCrudo(stockData)
+    if (pedidosData) setPedidosCrudos(pedidosData)
     setLoading(false)
   }
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 CAMBIO AUTOMÁTICO DE TEXTOS SEGÚN EL TIPO DE LISTA
+  // CAMBIO AUTOMÁTICO DE TEXTOS SEGÚN EL TIPO DE LISTA
   useEffect(() => {
     if (origenStock === "ingresando") {
       setEncabezado("⏳ ¡Atención! Naves en camino ⏳\nReservá el tuyo antes de que ingresen. Mirá lo que está llegando:")
@@ -46,23 +54,45 @@ export function TabListas() {
     }
   }, [tipoPrecio, origenStock])
 
-  // 🚀 AGRUPACIÓN DINÁMICA (Depende del precio, batería y disponibilidad)
+  // AGRUPACIÓN DINÁMICA (SOPORTA DISPONIBLE Y PEDIDOS INGRESANDO)
   useEffect(() => {
-    // 1. Filtramos según origen de stock
-    const filtrados = stockCrudo.filter(item => {
-      if (origenStock === "disponible") return item.estado === "Disponible"
-      return item.estado === "En Tránsito" || item.estado === "En Camino"
-    })
+    let listaAProcesar: any[] = []
 
-    // 2. Agrupamos
-    const grupos = filtrados.reduce((acc: any, item: any) => {
+    if (origenStock === "disponible") {
+      listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible")
+    } else {
+      // 🚀 PROCESAMOS LOS EQUIPOS DE LA TABLA PEDIDOS_MAYORISTA
+      const deStockEnCamino = stockCrudo.filter(item => item.estado === "En Tránsito" || item.estado === "En Camino")
+      
+      const dePedidos: any[] = []
+      pedidosCrudos.forEach(p => {
+        // Adaptamos el objeto de pedido para que tenga las mismas claves de stock
+        const nombreEquipo = p.equipo || p.equipo_nombre || p.modelo || p.descripcion || "Equipo en Camino"
+        const cond = p.condicion || "Nuevo"
+        const bat = p.bateria || null
+        const pMay = Number(p.precio_venta_usd || p.precio_mayorista_usd || p.costo_usd || 0)
+        const pMin = Number(p.precio_minorista_usd || (pMay > 0 ? pMay + 50 : 0))
+
+        dePedidos.push({
+          equipo: nombreEquipo,
+          condicion: cond,
+          bateria: bat,
+          precio_venta_usd: pMay,
+          precio_minorista_usd: pMin
+        })
+      })
+
+      listaAProcesar = [...deStockEnCamino, ...dePedidos]
+    }
+
+    // AGRUPAMOS
+    const grupos = listaAProcesar.reduce((acc: any, item: any) => {
       const esNuevo = item.condicion?.toLowerCase().includes("nuevo")
       const bateriaKey = (mostrarBateria && !esNuevo) ? (item.bateria || 'N/A') : 'MIXTA'
       
-      // Elegimos el precio correcto
       const precioAsignado = tipoPrecio === "minorista" 
-        ? (item.precio_minorista_usd || item.precio_venta_usd) 
-        : item.precio_venta_usd
+        ? (item.precio_minorista_usd || item.precio_venta_usd || 0) 
+        : (item.precio_venta_usd || 0)
       
       const key = `${item.equipo}-${item.condicion}-${precioAsignado}-${bateriaKey}`
       
@@ -86,7 +116,7 @@ export function TabListas() {
     
     setStockAgrupado(arrayAgrupado)
     setSeleccionados(new Set(arrayAgrupado.map(g => g.id_group)))
-  }, [stockCrudo, mostrarBateria, tipoPrecio, origenStock])
+  }, [stockCrudo, pedidosCrudos, mostrarBateria, tipoPrecio, origenStock])
 
   const toggleSeleccion = (id_group: string) => {
     const nuevos = new Set(seleccionados)
@@ -95,7 +125,7 @@ export function TabListas() {
     setSeleccionados(nuevos)
   }
 
-  // 🚀 GENERADOR DEL TEXTO PARA WHATSAPP
+  // GENERADOR DEL TEXTO PARA WHATSAPP
   const generarTextoWhatsApp = () => {
     const equiposFiltrados = stockAgrupado.filter(g => seleccionados.has(g.id_group))
     
@@ -148,7 +178,7 @@ export function TabListas() {
           <p className="text-xs text-zinc-500 mt-1">Generá listas comerciales al instante para WhatsApp o Instagram.</p>
         </div>
         
-        {/* 🚀 SELECTORES DE TIPO DE LISTA */}
+        {/* SELECTORES DE TIPO DE LISTA */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
             <button onClick={() => setTipoPrecio("minorista")} className={cn("px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5", tipoPrecio === "minorista" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
@@ -190,7 +220,6 @@ export function TabListas() {
               <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Equipos ({stockAgrupado.length})</label>
                 
-                {/* 🚀 TOGGLE DE BATERÍA MÁGICO */}
                 <label className="flex items-center gap-2 cursor-pointer bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-emerald-500/50 transition-colors">
                   <BatteryMedium className={cn("size-3.5", mostrarBateria ? "text-emerald-500" : "text-zinc-500")} />
                   <input type="checkbox" checked={mostrarBateria} onChange={e => setMostrarBateria(e.target.checked)} className="hidden" />
@@ -249,7 +278,6 @@ export function TabListas() {
                 <h3 className="text-lg font-black text-black">Vista Previa</h3>
               </div>
               
-              {/* Celular Fake Preview */}
               <div className="bg-[#E5DDD5] p-4 rounded-2xl mb-6 shadow-inner h-[400px] overflow-y-auto hide-scrollbar">
                 <div className="bg-white p-3 rounded-tr-xl rounded-bl-xl rounded-br-xl shadow-sm text-sm text-black whitespace-pre-wrap font-sans relative">
                   <div className="absolute top-0 left-[-8px] w-0 h-0 border-t-[10px] border-t-white border-l-[10px] border-l-transparent"></div>

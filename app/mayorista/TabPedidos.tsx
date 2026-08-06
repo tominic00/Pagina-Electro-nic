@@ -115,19 +115,58 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 ACTUALIZAR ESTADO DE PAGOS (Y REGISTRAR FECHAS)
-  const togglePago = async (pedidoId: string, campoBoolean: string, valorActual: boolean) => {
-    // Si lo estamos marcando como pagado, guardamos la fecha de hoy en el campo de fecha correspondiente
-    const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
-    
-    const payload = {
-      [campoBoolean]: !valorActual,
-      [campoFecha]: !valorActual ? new Date().toISOString() : null // Si lo destildamos, borramos la fecha
-    }
-
-    await supabase.from("pedidos_mayorista").update(payload).eq("id", pedidoId)
-    fetchData()
+  // 🚀 ACTUALIZAR ESTADO DE PAGOS E IMPACTAR EN LA CAJA
+const togglePago = async (pedido: any, campoBoolean: string, valorActual: boolean) => {
+  const nuevoEstado = !valorActual
+  const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
+  
+  // 1. Actualizar el pedido en Supabase
+  const payload = {
+    [campoBoolean]: nuevoEstado,
+    [campoFecha]: nuevoEstado ? new Date().toISOString() : null
   }
+
+  await supabase.from("pedidos_mayorista").update(payload).eq("id", pedido.id)
+
+  // 2. Determinar qué concepto y monto se está pagando
+  let concepto = ""
+  let monto = 0
+
+  if (campoBoolean === "pagado_equipos") {
+    concepto = `Pago Equipos Lote: ${pedido.titulo || pedido.proveedor}`
+    monto = Number(pedido.costo_equipos_usd) || 0
+  } else if (campoBoolean === "pagado_miami_bsas") {
+    concepto = `Flete Miami-BsAs Lote: ${pedido.titulo || pedido.proveedor}`
+    monto = Number(pedido.envio_miami_bsas_usd) || 0
+  } else if (campoBoolean === "pagado_bsas_tuc") {
+    concepto = `Flete BsAs-Tucumán Lote: ${pedido.titulo || pedido.proveedor}`
+    monto = Number(pedido.envio_bsas_tuc_usd) || 0
+  }
+
+  // 3. Impactar en la Caja
+  if (monto > 0) {
+    if (nuevoEstado) {
+      // ➔ REGISTRAR EGRESO DE CAJA
+      await supabase.from("caja_mayorista").insert([{
+        tipo: "Egreso",
+        categoria: campoBoolean.includes("envio") || campoBoolean.includes("miami") || campoBoolean.includes("tuc") ? "Flete / Logística" : "Compra de Stock",
+        monto: monto,
+        metodo_pago: "Efectivo",
+        descripcion: concepto,
+        usuario: usuarioActual.nombre,
+        referencia_id: pedido.id
+      }])
+    } else {
+      // ➔ SI SE DESTILDA: Borra el egreso de la caja correspondiente a este pedido
+      await supabase.from("caja_mayorista")
+        .delete()
+        .eq("referencia_id", pedido.id)
+        .eq("descripcion", concepto)
+    }
+  }
+
+  fetchData()
+}
 
   // 🚀 INGRESAR LOTE AL STOCK Y MARCAR LLEGADA REAL
   const marcarRecibido = async (pedido: any) => {
@@ -207,7 +246,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
               <div className="p-5 flex-1 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-1">Control de Pagos</p>
                 
-                <button onClick={() => togglePago(p.id, "pagado_equipos", p.pagado_equipos)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
+                <button onClick={() => togglePago(p, "pagado_equipos", p.pagado_equipos)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
                     <div>
