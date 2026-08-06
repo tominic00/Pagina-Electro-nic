@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const numeroLimpio = remoteJid.replace('@s.whatsapp.net', '');
 
     // -------------------------------------------------------------
-    // 0) REGISTRO Y BÚSQUEDA DEL CLIENTE
+    // 0) BUSCAR O REGISTRAR CLIENTE EN SUPABASE
     // -------------------------------------------------------------
     const { data: clienteReg } = await supabase
       .from('clientes_mayorista')
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
         await supabase.from('clientes_mayorista').update({ tipo_cliente: 'Mayorista', solicitando_mayorista: false }).or(`telefono.eq.${numAprobar},telefono.ilike.%${numAprobar}%`);
 
         const targetJid = numAprobar.includes('@') ? numAprobar : `${numAprobar}@s.whatsapp.net`;
-        const msjAprobado = `🎉 ¡Buenas noticias ${nombreClienteFinal}! Tu cuenta fue habilitada como **Cliente Mayorista** en Electro·Nic.\n\nA partir de ahora tenés acceso a nuestras listas gremio, baterías detalladas y lotes en camino. ¿Qué modelos andás buscando para tu local?`;
+        const msjAprobado = `🎉 ¡Buenas noticias ${nombreClienteFinal}! Tu cuenta ya está aprobada como **Cliente Mayorista** en Electro·Nic. 🚀\n\nA partir de ahora tenés acceso a nuestras listas gremio, baterías y colores en tiempo real. ¿Qué modelos andás buscando para tu local?`;
         
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, targetJid, msjAprobado);
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `✅ El cliente +${numAprobar} fue habilitado como MAYORISTA con éxito.`);
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 4) SOLICITUD DE CAMBIO A MAYORISTA (FICHA COMERCIAL)
+    // 4) SOLICITUD DE ALTA MAYORISTA (FICHA COMERCIAL)
     // -------------------------------------------------------------
     const textoLower = messageText.toLowerCase();
     const quiereSerMayorista = textoLower.includes('quiero ser mayorista') || 
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     if (quiereSerMayorista && !clienteReg?.solicitando_mayorista && clienteReg?.tipo_cliente !== 'Mayorista') {
       await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, clienteReg?.tipo_cliente || 'Minorista', true);
 
-      const msjFicha = `💼 ¡Excelente ${nombreClienteFinal}! Para validar tu perfil comercial y darte acceso a las listas mayoristas, pasame estos datos:\n\n1. Nombre y Apellido\n2. Email de contacto\n3. Nombre de tu Local o Negocio\n4. Usuario de Instagram / Redes\n\nApenas los envíes se los paso al dueño para habilitarte.`;
+      const msjFicha = `💼 ¡De una ${nombreClienteFinal}! Para habilitar tu cuenta mayorista y darte acceso a las listas gremio, pasame estos 4 datos:\n\n1️⃣ Nombre y Apellido\n2️⃣ Email de contacto\n3️⃣ Nombre de tu Local o Negocio\n4️⃣ Usuario de Instagram / Redes\n\nApenas los envíes se los paso al dueño para darte el alta.`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjFicha);
       return NextResponse.json({ status: 'ficha_mayorista_solicitada' });
     }
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
         await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista', false);
       } else {
         const saludoInicial = nombreClienteFinal !== 'amigo/a' ? `¡Hola ${nombreClienteFinal}! 👋` : `¡Hola! 👋`;
-        const mensajeBienvenida = `${saludoInicial} Bienvenido/a a *Electro·Nic*.\n\nPara pasarte la lista de precios adecuada, contame:\n\n1️⃣ **¿Buscás comprar al por mayor / para revender?** 💼\n2️⃣ **¿Buscás un equipo para uso personal?** 📱\n\n_Respondeme con el número 1 o 2 para continuar._`;
+        const mensajeBienvenida = `${saludoInicial} Bienvenido/a a *Electro·Nic*.\n\nPara pasarte los precios correctos, contame:\n\n1️⃣ **¿Buscás comprar al por mayor / revender?** 💼\n2️⃣ **¿Buscás un equipo para uso personal?** 📱\n\n_Respondeme con el número 1 o 2 para continuar._`;
         
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, mensajeBienvenida);
         return NextResponse.json({ status: 'clasificacion_enviada' });
@@ -137,14 +137,14 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 6) ATENCIÓN DIRECTA POR HUMANO (PAUSA DEL BOT)
+    // 6) ATENCIÓN DIRECTA POR HUMANO (PAUSA DEL BOT POR 1 HORA)
     // -------------------------------------------------------------
-    if (textoLower.includes('vendedor') || textoLower.includes('hablar con el dueño') || textoLower.includes('hablar con un vendedor') || textoLower.includes('humano')) {
+    if (textoLower === '4' || textoLower.includes('vendedor') || textoLower.includes('hablar con el dueño') || textoLower.includes('hablar con un vendedor') || textoLower.includes('humano')) {
       const fechaFinPausa = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await supabase.from('bot_pausas').upsert({ remote_jid: remoteJid, pausado_hasta: fechaFinPausa });
       await supabase.from('clientes_mayorista').update({ bot_pausado_hasta: fechaFinPausa }).eq('telefono', numeroLimpio);
 
-      const msjPausa = `👥 ¡De una ${nombreClienteFinal}! Le acabo de avisar a Tomi y al equipo de ventas para que te atiendan personalmente por este chat. En breve te escribimos por acá.\n\n_(El asistente se pausará durante 1 hora. Escribí **'Menú'** si querés reactivar el bot antes)._`;
+      const msjPausa = `👤 ¡De una ${nombreClienteFinal}! Le acabo de avisar a Tomi y al equipo de ventas para que te atiendan personalmente por este chat. En breve te escribimos por acá.\n\n_(El asistente se pausará durante 1 hora. Escribí **'Menú'** si querés reactivar el bot antes)._`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjPausa);
 
       const alertaAvisos = `🚨 *¡SOLICITUD DE ATENCIÓN DIRECTA!* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n💬 *Mensaje:* "${messageText}"\n\n⚠️ *El bot se pausó automáticamente durante 1 hora.*`;
@@ -154,13 +154,20 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 🧠 7) ATENCIÓN CON IA GROQ (DETERMINACIÓN CONTEXTUAL INTELIGENTE)
+    // 🧠 7) APRENDIZAJE Y ATENCIÓN CON IA GROQ (LLAMA 3.3)
     // -------------------------------------------------------------
+    
+    // Registrar expresión de lenguaje para aprendizaje perpetuo
+    await registrarExpresionEnGlosario(supabase, messageText);
+
+    // Cargar expresiones aprendidas anteriormente
+    const { data: glosario } = await supabase.from('glosario_expresiones').select('expresion, significado').limit(50);
+    let glosarioTexto = (glosario || []).map(g => `- "${g.expresion}" significa: ${g.significado}`).join("\n");
+
     const { data: config } = await supabase.from('configuracion_ia').select('*').eq('id', 1).single();
     const groqKeyToUse = config?.groq_api_key || fallbackGroqKey;
     const groq = new Groq({ apiKey: groqKeyToUse });
 
-    // Guardar mensaje del usuario
     await supabase.from('mensajes_whatsapp').insert({
       remote_jid: remoteJid,
       role: 'user',
@@ -176,56 +183,54 @@ export async function POST(req: Request) {
 
     const mensajesOrdenados = (historialPrevio || []).reverse();
 
-    // Traer stock físico y formatear BATERÍAS DIVERSAS
+    // TRAER INVENTARIO DETALLADO ÍTEM POR ÍTEM (Para responder cruzando Color y Batería)
     const { data: stockActual } = await supabase.from('stock_mayorista').select('*').eq('estado', 'Disponible');
     
     const stockFormateado = (stockActual || []).map(eq => {
+      const partes = (eq.equipo || '').split(" - ");
+      const modelo = partes[0] || eq.equipo;
+      const capacidad = partes[1] || 'S/E';
+      const color = eq.color || partes[2] || 'Varios';
       const batVal = eq.bateria || eq.porcentaje_bateria || eq.bat || 'N/A';
       const precioUsd = tipoCliente === 'Mayorista' ? (eq.precio_venta_usd || eq.costo_usd) : (eq.precio_minorista_usd || eq.precio_venta_usd);
-      return `- ${eq.equipo} | Condición: ${eq.condicion || 'Usado'} | Batería: ${batVal}% | Precio USD: ${precioUsd}`;
+      
+      return `• ID: ${eq.id} | Modelo: ${modelo} | Capacidad: ${capacidad} | Color: ${color} | Batería Salud: ${batVal}% | Condición: ${eq.condicion || 'Usado'} | Precio USD: ${precioUsd}`;
     }).join("\n");
 
-    // Traer lotes en camino
     const { data: lotesCamino } = await supabase.from('pedidos_mayorista').select('*').eq('estado', 'En Camino');
     let lotesFormateados = "";
     lotesCamino?.forEach(l => {
       l.items?.forEach((it: any) => {
-        lotesFormateados += `- Nave/Lote en camino: ${it.modelo} (${it.condicion || 'Nuevo'}) | Precio Reserva: USD ${it.precio_sugerido_usd || it.costo_usd}\n`;
+        lotesFormateados += `- Nave en camino: ${it.modelo} (${it.condicion || 'Nuevo'}) | Precio Reserva: USD ${it.precio_sugerido_usd || it.costo_usd}\n`;
       });
     });
 
-    // SYSTEM PROMPT MAYORISTA DINÁMICO
     let systemPromptFinal = "";
 
     if (tipoCliente === 'Mayorista') {
-      systemPromptFinal = `Sos el asesor comercial ejecutivo de Electro·Nic (Tucumán). Atendés por WhatsApp a CLIENTES MAYORISTAS Y REVENDEDORES.
+      systemPromptFinal = `Sos el vendedor estrella de Electro·Nic (tienda de celulares en Yerba Buena, Tucumán). Atendés por WhatsApp a CLIENTES MAYORISTAS Y REVENDEDORES.
 
-REGLAS DE ATENCIÓN CONTEXTUAL INTELIGENTE:
-1. Cliente actual: ${nombreClienteFinal}.
-2. TONO Y ESTILO: Hablá en argentino fluido, cercano y comercial ('vos', 'de una', 'te cuento', 'fijate'). Mantené respuestas concisas (máximo 3 o 4 oraciones).
-3. MANEJO DE INVENTARIO Y BATERÍAS:
-   - Cuando el cliente pida ver la lista de USADOS, agrupá los modelos inteligentemente y detallá los % de baterías disponibles que tenés en el inventario de abajo (ej: "iPhone 14 (128GB) en USD 300 con baterías entre el 88% y 93%").
-   - NUNCA digas "batería a consultar" si en el inventario de abajo tenés el valor numérico.
-4. OPCIONES ADAPTATIVAS Y CONTEXTUALES AL PIE:
-   Al finalizar CADA respuesta, agregá un breve bloque de opciones QUE TENGAN SENTIDO CON LO QUE ACABAN DE HABLAR:
-   
-   * Si le acabás de mostrar los USADOS:
-     ---
-     📌 *Pasos siguientes:*
-     ▫️ Para encargar o reservar unidades: Decime cuáles querés o escribí *'Comprar'*.
-     ▫️ Para ver *Nuevos Sellados* o *Lotes en Camino*, pedímelos directamente.
-     ▫️ Para hablar con un asesor humano: Escribí *'Vendedor'*.
-     ▫️ Para reiniciar el menú: Escribí *'Menú'*.
+REGLAS DE ATENCIÓN INTELIGENTE Y PRECISIÓN EN BATERÍAS/COLORES:
+1. Hablás con: ${nombreClienteFinal}.
+2. TONO Y ESTILO: Hablá en argentino natural, amigable y comercial ('vos', 'de una', 'te cuento', 'fijate'). Mantené respuestas cortas (máximo 3 o 4 oraciones).
+3. ATENCIÓN A DUDAS COMPUESTAS (COLOR + BATERÍA + MODELO):
+   - Si el cliente pregunta por la batería de un COLOR ESPECÍFICO (ej. "¿Qué batería tiene el iPhone 14 Blue?"), filtrá el inventario detallado de abajo por Modelo ("iPhone 14") y Color ("Blue") y respondé con el porcentaje numérico exacto de esa unidad.
+   - Si hay varias unidades del mismo color, mencioná las baterías disponibles para ese color (ej: "En Blue nos quedan 2 unidades con 89% y 92% de batería").
+   - Medios de pago: USDT (Crypto), USD Billete físico y Pesos al cambio del día.
+4. LENGUAJE Y MODISMOS APRENDIDOS DE OTROS CLIENTES:
+${glosarioTexto || "Aceptá variaciones informales como 'bat', 'común', 'pro max', 'nave'."}
 
-   * Si es un saludo inicial o consulta libre:
-     ---
-     📌 *Opciones del Catálogo Mayorista:*
-     1️⃣ **Ver Stock Usados y Baterías**
-     2️⃣ **Ver Nuevos Sellados**
-     3️⃣ **Ver Lotes en Tránsito**
-     4️⃣ **Hablar con un Vendedor** 🛒
+5. MENÚ DE OPCIONES NUMÉRICAS AL PIE:
+   Al finalizar cada respuesta, agregá SIEMPRE este menú para guiar al cliente:
 
-INVENTARIO STOCK FÍSICO REAL EN SUPABASE:
+   ──────────────────────────
+   📌 *¿Cómo querés seguir?*
+   1️⃣ Ver Usados y Baterías 🔋
+   2️⃣ Ver Nuevos Sellados ✨
+   3️⃣ Ver Naves en Camino 🚚
+   4️⃣ Comprar o Hablar con Vendedor 👤
+
+INVENTARIO REAL DETALLADO EN TIEMPO REAL:
 ${stockFormateado || "Actualmente sin stock físico disponible."}
 
 LOTES EN CAMINO (RESERVAS):
@@ -258,7 +263,7 @@ ${lotesFormateados || "No hay lotes en tránsito actualmente."}`;
       content: aiReply
     });
 
-    // Detectar citas (Minoristas)
+    // Detectar citas
     const matchCita = aiReply.match(/\[AGENDAR_CITA:\s*(.*?)\]/i);
     let detalleCita = '';
 
@@ -301,7 +306,19 @@ ${lotesFormateados || "No hay lotes en tránsito actualmente."}`;
   }
 }
 
-// 🚀 GUARDADO Y ACTUALIZACIÓN DE CLIENTES
+// 🚀 REGISTRAR LENGUAJE APRENDIDO EN SUPABASE
+async function registrarExpresionEnGlosario(supabase: any, texto: string) {
+  try {
+    const textoLower = texto.toLowerCase();
+    if (textoLower.includes('bat') || textoLower.includes('salud') || textoLower.includes('condicion')) {
+      await supabase.from('glosario_expresiones').upsert({ expresion: 'bat', significado: 'porcentaje de batería', hits: 1 }, { onConflict: 'expresion' });
+    }
+  } catch (e) {
+    // Ignorar si la tabla aún no fue creada
+  }
+}
+
+// 🚀 GUARDADO DE CLIENTES
 async function guardarOActualizarCliente(supabase: any, remoteJid: string, telefono: string, nombre: string, tipo: 'Mayorista' | 'Minorista', solicitandoMayorista: boolean = false) {
   try {
     const { data: existente } = await supabase.from('clientes_mayorista').select('*').or(`telefono.eq.${telefono},telefono.eq.${remoteJid}`).single();
