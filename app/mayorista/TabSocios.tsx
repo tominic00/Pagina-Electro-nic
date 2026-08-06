@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Users, DollarSign, History, Loader2, Edit3, Trash2, X, CheckCircle2 } from "lucide-react"
+import { Users, DollarSign, History, Loader2, Edit3, Trash2, X, Calendar, Filter } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -8,6 +8,10 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
   const [ventas, setVentas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // 🚀 ESTADOS PARA FILTRO CALENDARIO (DESDE / HASTA)
+  const [fechaDesde, setFechaDesde] = useState<string>("")
+  const [fechaHasta, setFechaHasta] = useState<string>("")
 
   // ESTADOS DE MODAL DE PAGO / EDICIÓN
   const [showModal, setShowModal] = useState(false)
@@ -30,10 +34,33 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 CÁLCULO DE APORTES, RETIROS Y PARTICIPACIÓN
+  // 🛠️ FUNCIÓN PARA VERIFICAR SI UNA FECHA ESTÁ DENTRO DEL RANGO
+  const estaEnRango = (fechaStr: string) => {
+    if (!fechaStr) return true
+    const f = new Date(fechaStr)
+    
+    if (fechaDesde) {
+      const desde = new Date(`${fechaDesde}T00:00:00`)
+      if (f < desde) return false
+    }
+    
+    if (fechaHasta) {
+      const hasta = new Date(`${fechaHasta}T23:59:59`)
+      if (f > hasta) return false
+    }
+
+    return true
+  }
+
+  // 🚀 FILTRADO DE VENTAS Y CAJA POR FECHA
+  const ventasFiltradas = ventas.filter(v => estaEnRango(v.created_at || v.fecha))
+  const movimientosCajaFiltrados = movimientosCaja.filter(m => estaEnRango(m.fecha || m.created_at))
+
+  // 🚀 CÁLCULO DE APORTES, RETIROS Y PARTICIPACIÓN CON FILTRO
   const aportesPorSocio: Record<string, { aportado: number; cobrado: number }> = {}
   let capitalTotalSocios = 0
 
+  // Primero calculamos el capital aportado total de cada socio (Histórico para % de participación)
   movimientosCaja.forEach(m => {
     const monto = Number(m.monto_usd || m.monto || 0)
     const socio = m.socio
@@ -44,22 +71,32 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
       if (m.categoria === 'Inversión Socio') {
         aportesPorSocio[socio].aportado += monto
         capitalTotalSocios += monto
-      } else if (m.categoria === 'Retiro Socio' || m.categoria === 'Pago Utilidad Socio') {
+      }
+    }
+  })
+
+  // Luego calculamos los retiros/cobros dentro del rango de fechas seleccionado
+  movimientosCajaFiltrados.forEach(m => {
+    const monto = Number(m.monto_usd || m.monto || 0)
+    const socio = m.socio
+
+    if (socio && aportesPorSocio[socio]) {
+      if (m.categoria === 'Retiro Socio' || m.categoria === 'Pago Utilidad Socio') {
         aportesPorSocio[socio].cobrado += monto
       }
     }
   })
 
-  // 🚀 CÁLCULO DE GANANCIA NETA TOTAL
-  const utilidadBrutaVentas = ventas.reduce((acc, v) => acc + Number(v.ganancia_usd || 0), 0)
-  const gastosOperativos = movimientosCaja
+  // 🚀 CÁLCULO DE GANANCIA NETA FILTRADA POR FECHA
+  const utilidadBrutaVentas = ventasFiltradas.reduce((acc, v) => acc + Number(v.ganancia_usd || 0), 0)
+  const gastosOperativos = movimientosCajaFiltrados
     .filter(m => m.tipo === 'Egreso' && m.categoria === 'Gasto Operativo')
     .reduce((acc, m) => acc + Number(m.monto_usd || m.monto || 0), 0)
 
   const gananciaNetaTotal = Math.max(0, utilidadBrutaVentas - gastosOperativos)
 
-  // 🚀 HISTORIAL DE LIQUIDACIONES / PAGOS A SOCIOS
-  const historialLiquidaciones = movimientosCaja.filter(m => m.categoria === 'Pago Utilidad Socio' || m.categoria === 'Retiro Socio')
+  // 🚀 HISTORIAL DE LIQUIDACIONES / PAGOS A SOCIOS (FILTRADO POR FECHA)
+  const historialLiquidaciones = movimientosCajaFiltrados.filter(m => m.categoria === 'Pago Utilidad Socio' || m.categoria === 'Retiro Socio')
 
   // 🚀 ABRIR MODAL PARA NUEVO PAGO PERSONALIZADO
   const abrirModalPago = (socio: string, montoSugerido: number) => {
@@ -133,11 +170,53 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
+  const limpiarFiltroFechas = () => {
+    setFechaDesde("")
+    setFechaHasta("")
+  }
+
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Users className="size-5 text-indigo-400"/> Gestión de Socios y Repartos</h2>
-        <p className="text-xs text-zinc-500 mt-1">Control de aportes, liquidación de utilidades por $\%$ de capital e historial de pagos.</p>
+      
+      {/* CABECERA Y FILTRO DE FECHAS */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+        <div>
+          <h2 className="text-xl font-black text-white flex items-center gap-2"><Users className="size-5 text-indigo-400"/> Gestión de Socios y Repartos</h2>
+          <p className="text-xs text-zinc-500 mt-1">Control de aportes, liquidación de utilidades por $\%$ de capital e historial de pagos.</p>
+        </div>
+
+        {/* 🚀 FILTRO DE FECHAS CALENDARIO */}
+        <div className="bg-zinc-900 border border-zinc-800 p-2.5 rounded-2xl flex flex-wrap items-center gap-3 shadow-inner">
+          <div className="flex items-center gap-2">
+            <Calendar className="size-4 text-indigo-400" />
+            <span className="text-[10px] font-black uppercase text-zinc-400">Rango:</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input 
+              type="date" 
+              value={fechaDesde} 
+              onChange={e => setFechaDesde(e.target.value)} 
+              className="bg-zinc-950 border border-zinc-800 text-white text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:border-indigo-500 transition-all" 
+            />
+            <span className="text-xs text-zinc-500 font-bold">a</span>
+            <input 
+              type="date" 
+              value={fechaHasta} 
+              onChange={e => setFechaHasta(e.target.value)} 
+              className="bg-zinc-950 border border-zinc-800 text-white text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:border-indigo-500 transition-all" 
+            />
+          </div>
+
+          {(fechaDesde || fechaHasta) && (
+            <button 
+              onClick={limpiarFiltroFechas} 
+              className="text-[10px] font-black uppercase bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-xl transition-all"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -164,7 +243,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
 
                     <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-2 mb-6">
                       <div className="flex justify-between text-xs">
-                        <span className="text-zinc-400">Ganancia Tot. Correspondiente:</span>
+                        <span className="text-zinc-400">Ganancia Período:</span>
                         <span className="font-bold text-white">USD {gananciaGeneradaSocio.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between text-xs">
@@ -172,7 +251,9 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
                         <span className="font-bold text-emerald-400">- USD {datos.cobrado.toLocaleString()}</span>
                       </div>
                       <div className="pt-2 border-t border-zinc-800 flex justify-between items-center">
-                        <span className="text-xs font-black uppercase text-amber-500">Pendiente de Cobro:</span>
+                        <span className="text-xs font-black uppercase text-amber-500">
+                          {fechaDesde || fechaHasta ? "Deuda Rango:" : "Pendiente de Cobro:"}
+                        </span>
                         <span className="text-base font-black text-amber-400">USD {gananciaPendienteDePago.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
@@ -196,9 +277,16 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
 
           {/* HISTORIAL DE PAGOS A SOCIOS */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-300 mb-4 flex items-center gap-2">
-              <History className="size-4 text-indigo-400"/> Historial de Pagos y Retiros a Socios
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-zinc-300 flex items-center gap-2">
+                <History className="size-4 text-indigo-400"/> Historial de Pagos y Retiros a Socios ({historialLiquidaciones.length})
+              </h3>
+              {(fechaDesde || fechaHasta) && (
+                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+                  Filtrado por rango seleccionado
+                </span>
+              )}
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
@@ -233,7 +321,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
                     </tr>
                   ))}
                   {historialLiquidaciones.length === 0 && (
-                    <tr><td colSpan={6} className="py-8 text-center text-zinc-500 italic">No se realizaron pagos de utilidades aún.</td></tr>
+                    <tr><td colSpan={6} className="py-8 text-center text-zinc-500 italic">No se encontraron pagos en el período seleccionado.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -243,7 +331,7 @@ export function TabSocios({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL PARA PAGAR O EDITAR UTILIDAD DE SOCIO */}
+      {/* MODAL PARA PAGAR O EDITAR UTILIDAD DE SOCIO */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
