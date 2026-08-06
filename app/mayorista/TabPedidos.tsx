@@ -1,11 +1,43 @@
 import { useState, useEffect } from "react"
 import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
+
+// 🚀 LISTA COMPLETA DE MODELOS IPHONE
+const MODELOS_IPHONE = [
+  "iPhone 11",
+  "iPhone 11 Pro",
+  "iPhone 11 Pro Max",
+  "iPhone 12",
+  "iPhone 12 mini",
+  "iPhone 12 Pro",
+  "iPhone 12 Pro Max",
+  "iPhone 13",
+  "iPhone 13 mini",
+  "iPhone 13 Pro",
+  "iPhone 13 Pro Max",
+  "iPhone 14",
+  "iPhone 14 Plus",
+  "iPhone 14 Pro",
+  "iPhone 14 Pro Max",
+  "iPhone 15",
+  "iPhone 15 Plus",
+  "iPhone 15 Pro",
+  "iPhone 15 Pro Max",
+  "iPhone 16",
+  "iPhone 16 Plus",
+  "iPhone 16 Pro",
+  "iPhone 16 Pro Max",
+  "iPhone 17",
+  "iPhone 17 Air",
+  "iPhone 17 Pro",
+  "iPhone 17 Pro Max",
+  "iPhone SE (3ra gen)"
+]
 
 export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const [pedidos, setPedidos] = useState<any[]>([])
-  const [modelosHistoricos, setModelosHistoricos] = useState<string[]>([]) 
+  const [modelosDisponibles, setModelosDisponibles] = useState<string[]>(MODELOS_IPHONE) 
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -36,8 +68,12 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     const { data: ventasData } = await supabase.from("ventas_mayorista").select("equipo_nombre")
     
     const todosLosNombres = [...(stockData?.map(d => d.equipo) || []), ...(ventasData?.map(d => d.equipo_nombre) || [])]
-    const modelosUnicos = Array.from(new Set(todosLosNombres.map(nombre => nombre.split(" - ")[0].trim()))).filter(Boolean).sort()
-    setModelosHistoricos(modelosUnicos)
+    const modelosUnicosBD = Array.from(new Set(todosLosNombres.map(nombre => nombre.split(" - ")[0].trim()))).filter(Boolean)
+    
+    // Unimos los modelos estáticos + los modelos históricos que haya en la BD para no perder nada
+    const combinados = Array.from(new Set([...MODELOS_IPHONE, ...modelosUnicosBD])).sort()
+    setModelosDisponibles(combinados)
+    
     setLoading(false)
   }
 
@@ -47,6 +83,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const abrirNuevo = () => {
     setEditingId(null)
     setProveedor(""); setTitulo(""); setTracking(""); setFechaEstimada(""); setEnvioMiamiBsAs(""); setEnvioBsAsTuc(""); setItems([])
+    setItemTemp({ modelo: MODELOS_IPHONE[0], capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
     setShowModal(true)
   }
 
@@ -66,7 +103,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     if (!itemTemp.modelo || !itemTemp.costo_usd) return alert("Completá el modelo y el costo unitario.")
     const nombreCompleto = itemTemp.capacidad === "N/A" ? itemTemp.modelo.trim() : `${itemTemp.modelo.trim()} - ${itemTemp.capacidad}`
     setItems([...items, { ...itemTemp, modelo: nombreCompleto, cantidad: Number(itemTemp.cantidad), costo_usd: Number(itemTemp.costo_usd), precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) }])
-    setItemTemp({ modelo: "", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+    setItemTemp({ modelo: modelosDisponibles[0] || "iPhone 13", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
   }
 
   const quitarItem = (index: number) => {
@@ -77,7 +114,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const totalUnidades = items.reduce((acc, item) => acc + item.cantidad, 0)
   const costoTotalOperacion = costoTotalEquipos + Number(envioMiamiBsAs) + Number(envioBsAsTuc)
 
-  // 🚀 GUARDAR LOTE (NUEVO O ACTUALIZADO)
+  // 🚀 GUARDAR LOTE
   const handleGuardarLote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (items.length === 0) return alert("Debes agregar al menos un equipo al lote.")
@@ -88,7 +125,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         titulo: titulo || `Lote ${new Date().toLocaleDateString()}`,
         proveedor,
         tracking,
-        fecha_estimada_llegada: fechaEstimada || null, // Guardamos la posible llegada
+        fecha_estimada_llegada: fechaEstimada || null,
         items,
         cantidad: totalUnidades,
         costo_equipos_usd: costoTotalEquipos,
@@ -115,21 +152,20 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 ACTUALIZAR ESTADO DE PAGOS (Y REGISTRAR FECHAS)
+  // 🚀 CONTROL DE PAGOS
   const togglePago = async (pedidoId: string, campoBoolean: string, valorActual: boolean) => {
-    // Si lo estamos marcando como pagado, guardamos la fecha de hoy en el campo de fecha correspondiente
     const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
     
     const payload = {
       [campoBoolean]: !valorActual,
-      [campoFecha]: !valorActual ? new Date().toISOString() : null // Si lo destildamos, borramos la fecha
+      [campoFecha]: !valorActual ? new Date().toISOString() : null
     }
 
     await supabase.from("pedidos_mayorista").update(payload).eq("id", pedidoId)
     fetchData()
   }
 
-  // 🚀 INGRESAR LOTE AL STOCK Y MARCAR LLEGADA REAL
+  // 🚀 RECIBIR LOTE
   const marcarRecibido = async (pedido: any) => {
     if(!confirm(`¿Recibiste el lote completo hoy? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
 
@@ -159,11 +195,10 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         if (errorStock) throw new Error(errorStock.message)
       }
       
-      // La fecha_recibido será la fecha real en la que efectivamente ingresó a tu local
       await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date().toISOString() }).eq('id', pedido.id)
       
       fetchData()
-      alert("¡Lote ingresado al stock! (Se registró la fecha de llegada real de hoy)")
+      alert("¡Lote ingresado al stock!")
     } catch (error: any) {
       alert("Error al inyectar equipos al stock: " + error.message)
     }
@@ -254,7 +289,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL: CREAR O EDITAR LOTE GIGANTE */}
+      {/* 🚀 MODAL: CREAR O EDITAR LOTE */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
@@ -294,31 +329,34 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2 mb-4">2. Equipos a Comprar</h4>
                 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col md:flex-row gap-3 items-end">
+                  
+                  {/* 🚀 SELECT DESPLEGABLE CON TODOS LOS MODELOS IPHONE */}
                   <div className="flex-[2] w-full">
-                    <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo</label>
-                    <input 
-                      type="text" 
-                      list="modelos-guardados"
-                      value={itemTemp.modelo} 
-                      onChange={e => setItemTemp({...itemTemp, modelo: e.target.value})} 
-                      placeholder="Ej: iPhone 13 Pro" 
-                      className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500" 
-                    />
-                    <datalist id="modelos-guardados">
-                      {modelosHistoricos.map(modelo => <option key={modelo} value={modelo} />)}
-                    </datalist>
+                    <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo de iPhone</label>
+                    <select
+                      value={itemTemp.modelo}
+                      onChange={e => setItemTemp({ ...itemTemp, modelo: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="" disabled>Seleccionar Modelo...</option>
+                      {modelosDisponibles.map(modelo => (
+                        <option key={modelo} value={modelo} className="bg-zinc-900 text-white py-1">
+                          {modelo}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   
                   <div className="w-24">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1 flex items-center gap-1"><HardDrive className="size-3"/> GB</label>
-                    <select value={itemTemp.capacidad} onChange={e => setItemTemp({...itemTemp, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500">
+                    <select value={itemTemp.capacidad} onChange={e => setItemTemp({...itemTemp, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer">
                       <option value="64GB">64GB</option><option value="128GB">128GB</option><option value="256GB">256GB</option><option value="512GB">512GB</option><option value="1TB">1TB</option><option value="N/A">N/A</option>
                     </select>
                   </div>
 
                   <div className="flex-1 w-full">
                     <label className="text-[10px] font-bold text-zinc-500 block mb-1">Condición</label>
-                    <select value={itemTemp.condicion} onChange={e => setItemTemp({...itemTemp, condicion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500">
+                    <select value={itemTemp.condicion} onChange={e => setItemTemp({...itemTemp, condicion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer">
                       <option>Nuevo</option><option>Usado</option>
                     </select>
                   </div>
