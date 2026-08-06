@@ -119,7 +119,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 VACIAR TODAS LAS GARANTÍAS (OPCIÓN DE LIMPIEZA TOTAL)
+  // 🚀 VACIAR TODAS LAS GARANTÍAS
   const vaciarTodasLasGarantias = async () => {
     if (!confirm("🚨 ATENCIÓN: ¿Querés BORRAR ABSOLUTAMENTE TODAS las garantías del historial?\n\nEsta acción no se puede deshacer.")) return
     try {
@@ -222,7 +222,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🖨️ IMPRESIÓN INTELIGENTE DEL REMITO CON DETALLE COMPLETO DEL NUEVO EQUIPO
+  // 🖨️ REMITO OFICIAL DE GARANTÍA CON DESGLOSE COMPLETO DE PRECIOS Y CAMBIO
   const imprimirRemito = (garantia: any, datosAdicionales?: any) => {
     const fecha = new Date(garantia.created_at || Date.now()).toLocaleDateString("es-AR")
     const cliente = garantia.cliente || "Cliente"
@@ -230,14 +230,14 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     const imeiRecibido = garantia.imei || "N/A"
     const estado = datosAdicionales?.tipoSolucion || garantia.estado || "Resuelta"
 
-    // Intentar rescatar precio original de la venta vinculada
+    // 1. Rescatar precio original de la venta vinculada si no viene directo
     let pOrig = datosAdicionales?.precioOriginal ?? 0
     if (pOrig === 0 && garantia.venta_id) {
       const vOrig = ventasDb.find(v => v.id === garantia.venta_id)
       if (vOrig) pOrig = Number(vOrig.monto_vendido_usd || vOrig.precio_venta_usd || 0)
     }
 
-    // Parsear datos de cambio desde las observaciones si venimos del historial directo
+    // 2. Parsear datos de cambio desde las observaciones si venimos del historial
     let equipoEntregadoNombre = datosAdicionales?.equipoNuevo?.equipo || ""
     let imeiEntregado = datosAdicionales?.equipoNuevo?.imei || "N/A"
     let dif = datosAdicionales?.diferenciaUsd ?? 0
@@ -383,6 +383,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     ventanaRemito.document.close()
   }
 
+  // 🚀 APLICAR SOLUCIÓN
   const handleAplicarSolucion = async () => {
     setIsSaving(true)
     try {
@@ -416,12 +417,14 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           diferenciaUsd: difRedondeada
         }
 
+        // 1. Actualizar estado de garantía
         const { error: err3 } = await supabase.from("garantias_mayorista").update({ 
           estado: 'Resuelta (Cambio de Equipo)',
           observaciones: `Cambio por ${equipoNuevo.equipo}. Dif: USD ${difRedondeada}`
         }).eq("id", garantia.id)
         if (err3) throw new Error("Fallo al cerrar garantía: " + err3.message)
 
+        // 2. Anular venta anterior
         if (garantia.venta_id) {
           const { error: err4 } = await supabase.from("ventas_mayorista").update({ 
             estado: 'Anulada por Cambio', 
@@ -436,23 +439,24 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
           ? `Garantía + Devolución Dif. USD ${Math.abs(difRedondeada)}` 
           : "Cambio Mano a Mano (Garantía)"
 
+        // 3. Registrar nueva venta (SIN el campo 'observaciones' para evitar fallos de esquema)
         const { error: err5 } = await supabase.from("ventas_mayorista").insert([{
           equipo_id: equipoNuevo.id,
           equipo_nombre: equipoNuevo.equipo,
-          imei: equipoNuevo.imei || null,
           cliente: garantia.cliente,
           monto_vendido_usd: precioNuevo,
           ganancia_usd: difRedondeada > 0 ? difRedondeada : 0,
           vendedor: usuarioActual.nombre,
           forma_pago: conceptoFormaPago,
-          estado: 'Completada',
-          observaciones: `Reemplazo de garantía. Original: USD ${precioOriginal}, Entregado: USD ${precioNuevo}. Diferencia: USD ${difRedondeada}`
+          estado: 'Completada'
         }])
         if (err5) throw new Error("Fallo al registrar la nueva venta: " + err5.message)
 
+        // 4. Descontar equipo nuevo del stock
         const { error: err6 } = await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).eq("id", equipoNuevo.id)
         if (err6) throw new Error("Fallo al descontar equipo nuevo del stock: " + err6.message)
 
+        // 5. Ingresar equipo defectuoso a 'En Reparación'
         const { error: err7 } = await supabase.from("stock_mayorista").insert([{
            equipo: garantia.equipo_nombre, 
            condicion: "Para reparar", 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import * as XLSX from 'xlsx';
@@ -8,21 +8,29 @@ import * as XLSX from 'xlsx';
 const MODELOS_APPLE = ["iPhone 11", "iPhone 12", "iPhone 13", "iPhone 13 mini", "iPhone 13 Pro", "iPhone 13 Pro Max", "iPhone 14", "iPhone 14 Plus", "iPhone 14 Pro", "iPhone 14 Pro Max", "iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max", "iPhone 16", "iPhone 16 Plus", "iPhone 16 Pro", "iPhone 16 Pro Max", "iPhone 16e", "iPhone 17", "iPhone 17 Air", "iPhone 17 Pro", "iPhone 17 Pro Max" ]
 const COLORES = ["Midnight", "Starlight", "Blue", "Black", "White", "(PRODUCT)RED", "Purple", "Deep Purple", "Pink", "Yellow", "Green", "Graphite", "Gold", "Silver", "Space Gray", "Natural Titanium", "Blue Titanium"]
 const CAPACIDADES = ["32 GB", "64 GB", "128 GB", "256 GB", "512 GB", "1 TB", "N/A"]
-const CONDICIONES = ["Nuevo Sellado", "A+", "A", "A-", "B", "C"]
+const CONDICIONES = ["Nuevo Sellado", "A+", "A", "A-", "B", "C", "Para reparar"]
 
 export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [equipos, setEquipos] = useState<any[]>([])
   const [costoEnvioPromedio, setCostoEnvioPromedio] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
-  // SUB-PESTAÑAS
-  const [activeSubTab, setActiveSubTab] = useState<"disponibles" | "vendidos">("disponibles")
+  // 🚀 SUB-PESTAÑAS AMPLIADAS CON REPARACIÓN
+  const [activeSubTab, setActiveSubTab] = useState<"disponibles" | "reparacion" | "vendidos">("disponibles")
 
   // Modales
   const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   
+  // 🛠️ MODAL DE FINALIZACIÓN DE REPARACIÓN
+  const [showRepararModal, setShowRepararModal] = useState(false)
+  const [equipoEnReparacion, setEquipoEnReparacion] = useState<any>(null)
+  const [costoReparacionUsd, setCostoReparacionUsd] = useState<number | "">("")
+  const [nuevaCondicionPosReparacion, setNuevaCondicionPosReparacion] = useState("A")
+  const [nuevoPrecioMayorista, setNuevoPrecioMayorista] = useState<number | "">("")
+  const [nuevoPrecioMinorista, setNuevoPrecioMinorista] = useState<number | "">("")
+
   // Modales de Cotización
   const [showCotizarModal, setShowCotizarModal] = useState(false)
   const [showPrevisualizarModal, setShowPrevisualizarModal] = useState(false)
@@ -77,8 +85,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
+  // 🚀 FILTRADO POR SUB-PESTAÑAS (DISPONIBLES / EN REPARACIÓN / VENDIDOS)
   const equiposFiltrados = equipos.filter(eq => {
-    if (activeSubTab === "disponibles" && eq.estado === "Vendido") return false
+    if (activeSubTab === "disponibles" && (eq.estado === "Vendido" || eq.estado === "En Reparación")) return false
+    if (activeSubTab === "reparacion" && eq.estado !== "En Reparación") return false
     if (activeSubTab === "vendidos" && eq.estado !== "Vendido") return false
 
     const matchTexto = eq.equipo.toLowerCase().includes(filtroTexto.toLowerCase()) || (eq.imei && eq.imei.toLowerCase().includes(filtroTexto.toLowerCase()))
@@ -99,6 +109,46 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
+  // 🛠️ ABRIR MODAL DE FINALIZACIÓN DE REPARACIÓN
+  const abrirFinalizarReparacion = (eq: any) => {
+    setEquipoEnReparacion(eq)
+    setCostoReparacionUsd("")
+    setNuevaCondicionPosReparacion("A")
+    setNuevoPrecioMayorista(eq.precio_venta_usd || "")
+    setNuevoPrecioMinorista(eq.precio_minorista_usd || "")
+    setShowRepararModal(true)
+  }
+
+  // 🚀 CONFIRMAR REPARACIÓN, SUMAR COSTO Y PASAR A DISPONIBLE
+  const handleConfirmarReparacionFinalizada = async () => {
+    if (!equipoEnReparacion) return
+    setIsSaving(true)
+    try {
+      const costoArreglo = Number(costoReparacionUsd) || 0
+      const costoAnterior = Number(equipoEnReparacion.costo_usd) || 0
+      const costoTotalActualizado = costoAnterior + costoArreglo
+
+      const { error } = await supabase.from("stock_mayorista").update({
+        costo_usd: costoTotalActualizado,
+        condicion: nuevaCondicionPosReparacion,
+        precio_venta_usd: Number(nuevoPrecioMayorista) || 0,
+        precio_minorista_usd: Number(nuevoPrecioMinorista) || 0,
+        estado: 'Disponible',
+        observaciones: `${equipoEnReparacion.observaciones || ''} | Reparación finalizada. Costo arreglo: USD ${costoArreglo}`.trim()
+      }).eq("id", equipoEnReparacion.id)
+
+      if (error) throw error
+
+      alert("✅ Equipo reparado con éxito. Se sumó el costo de reparación y pasó a estar 'Disponible' en el inventario.")
+      setShowRepararModal(false)
+      fetchData()
+    } catch (error: any) {
+      alert("Error al actualizar equipo: " + error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // 📥 DESCARGA DIRECTA DE PLANTILLA CSV DE DEMOSTRACIÓN
   const descargarPlantillaCSV = () => {
     const headers = "Tipo,Modelo,Capacidad,Color,Bateria,Condicion,IMEI,Costo_Base_USD,Precio_Mayorista_USD,Precio_Minorista_USD,Estado,Comentarios"
@@ -107,7 +157,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
     const contenidoCSV = `${headers}\n${fila1}\n${fila2}`
     
-    // Crear objeto Blob para asegurar la descarga directa
     const blob = new Blob(["\uFEFF" + contenidoCSV], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -148,106 +197,100 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-// 📤 IMPORTACIÓN UNIVERSAL (.CSV, .XLSX, .NUMBERS)
+  // 📤 IMPORTACIÓN UNIVERSAL (.CSV, .XLSX, .NUMBERS)
+  const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
 
-const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    try {
-      const data = new Uint8Array(event.target?.result as ArrayBuffer);
-      
-      // Procesa .numbers, .xlsx y .csv de forma nativa
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      // Convertir a objetos JSON usando la primera fila como clave
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        if (jsonData.length === 0) {
+          throw new Error("El archivo está vacío o no se pudieron leer las filas.");
+        }
 
-      if (jsonData.length === 0) {
-        throw new Error("El archivo está vacío o no se pudieron leer las filas.");
-      }
-
-      // Función auxiliar para buscar el valor de una columna ignorando mayúsculas/minúsculas y espacios
-      const getVal = (row: any, ...keys: string[]) => {
-        const rowKeys = Object.keys(row);
-        for (const key of keys) {
-          const foundKey = rowKeys.find(k => k.trim().toLowerCase().replace(/_/g, '') === key.toLowerCase().replace(/_/g, ''));
-          if (foundKey && row[foundKey] !== undefined && row[foundKey] !== "") {
-            return String(row[foundKey]).trim();
+        const getVal = (row: any, ...keys: string[]) => {
+          const rowKeys = Object.keys(row);
+          for (const key of keys) {
+            const foundKey = rowKeys.find(k => k.trim().toLowerCase().replace(/_/g, '') === key.toLowerCase().replace(/_/g, ''));
+            if (foundKey && row[foundKey] !== undefined && row[foundKey] !== "") {
+              return String(row[foundKey]).trim();
+            }
           }
-        }
-        return "";
-      };
-
-      // Función para limpiar montos numéricos (quita $, comas, puntos de miles)
-      const parseMonto = (val: string) => {
-        if (!val) return 0;
-        const numLimpio = val.replace(/[^0-9.-]/g, '');
-        return parseFloat(numLimpio) || 0;
-      };
-
-      const payload = jsonData.map(row => {
-        const modelo = getVal(row, "Modelo", "Equipo", "Modelo/Equipo");
-        const capacidad = getVal(row, "Capacidad", "GB", "Memoria");
-        const color = getVal(row, "Color");
-        const bateria = getVal(row, "Bateria", "Batería", "% Bateria");
-        const condicion = getVal(row, "Condicion", "Condición", "Estado Fisico") || "A";
-        const imei = getVal(row, "IMEI", "Serie", "N° Serie");
-        const costo_usd = parseMonto(getVal(row, "Costo_Base_USD", "Costo", "Costo_USD", "Costo Base"));
-        const precio_venta_usd = parseMonto(getVal(row, "Precio_Mayorista_USD", "Precio Mayorista", "Mayorista"));
-        const precio_minorista_usd = parseMonto(getVal(row, "Precio_Minorista_USD", "Precio Minorista", "Minorista"));
-        const estado = getVal(row, "Estado") || "Disponible";
-        const observaciones = getVal(row, "Comentarios", "Observaciones", "Notas");
-
-        let nombreEquipo = modelo;
-        if (capacidad && capacidad !== "N/A" && !modelo.toLowerCase().includes(capacidad.toLowerCase())) {
-          nombreEquipo += ` - ${capacidad}`;
-        }
-        if (color && color !== "N/A" && !modelo.toLowerCase().includes(color.toLowerCase())) {
-          nombreEquipo += ` - ${color}`;
-        }
-
-        return {
-          equipo: nombreEquipo,
-          condicion: condicion,
-          bateria: bateria || null,
-          imei: imei || null,
-          costo_usd: costo_usd,
-          precio_venta_usd: precio_venta_usd,
-          precio_minorista_usd: precio_minorista_usd,
-          estado: estado,
-          observaciones: observaciones,
-          ingresado_por: usuarioActual.nombre
+          return "";
         };
-      }).filter(p => p.equipo !== ""); // Filtrar si la fila no tiene modelo
 
-      if (payload.length === 0) {
-        throw new Error("No se encontraron filas válidas para importar.");
+        const parseMonto = (val: string) => {
+          if (!val) return 0;
+          const numLimpio = val.replace(/[^0-9.-]/g, '');
+          return parseFloat(numLimpio) || 0;
+        };
+
+        const payload = jsonData.map(row => {
+          const modelo = getVal(row, "Modelo", "Equipo", "Modelo/Equipo");
+          const capacidad = getVal(row, "Capacidad", "GB", "Memoria");
+          const color = getVal(row, "Color");
+          const bateria = getVal(row, "Bateria", "Batería", "% Bateria");
+          const condicion = getVal(row, "Condicion", "Condición", "Estado Fisico") || "A";
+          const imei = getVal(row, "IMEI", "Serie", "N° Serie");
+          const costo_usd = parseMonto(getVal(row, "Costo_Base_USD", "Costo", "Costo_USD", "Costo Base"));
+          const precio_venta_usd = parseMonto(getVal(row, "Precio_Mayorista_USD", "Precio Mayorista", "Mayorista"));
+          const precio_minorista_usd = parseMonto(getVal(row, "Precio_Minorista_USD", "Precio Minorista", "Minorista"));
+          const estado = getVal(row, "Estado") || "Disponible";
+          const observaciones = getVal(row, "Comentarios", "Observaciones", "Notas");
+
+          let nombreEquipo = modelo;
+          if (capacidad && capacidad !== "N/A" && !modelo.toLowerCase().includes(capacidad.toLowerCase())) {
+            nombreEquipo += ` - ${capacidad}`;
+          }
+          if (color && color !== "N/A" && !modelo.toLowerCase().includes(color.toLowerCase())) {
+            nombreEquipo += ` - ${color}`;
+          }
+
+          return {
+            equipo: nombreEquipo,
+            condicion: condicion,
+            bateria: bateria || null,
+            imei: imei || null,
+            costo_usd: costo_usd,
+            precio_venta_usd: precio_venta_usd,
+            precio_minorista_usd: precio_minorista_usd,
+            estado: estado,
+            observaciones: observaciones,
+            ingresado_por: usuarioActual.nombre
+          };
+        }).filter(p => p.equipo !== "");
+
+        if (payload.length === 0) {
+          throw new Error("No se encontraron filas válidas para importar.");
+        }
+
+        const { error } = await supabase.from("stock_mayorista").insert(payload);
+        if (error) throw error;
+
+        alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
+        setShowImportModal(false);
+        fetchData();
+
+      } catch (error: any) {
+        console.error("Error importación:", error);
+        alert(`❌ Error al procesar el archivo: ${error.message || "Verificá que el archivo tenga datos válidos."}`);
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       }
+    };
 
-      const { error } = await supabase.from("stock_mayorista").insert(payload);
-      if (error) throw error;
-
-      alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
-      setShowImportModal(false);
-      fetchData();
-
-    } catch (error: any) {
-      console.error("Error importación:", error);
-      alert(`❌ Error al procesar el archivo: ${error.message || "Verificá que el archivo tenga datos válidos."}`);
-    } finally {
-      setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    reader.readAsArrayBuffer(file);
   };
-
-  reader.readAsArrayBuffer(file);
-};
 
   const abrirNuevo = () => {
     setEditingId(null)
@@ -258,7 +301,6 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const abrirEdicion = (eq: any) => {
     setEditingId(eq.id)
     
-    // Extraer modelo, capacidad y color si el nombre viene separado por guiones
     const partes = eq.equipo.split(" - ")
     const mod = partes[0] || eq.equipo
     const cap = partes[1] || "N/A"
@@ -373,6 +415,7 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
   }
 
   const puedeVerCosto = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
+  const cantidadEnReparacion = equipos.filter(e => e.estado === "En Reparación").length
 
   return (
     <div className="p-6">
@@ -385,6 +428,14 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
             <button onClick={() => setActiveSubTab("disponibles")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === "disponibles" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
               Disponibles / Reservados
+            </button>
+            <button onClick={() => setActiveSubTab("reparacion")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all relative flex items-center gap-2", activeSubTab === "reparacion" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
+              <Wrench className="size-3.5" /> En Reparación / Taller
+              {cantidadEnReparacion > 0 && (
+                <span className="bg-amber-500 text-black text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {cantidadEnReparacion}
+                </span>
+              )}
             </button>
             <button onClick={() => setActiveSubTab("vendidos")} className={cn("px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === "vendidos" ? "bg-zinc-800 text-white shadow-md" : "text-zinc-500 hover:text-zinc-300")}>
               Historial Vendidos
@@ -413,7 +464,7 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       </div>
 
-      {/* TABLA DE DATOS CON DESGLOSE DE CAMPOS */}
+      {/* TABLA DE DATOS */}
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div> : (
         <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
@@ -422,7 +473,7 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <th className="p-4 rounded-tl-xl">Modelo & Especificaciones</th>
                 <th className="p-4 text-center">Condición</th>
                 <th className="p-4 text-center">% Batería</th>
-                {puedeVerCosto && <th className="p-4 text-right">Costo (Landed)</th>}
+                {puedeVerCosto && <th className="p-4 text-right">Costo (Base + Arreglos)</th>}
                 <th className="p-4 text-right">Precios (May / Min)</th>
                 <th className="p-4 text-center">Estado</th>
                 <th className="p-4 text-center rounded-tr-xl">Acciones</th>
@@ -447,10 +498,11 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         {col && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">{col}</span>}
                         <span className="text-[10px] text-zinc-500 font-mono">IMEI: {eq.imei || "S/N"}</span>
                       </div>
+                      {eq.observaciones && <p className="text-[10px] text-amber-500/80 italic mt-1 max-w-xs truncate">{eq.observaciones}</p>}
                     </td>
 
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span>
+                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.condicion?.includes('Nuevo') ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : eq.condicion === 'Para reparar' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{eq.condicion || "N/A"}</span>
                     </td>
                     <td className="p-4 text-center text-zinc-400 font-bold">{eq.bateria ? `${eq.bateria}%` : "---"}</td>
                     
@@ -470,13 +522,20 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                       <p className="font-bold text-sky-400 text-[10px] mt-0.5">Min: U$D {eq.precio_minorista_usd || "0"}</p>
                     </td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : eq.estado === 'Reservado' ? 'text-amber-500 border-amber-500/20' : 'text-zinc-500 border-zinc-700 bg-zinc-800'}`}>
+                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border ${eq.estado === 'Disponible' ? 'text-emerald-500 border-emerald-500/20' : eq.estado === 'En Reparación' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : eq.estado === 'Reservado' ? 'text-amber-500 border-amber-500/20' : 'text-zinc-500 border-zinc-700 bg-zinc-800'}`}>
                         {eq.estado}
                       </span>
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex justify-center gap-2">
-                        {eq.estado !== "Vendido" && (
+                        {/* 🚀 BOTÓN ALTA REPARADO */}
+                        {eq.estado === "En Reparación" && (
+                          <button onClick={() => abrirFinalizarReparacion(eq)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all text-[10px] font-bold uppercase flex items-center gap-1">
+                            <CheckCircle2 className="size-3.5"/> Alta Reparado
+                          </button>
+                        )}
+
+                        {eq.estado === "Disponible" && (
                           <button onClick={() => abrirCotizacion(eq)} className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all" title="Cotizar / Enviar por WhatsApp"><Tag className="size-4"/></button>
                         )}
                         <button onClick={() => abrirEdicion(eq)} className="p-2 bg-zinc-800 text-zinc-400 hover:text-sky-400 hover:bg-zinc-700 rounded-lg transition-all" title="Editar"><Edit3 className="size-4"/></button>
@@ -492,6 +551,65 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       )}
 
+      {/* 🛠️ MODAL: FINALIZAR REPARACIÓN Y SUMAR COSTO */}
+      {showRepararModal && equipoEnReparacion && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><Wrench className="size-5 text-amber-400"/> Finalizar Reparación</h3>
+              <button onClick={() => setShowRepararModal(false)} className="text-zinc-500 hover:text-white bg-zinc-900 p-2 rounded-xl"><X className="size-5"/></button>
+            </div>
+            
+            <div className="p-6 bg-[#161B22] space-y-5">
+              <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+                <p className="text-sm font-bold text-white">{equipoEnReparacion.equipo}</p>
+                <p className="text-[10px] text-zinc-500 font-mono mt-1">IMEI: {equipoEnReparacion.imei || "S/N"}</p>
+                <p className="text-[10px] text-zinc-400 mt-2">Costo acumulado anterior: <strong className="text-white">USD ${equipoEnReparacion.costo_usd}</strong></p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-amber-400 block mb-1">Costo del Arreglo / Repuesto (USD)</label>
+                <input 
+                  type="number" 
+                  value={costoReparacionUsd} 
+                  onChange={e => setCostoReparacionUsd(e.target.value ? Number(e.target.value) : "")} 
+                  placeholder="Ej: 35 (se suma al costo total)" 
+                  className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-4 py-3 outline-none focus:border-amber-500" 
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-white block mb-1">Nueva Condición tras reparación</label>
+                <select value={nuevaCondicionPosReparacion} onChange={e => setNuevaCondicionPosReparacion(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500">
+                  <option value="A+">A+ (Impecable)</option>
+                  <option value="A">A (Excelente)</option>
+                  <option value="A-">A- (Detalle mínimo)</option>
+                  <option value="B">B (Uso moderado)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-emerald-400 block mb-1">P. Mayorista (USD)</label>
+                  <input type="number" value={nuevoPrecioMayorista} onChange={e => setNuevoPrecioMayorista(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-sky-400 block mb-1">P. Minorista (USD)</label>
+                  <input type="number" value={nuevoPrecioMinorista} onChange={e => setNuevoPrecioMinorista(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-3 py-2.5 outline-none focus:border-sky-500" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                <button type="button" onClick={() => setShowRepararModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800">Cancelar</button>
+                <button type="button" onClick={handleConfirmarReparacionFinalizada} disabled={isSaving} className="px-8 py-3 bg-emerald-500 text-black font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 active:scale-95 disabled:opacity-50">
+                  {isSaving ? <Loader2 className="size-5 animate-spin"/> : "Alta de Reparado"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: CREAR / EDITAR EQUIPO */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
@@ -503,7 +621,6 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
             
             <form onSubmit={handleGuardar} className="p-6 bg-[#161B22] space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                
                 <div>
                   <label className="text-xs font-bold text-white block mb-1.5">Tipo de equipo</label>
                   <select value={formUI.tipo} onChange={e => setFormUI({...formUI, tipo: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
@@ -547,14 +664,12 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <div className="md:col-span-2">
                   <label className="text-xs font-bold text-white block mb-1.5">IMEI / N° de serie (si corresponde)</label>
                   <input type="text" value={formUI.imei} onChange={e => setFormUI({...formUI, imei: e.target.value})} placeholder="359412345678901" className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
-                  <p className="text-[10px] text-zinc-500 mt-1">Completalo únicamente si el equipo lo tiene. Cada IMEI corresponde a una sola unidad.</p>
                 </div>
 
                 {puedeVerCosto && (
                   <div>
                     <label className="text-xs font-bold text-white block mb-1.5 flex items-center gap-1"><DollarSign className="size-3 text-zinc-500"/> Costo Base (USD)</label>
                     <input required type="number" value={formUI.costo_usd} onChange={e => setFormUI({...formUI, costo_usd: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all" />
-                    {costoEnvioPromedio > 0 && <p className="text-[10px] text-sky-400 mt-1 flex items-center gap-1"><Info className="size-3"/> Al costo base se le estiman U$D {costoEnvioPromedio.toFixed(1)} de flete prorrateado.</p>}
                   </div>
                 )}
 
@@ -573,6 +688,7 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   <label className="text-xs font-bold text-white block mb-1.5">Estado</label>
                   <select value={formUI.estado} onChange={e => setFormUI({...formUI, estado: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 transition-all">
                     <option value="Disponible">Disponible</option>
+                    <option value="En Reparación">En Reparación</option>
                     <option value="Vendido">Vendido</option>
                     <option value="Reservado">Reservado</option>
                   </select>
@@ -616,61 +732,22 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <div className="p-3 bg-zinc-800 rounded-xl"><Smartphone className="size-6 text-zinc-400"/></div>
                 <div>
                   <p className="text-sm font-bold text-white">{cotizarItem.equipo}</p>
-                  <p className="text-[10px] text-zinc-500 mt-1">Solo se comparte lo que ves acá -- nunca costo ni proveedor.</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="flex justify-between items-end mb-1.5">
-                    <label className="text-xs font-bold text-white">Precio</label>
-                  </div>
+                  <label className="text-xs font-bold text-white block mb-1">Precio</label>
                   <input type="number" value={formCotizacion.precio} onChange={e => setFormCotizacion({...formCotizacion, precio: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
-                  
-                  <div className="flex gap-2 mt-2">
-                    <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_venta_usd})} className="text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-500 hover:text-black transition-colors">Usar Mayorista</button>
-                    <button type="button" onClick={() => setFormCotizacion({...formCotizacion, precio: cotizarItem.precio_minorista_usd})} className="text-[9px] font-bold uppercase bg-sky-500/10 text-sky-400 px-2 py-1 rounded hover:bg-sky-500 hover:text-black transition-colors">Usar Minorista</button>
-                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Moneda</label>
+                  <label className="text-xs font-bold text-white block mb-1">Moneda</label>
                   <select value={formCotizacion.moneda} onChange={e => setFormCotizacion({...formCotizacion, moneda: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500">
                     <option value="USD">USD</option>
                     <option value="ARS">ARS</option>
                   </select>
                 </div>
               </div>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={formCotizacion.actualizarPrecio} onChange={e => setFormCotizacion({...formCotizacion, actualizarPrecio: e.target.checked})} className="size-4 accent-emerald-500 rounded" />
-                <span className="text-sm text-zinc-300">Actualizar también el precio <strong className="text-sky-400">minorista</strong> en la base de datos</span>
-              </label>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Condición mostrada</label>
-                  <input type="text" value={formCotizacion.condicion} onChange={e => setFormCotizacion({...formCotizacion, condicion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Disponibilidad mostrada</label>
-                  <input type="text" value={formCotizacion.disponibilidad} onChange={e => setFormCotizacion({...formCotizacion, disponibilidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-white block mb-1.5">Garantía mostrada</label>
-                <input type="text" value={formCotizacion.garantia} onChange={e => setFormCotizacion({...formCotizacion, garantia: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-white block mb-1.5">Observación comercial (opcional)</label>
-                <textarea value={formCotizacion.observacion} onChange={e => setFormCotizacion({...formCotizacion, observacion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 h-20 resize-none" />
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={formCotizacion.incluirImei} onChange={e => setFormCotizacion({...formCotizacion, incluirImei: e.target.checked})} className="size-4 accent-emerald-500 rounded" />
-                <span className="text-sm text-zinc-300">Incluir IMEI enmascarado (•••• {cotizarItem.imei?.slice(-4) || "S/N"})</span>
-              </label>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                 <button onClick={() => setShowCotizarModal(false)} className="px-6 py-3 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800">Cancelar</button>
@@ -681,7 +758,7 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       )}
 
-      {/* MODAL 2: PREVISUALIZAR */}
+      {/* MODAL PREVISUALIZAR */}
       {showPrevisualizarModal && cotizarItem && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
@@ -697,18 +774,18 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button onClick={copiarMensaje} className="flex-1 px-4 py-3.5 bg-zinc-900 text-white font-bold rounded-xl hover:bg-zinc-800 flex items-center justify-center gap-2 transition-all">
-                  <Copy className="size-4"/> Copiar mensaje
+                  <Copy className="size-4"/> Copiar
                 </button>
                 <button onClick={enviarWhatsApp} className="flex-[1.5] px-4 py-3.5 bg-[#25D366] text-white font-black rounded-xl hover:bg-[#20bd5a] active:scale-95 flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#25D366]/20">
-                  <MessageCircle className="size-5"/> Compartir por WhatsApp
+                  <MessageCircle className="size-5"/> WhatsApp
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      
-      {/* MODAL: EXPORTAR */}
+
+      {/* MODAL EXPORTAR */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl">
@@ -717,24 +794,17 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <button onClick={() => setShowExportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
             <div className="p-6 space-y-4 bg-[#161B22]">
-              <p className="text-xs text-zinc-400 mb-4 font-medium">Elegí qué datos querés incluir en tu archivo Excel/CSV.</p>
-              
-              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-800 transition-colors">
-                <input type="checkbox" checked={exportOptions.bateria} onChange={e => setExportOptions({...exportOptions, bateria: e.target.checked})} className="size-5 accent-sky-500 rounded bg-zinc-950 border-zinc-700" />
-                <div><span className="block text-sm font-bold text-white">Condición de Batería</span><span className="block text-[10px] text-zinc-500 uppercase font-bold mt-0.5">Ideal para usados</span></div>
+              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer">
+                <input type="checkbox" checked={exportOptions.bateria} onChange={e => setExportOptions({...exportOptions, bateria: e.target.checked})} className="size-5 accent-sky-500" />
+                <span className="text-sm font-bold text-white">Batería</span>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-800 transition-colors">
-                <input type="checkbox" checked={exportOptions.imei} onChange={e => setExportOptions({...exportOptions, imei: e.target.checked})} className="size-5 accent-sky-500 rounded bg-zinc-950 border-zinc-700" />
-                <div><span className="block text-sm font-bold text-white">Número de IMEI / Serie</span><span className="block text-[10px] text-zinc-500 uppercase font-bold mt-0.5">Ideal para reventa</span></div>
+              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer">
+                <input type="checkbox" checked={exportOptions.imei} onChange={e => setExportOptions({...exportOptions, imei: e.target.checked})} className="size-5 accent-sky-500" />
+                <span className="text-sm font-bold text-white">IMEI</span>
               </label>
 
-              <label className={cn("flex items-center gap-3 p-4 border rounded-2xl cursor-pointer transition-colors", exportOptions.costo ? "bg-red-500/10 border-red-500/30" : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800")}>
-                <input type="checkbox" checked={exportOptions.costo} onChange={e => setExportOptions({...exportOptions, costo: e.target.checked})} className="size-5 accent-red-500 rounded bg-zinc-950 border-zinc-700" />
-                <div><span className={cn("block text-sm font-bold", exportOptions.costo ? "text-red-400" : "text-white")}>Costo de Compra (U$D)</span><span className="block text-[10px] text-zinc-500 uppercase font-bold mt-0.5">⚠️ No tildar si es para clientes</span></div>
-              </label>
-              
-              <button onClick={ejecutarExportacion} className="w-full mt-2 bg-sky-500 hover:bg-sky-400 text-black font-black uppercase tracking-widest py-4 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+              <button onClick={ejecutarExportacion} className="w-full mt-2 bg-sky-500 hover:bg-sky-400 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2">
                 <Download className="size-5" /> Descargar CSV
               </button>
             </div>
@@ -742,43 +812,26 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       )}
 
-      {/* MODAL: IMPORTAR MASIVO CON DESCARGA DIRECTA DE PLANTILLA */}
+      {/* MODAL IMPORTAR */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
               <h3 className="text-xl font-black text-white flex items-center gap-2"><FileSpreadsheet className="size-5 text-sky-400"/> Importar Stock Masivo</h3>
-              <button onClick={() => setShowImportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
+              <button onClick={() => setShowImportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900"><X className="size-5"/></button>
             </div>
             
             <div className="p-6 space-y-6">
-              
-              {/* BOTÓN DE DESCARGA DIRECTA CON BLOB */}
               <div className="bg-sky-500/10 border border-sky-500/20 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-xs font-black uppercase tracking-widest text-sky-400 flex items-center gap-1.5 mb-1">
-                    <Download className="size-4"/> Plantilla de Ejemplo
-                  </h4>
-                  <p className="text-xs text-zinc-300">Descargá el archivo de muestra con la estructura exacta de columnas.</p>
+                  <h4 className="text-xs font-black uppercase text-sky-400">Plantilla de Ejemplo</h4>
+                  <p className="text-xs text-zinc-300">Estructura exacta para evitar fallos.</p>
                 </div>
-                <button 
-                  type="button"
-                  onClick={descargarPlantillaCSV}
-                  className="bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider px-4 py-3 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95 shadow-lg shadow-sky-500/20"
-                >
-                  <Download className="size-4"/> Descargar CSV Ejemplo
+                <button type="button" onClick={descargarPlantillaCSV} className="bg-sky-500 hover:bg-sky-400 text-black font-black text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                  <Download className="size-4"/> Descargar Ejemplo
                 </button>
               </div>
 
-              {/* DESGLOSE DE ESTRUCTURA */}
-              <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Columnas requeridas en el CSV:</p>
-                <p className="text-[11px] font-mono text-zinc-300 bg-zinc-900 p-2.5 rounded-xl border border-zinc-800 overflow-x-auto">
-                  Tipo, Modelo, Capacidad, Color, Bateria, Condicion, IMEI, Costo_Base_USD, Precio_Mayorista_USD, Precio_Minorista_USD, Estado, Comentarios
-                </p>
-              </div>
-
-              {/* CARGAR ARCHIVO */}
               <div>
                 <input 
                   type="file" 
@@ -788,15 +841,11 @@ const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   className="hidden" 
                   id="csvUpload" 
                 />
-                <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950 hover:bg-sky-500/5")}>
-                  {isImporting ? (
-                    <><Loader2 className="size-10 text-sky-500 animate-spin mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Procesando Importación...</span></>
-                  ) : (
-                    <><Upload className="size-10 text-zinc-500 mb-3" /><span className="text-sm font-black uppercase tracking-widest text-white">Seleccionar tu archivo .CSV</span><span className="text-xs text-zinc-500 mt-1">Haz clic aquí para cargar el archivo desde tu PC</span></>
-                  )}
+                <label htmlFor="csvUpload" className={cn("w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-10 cursor-pointer transition-all", isImporting ? "border-zinc-700 bg-zinc-900 pointer-events-none" : "border-zinc-700 hover:border-sky-500 bg-zinc-950")}>
+                  {isImporting ? <Loader2 className="size-10 text-sky-500 animate-spin mb-3" /> : <Upload className="size-10 text-zinc-500 mb-3" />}
+                  <span className="text-sm font-black text-white">Seleccionar archivo (.CSV, .Numbers, .XLSX)</span>
                 </label>
               </div>
-
             </div>
           </div>
         </div>
