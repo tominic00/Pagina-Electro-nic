@@ -2,9 +2,9 @@ import { Analytics } from '@vercel/analytics/react'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Playfair_Display } from 'next/font/google'
 import Script from 'next/script'
-import './globals.css'
-import { CartProvider } from "@/context/cart-context"
 import NextTopLoader from 'nextjs-toploader'
+import { CartProvider } from "@/context/cart-context"
+import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({
@@ -17,44 +17,58 @@ const playfair = Playfair_Display({
   weight: ['400', '500', '600', '700'],
 })
 
-// 🚀 METADATOS OPTIMIZADOS PARA SEO Y WHATSAPP (OPEN GRAPH)
+// 🚀 DOMINIO BASE DE ELECTRO·NIC
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://electronictuc.vercel.app'
+
+// 🚀 SEO DURO Y OPEN GRAPH PARA ELECTRO·NIC
 export const metadata: Metadata = {
-  // 1. SEO DURO PARA GOOGLE
-  title: "PEPTI AGE | Distribuidor Oficial RXWELLHEALTH Argentina",
-  description: "Líderes en distribución de compuestos biotecnológicos y viales liofilizados para investigación. Pureza certificada >99% con respaldo internacional de RXWELLHEALTH en Argentina.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Electro·Nic | Celulares, Accesorios y Tecnología",
+    template: "%s | Electro·Nic"
+  },
+  description: "Tu tienda de confianza en Tucumán. Especialistas en iPhones Nuevos y Usados Selección, servicio técnico, accesorios premium y distribución mayorista.",
   keywords: [
-    "péptidos argentina",
-    "comprar péptidos investigación",
-    "péptidos liofilizados argentina",
-    "distribuidor rxwellhealth argentina",
-    "pepti age",
-    "compuestos longevidad celular",
-    "biotecnología molecular argentina",
-    "viales de investigación analítica",
-    "tirzepatide", 
-    "cjc-1295", 
-    "ghk-cu"
+    "electronic tucuman",
+    "electro nic",
+    "comprar iphone tucuman",
+    "celulares tucuman",
+    "iphones usados seleccionados",
+    "iphones nuevos sellados",
+    "accesorios celulares tucuman",
+    "mayorista celulares argentina",
+    "servicio tecnico iphone tucuman",
+    "fundas y cargadores iphone",
+    "tecnologia yerba buena"
   ],
   
-  // 2. CONFIGURACIÓN PARA WHATSAPP Y REDES (Open Graph)
+  // 1. CONFIGURACIÓN PARA WHATSAPP Y REDES SOCIALES
   openGraph: {
-    title: "PEPTI AGE | Biotecnología y Wellness Avanzado",
-    description: "Conectamos tu investigación con los estándares del primer mundo. Descubrí nuestro catálogo de compuestos importados con >99% de pureza.",
-    url: "https://pepti-age.vercel.app",
-    siteName: "PEPTI AGE",
+    title: "Electro·Nic | Todo para tu celular y tecnología",
+    description: "Equipos Apple garantizados, accesorios premium y la mejor atención de Tucumán. Mirá nuestro catálogo actualizado.",
+    url: siteUrl,
+    siteName: "Electro·Nic",
     images: [
       {
-        url: "/images/laboratorio-pepti-age.jpg", // Usamos la imagen premium de tu Hero para el link de WhatsApp
+        url: "/images/og-electronic.jpg", // Podés poner una foto copada de tu local o de iPhones en public/images/
         width: 1200,
         height: 630,
-        alt: "Laboratorio y compuestos de PEPTI AGE",
+        alt: "Electro·Nic - Celulares y Tecnología en Tucumán",
       },
     ],
     locale: "es_AR",
     type: "website",
   },
 
-  // 3. INDEXACIÓN Y ROBOTS (Para decirle a Google que rastree todo)
+  // 2. TARJETAS PARA TWITTER / TELEGRAM
+  twitter: {
+    card: "summary_large_image",
+    title: "Electro·Nic | Celulares y Tecnología",
+    description: "iPhones Nuevos y Usados Selección, accesorios y servicio técnico.",
+    images: ["/images/og-electronic.jpg"],
+  },
+
+  // 3. INDEXACIÓN EN GOOGLE
   robots: {
     index: true,
     follow: true,
@@ -66,17 +80,11 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-
-  // 4. VERIFICACIÓN DE GOOGLE SEARCH CONSOLE (¡Intocable!)
-  verification: {
-    google: "pjSAjesW2AXu5b1PFJj5vjE1EnZcJpd1zc9Byinuc4A",
-  },
-
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
-  themeColor: '#0a1f5a',
+  colorScheme: 'dark',
+  themeColor: '#10b981', // Verde Esmeralda insignia de Electro·Nic
 }
 
 export default function RootLayout({
@@ -87,14 +95,14 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`light ${geistSans.variable} ${geistMono.variable} ${playfair.variable} bg-background`}
-      style={{ colorScheme: "light" }}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${playfair.variable} bg-background`}
+      style={{ colorScheme: "dark" }}
     >
       <head>
-        {/* 🚀 GOOGLE ANALYTICS 4 (Rastreo Global) */}
+        {/* Google Analytics 4 */}
         <Script
           strategy="afterInteractive"
-          src={`https://www.googletagmanager.com/gtag/js?id=G-7DT13E6SEH`}
+          src="https://www.googletagmanager.com/gtag/js?id=G-7DT13E6SEH"
         />
         <Script
           id="google-analytics-init"
@@ -111,10 +119,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-sans antialiased">
-        {/* 🚀 BARRITA DE CARGA PREMIUM (Estilo Apple) */}
+      <body className="font-sans antialiased bg-black text-white">
+        {/* Barrita superior de carga en color verde Electro·Nic */}
         <NextTopLoader 
-          color="#00e5ff"
+          color="#10b981"
           initialPosition={0.08}
           crawlSpeed={200}
           height={3}
@@ -122,7 +130,7 @@ export default function RootLayout({
           showSpinner={false}
           easing="ease"
           speed={200}
-          shadow="0 0 10px #00e5ff, 0 0 5px #00e5ff"
+          shadow="0 0 10px #10b981, 0 0 5px #10b981"
         />
         
         <CartProvider>
