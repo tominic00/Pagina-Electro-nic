@@ -198,7 +198,7 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🖨️ REMITO CON DESGLOSE CLARO DE VALORES (PAGO O DEVOLUCIÓN)
+  // 🖨️ REMITO OFICIAL DE GARANTÍA / CAMBIO (ESTRUCTURA TIPO VENTA)
   const imprimirRemito = (garantia: any, datosAdicionales?: any) => {
     const fecha = new Date(garantia.created_at || Date.now()).toLocaleDateString("es-AR")
     const cliente = garantia.cliente || "Cliente"
@@ -219,19 +219,26 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Remito de Garantía - Electro·Nic</title>
+          <title>Remito Oficial de Cambio / Garantía - Electro·Nic</title>
           <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #111; font-size: 13px; line-height: 1.5; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #111; font-size: 12px; line-height: 1.4; }
             .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 20px; }
             .header h1 { margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
             .header p { margin: 2px 0; font-size: 11px; color: #444; }
-            .info-box { border: 1px solid #ddd; background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 20px; }
+            
+            .info-table { width: 100%; margin-bottom: 20px; border-collapse: collapse; }
+            .info-table td { padding: 6px; font-size: 12px; }
+            .info-box { border: 1px solid #ccc; background: #fafafa; padding: 10px; border-radius: 6px; }
+
             .table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            .table th, .table td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-            .table th { background-color: #eee; font-size: 11px; text-transform: uppercase; }
-            .financial-box { border: 2px solid #000; padding: 15px; border-radius: 8px; background: #fafafa; margin-top: 20px; text-align: right; }
-            .financial-title { font-[10px]; font-weight: bold; text-transform: uppercase; color: #555; }
-            .financial-amount { font-size: 18px; font-weight: bold; color: #000; margin-top: 5px; }
+            .table th, .table td { border: 1px solid #ccc; padding: 9px; text-align: left; }
+            .table th { background-color: #10b981; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+            .resumen-box { border: 2px solid #10b981; background: #f0fdf4; padding: 15px; border-radius: 8px; margin-top: 20px; }
+            .resumen-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #cbd5e1; }
+            .resumen-row:last-child { border-bottom: none; }
+            .resumen-total { display: flex; justify-content: space-between; font-size: 15px; font-weight: bold; margin-top: 10px; padding-top: 8px; border-top: 2px solid #10b981; color: #047857; }
+
             .firmas { margin-top: 60px; display: flex; justify-content: space-between; }
             .firma-linea { border-top: 1px solid #000; width: 40%; text-align: center; padding-top: 5px; font-weight: bold; font-size: 11px; }
           </style>
@@ -239,65 +246,90 @@ export function TabGarantias({ usuarioActual }: { usuarioActual: any }) {
         <body>
           <div class="header">
             <h1>ELECTRO·NIC TUCUMÁN</h1>
-            <p>Florida Sur 24 local 2, Yerba Buena, Tucumán</p>
-            <p><strong>REMITO DE GARANTÍA / CAMBIO N° ${garantia.id || 'N/A'}</strong></p>
+            <p>Florida Sur 24 local 2, Yerba Buena, Tucumán | División Mayorista B2B</p>
+            <p><strong>REMITO OFICIAL DE GARANTÍA Y CAMBIO N° ${garantia.id || 'N/A'}</strong></p>
             <p>Fecha de emisión: ${fecha}</p>
           </div>
 
-          <div class="info-box">
-            <strong>Cliente:</strong> ${cliente}<br/>
-            <strong>Atendido por:</strong> ${usuarioActual.nombre}<br/>
-            <strong>Estado de Garantía:</strong> ${estado}
-          </div>
+          <table class="info-table">
+            <tr>
+              <td width="50%" class="info-box">
+                <strong>DATOS DEL CLIENTE:</strong><br/>
+                Nombre / Razon Social: <strong>${cliente}</strong><br/>
+                Operación: <strong>${estado}</strong>
+              </td>
+              <td width="50%" class="info-box" style="text-align: right;">
+                <strong>DATOS DE EMISIÓN:</strong><br/>
+                Atendido por: <strong>${usuarioActual.nombre}</strong><br/>
+                Comprobante: <strong>REMITO B2B / CAMBIO</strong>
+              </td>
+            </tr>
+          </table>
 
-          <h3>Detalle de Equipos</h3>
+          <h3>1. Detalle de Equipos Involucrados</h3>
           <table class="table">
             <thead>
               <tr>
                 <th>Operación</th>
-                <th>Equipo / Modelo</th>
+                <th>Descripción / Modelo</th>
                 <th>IMEI / N° Serie</th>
-                <th>Falla / Observación</th>
+                <th>Estado / Motivo</th>
+                <th style="text-align: right;">Valuación Unit.</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>Ingresado (Garantía)</strong></td>
+                <td><strong style="color: #dc2626;">[DEVOLUCIÓN]</strong> Ingreso por Garantía</td>
                 <td>${equipoRecibido}</td>
                 <td>${imeiRecibido}</td>
                 <td>Falla: ${garantia.problema || 'N/A'}</td>
+                <td style="text-align: right;"><strong>USD $${pOrig}</strong></td>
               </tr>
               ${datosAdicionales?.equipoNuevo ? `
               <tr>
-                <td><strong>Entregado (Reemplazo)</strong></td>
+                <td><strong style="color: #047857;">[ENTREGA]</strong> Reemplazo Directo</td>
                 <td>${equipoEntregado}</td>
                 <td>${imeiEntregado}</td>
-                <td>Cambio de unidad</td>
+                <td>Unidad Nueva de Stock</td>
+                <td style="text-align: right;"><strong>USD $${pNuev}</strong></td>
               </tr>
               ` : ''}
             </tbody>
           </table>
 
           ${datosAdicionales?.equipoNuevo ? `
-          <div class="financial-box">
-            <div class="financial-title">Desglose de Valores:</div>
-            <p style="margin: 3px 0;">Valor asignado al equipo devuelto: <strong>USD $${pOrig}</strong></p>
-            <p style="margin: 3px 0;">Precio del nuevo equipo entregado: <strong>USD $${pNuev}</strong></p>
-            <hr style="margin: 8px 0; border: none; border-top: 1px solid #ccc;"/>
-            <div class="financial-amount">
-              ${dif > 0 ? `DIFERENCIA ABONADA POR CLIENTE: USD $${dif}` : ''}
-              ${dif < 0 ? `DIFERENCIA DEVUELTA AL CLIENTE: USD $${Math.abs(dif)}` : ''}
-              ${dif === 0 ? `CAMBIO MANO A MANO (SIN DIFERENCIA)` : ''}
+          <h3>2. Estado Financiero y Liquidación de Cambio</h3>
+          <div class="resumen-box">
+            <div class="resumen-row">
+              <span>Valor reconocido por el equipo devuelto:</span>
+              <span><strong>USD $${pOrig.toFixed(2)}</strong></span>
+            </div>
+            <div class="resumen-row">
+              <span>Precio del equipo nuevo entregado:</span>
+              <span><strong>USD $${pNuev.toFixed(2)}</strong></span>
+            </div>
+            
+            <div class="resumen-total">
+              <span>
+                ${dif > 0 ? 'DIFERENCIA A ABONAR POR CLIENTE:' : ''}
+                ${dif < 0 ? 'DIFERENCIA A DEVOLVER AL CLIENTE:' : ''}
+                ${dif === 0 ? 'LIQUIDACIÓN DE OPERACIÓN:' : ''}
+              </span>
+              <span>
+                ${dif > 0 ? `+ USD $${dif.toFixed(2)}` : ''}
+                ${dif < 0 ? `- USD $${Math.abs(dif).toFixed(2)}` : ''}
+                ${dif === 0 ? 'USD $0.00 (Mano a Mano)' : ''}
+              </span>
             </div>
           </div>
           ` : ''}
 
-          <div style="margin-top: 25px;">
-            <p><strong>Observaciones generales:</strong> ${garantia.observaciones || 'Se realiza la entrega del equipo conforme a las especificaciones y términos de garantía del local.'}</p>
+          <div style="margin-top: 20px; background: #fafafa; border: 1px solid #eee; padding: 10px; border-radius: 6px;">
+            <p style="margin: 0;"><strong>Observaciones adicionales:</strong> ${garantia.observaciones || 'Se realiza la entrega y recepción de las unidades en conformidad de las partes.'}</p>
           </div>
 
           <div class="firmas">
-            <div class="firma-linea">Firma Conformidad Cliente</div>
+            <div class="firma-linea">Firma de Conformidad Cliente</div>
             <div class="firma-linea">Firma / Sello Electro·Nic</div>
           </div>
 

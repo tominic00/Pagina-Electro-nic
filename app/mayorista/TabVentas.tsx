@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers } from "lucide-react"
-import  supabase  from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -20,7 +20,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [carrito, setCarrito] = useState<any[]>([])
   const [equipoSeleccionadoId, setEquipoSeleccionadoId] = useState("")
   const [precioItem, setPrecioItem] = useState("")
-  const [montoAbonado, setMontoAbonado] = useState<number | "">("") // NUEVO: Cuánto paga realmente
+  const [montoAbonado, setMontoAbonado] = useState<number | "">("")
 
   // ESTADOS DE DESCUENTO GLOBAL
   const [ajusteGlobal, setAjusteGlobal] = useState<number | "">("")
@@ -75,17 +75,15 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   else montoAjusteGlobal = totalVentaBase * (valorAjuste / 100)
 
   const totalVentaFinal = totalVentaBase + montoAjusteGlobal
-  const gananciaNeta = totalVentaFinal - totalCosto
   
   const isPagoPesos = formaPago.includes("ARS")
   const totalPesos = isPagoPesos ? totalVentaFinal * cotizacionUsd : 0
 
-  // Auto-completar el monto abonado con el total si no se tocó
   useEffect(() => {
     setMontoAbonado(totalVentaFinal > 0 ? totalVentaFinal : "")
   }, [totalVentaFinal])
 
-  // LÓGICA DEL HISTORIAL (AGRUPACIÓN POR LOTE)
+  // LÓGICA DEL HISTORIAL
   const ventasFiltradas = ventas.filter(v => {
     const matchClienteOEquipo = filtroHistorialCliente === "" || 
                                 (v.cliente?.toLowerCase().includes(filtroHistorialCliente.toLowerCase())) || 
@@ -94,9 +92,8 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     return matchClienteOEquipo && matchFecha
   })
 
-  // Agrupamos las ventas que tienen el mismo lote_id
   const lotesAgrupados = Object.values(ventasFiltradas.reduce((acc: any, v) => {
-    const key = v.lote_id || v.id // Si no tiene lote (venta vieja o individual), usa su propio ID
+    const key = v.lote_id || v.id 
     if (!acc[key]) {
       acc[key] = { 
         lote_id: key, 
@@ -106,11 +103,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         cotizacion_usd: v.cotizacion_usd,
         items: [], 
         total_lote: 0,
+        monto_abonado: v.monto_abonado !== undefined ? Number(v.monto_abonado) : null,
         es_lote_real: !!v.lote_id
       }
     }
     acc[key].items.push(v)
-    // Sumamos al total del lote solo si el item no está anulado
     if (v.estado !== 'Anulada' && !v.estado.includes('Anulada')) {
       acc[key].total_lote += Number(v.monto_vendido_usd || 0)
     }
@@ -118,7 +115,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   }, {})).sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 
 
-  // 🚀 FUNCIÓN PARA ANULAR UNA VENTA (INDIVIDUAL)
   const handleAnularVenta = async (venta: any) => {
     if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en tu stock automáticamente.`)) return
 
@@ -153,31 +149,88 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  const generarPDF = (tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", listaItems: any[], nombreCliente: string, totalFacturado: number, ajuste: number, fPago: string, cotizacion: number) => {
+  // 🖨️ PDF REMITO/PRESUPUESTO ENCUADRADO Y CON ESTADO DE PAGO
+  const generarPDF = (
+    tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
+    listaItems: any[], 
+    nombreCliente: string, 
+    totalFacturado: number, 
+    ajuste: number, 
+    fPago: string, 
+    cotizacion: number,
+    pagadoUsuario?: number
+  ) => {
     try {
       const doc = new jsPDF()
+      
+      // ENCABEZADO
       doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("Electro·Nic", 14, 20)
       doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("División Mayorista B2B", 14, 26); doc.text("Tucumán, Argentina", 14, 31)
-      doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text(`${tipoDocumento} N° ${Math.floor(Math.random() * 10000)}`, 140, 20)
-      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 140, 26); doc.text(`Cliente: ${nombreCliente}`, 140, 31); doc.text(`Atendido por: ${usuarioActual?.nombre || "Vendedor"}`, 140, 36)
+      doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text(`${tipoDocumento} N° ${Math.floor(Math.random() * 10000)}`, 130, 20)
+      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 130, 26); doc.text(`Cliente: ${nombreCliente}`, 130, 31); doc.text(`Atendido por: ${usuarioActual?.nombre || "Vendedor"}`, 130, 36)
       doc.line(14, 42, 196, 42) 
 
+      // TABLA DE PRODUCTOS
       const columnas = ["Cant", "Descripción (Modelo)", "Condición", "IMEI / Serie", "Precio Unitario"]
       const filas = listaItems.map(item => ["1", item.equipo || item.equipo_nombre, item.condicion || "---", item.imei || "---", `U$D ${item.precio_cerrado_usd || item.monto_vendido_usd}`])
-      autoTable(doc, { startY: 48, head: [columnas], body: filas, theme: 'grid', headStyles: { fillColor: [16, 185, 129], textColor: 255 }, styles: { fontSize: 9 }, columnStyles: { 0: { halign: 'center' }, 4: { halign: 'right', fontStyle: 'bold' } } })
+      autoTable(doc, { 
+        startY: 48, 
+        head: [columnas], 
+        body: filas, 
+        theme: 'grid', 
+        headStyles: { fillColor: [16, 185, 129], textColor: 255 }, 
+        styles: { fontSize: 9 }, 
+        columnStyles: { 0: { halign: 'center' }, 4: { halign: 'right', fontStyle: 'bold' } } 
+      })
       
       // @ts-ignore
-      const finalY = doc.lastAutoTable.finalY + 10
-      doc.setFontSize(10)
-      if (ajuste !== 0) doc.text(ajuste > 0 ? `Recargo Adicional: U$D ${ajuste.toFixed(2)}` : `Descuento Especial: U$D ${Math.abs(ajuste).toFixed(2)}`, 130, finalY)
-      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.text(`TOTAL A PAGAR: U$D ${totalFacturado.toFixed(2)}`, 130, finalY + (ajuste !== 0 ? 8 : 0))
+      let finalY = doc.lastAutoTable.finalY + 10
 
-      let offsetY = finalY + 15
+      // TOTALES Y RECARGOS
       doc.setFontSize(10); doc.setFont("helvetica", "normal")
-      if (fPago) { doc.text(`Forma de pago: ${fPago}`, 14, offsetY); offsetY += 6 }
-      if (fPago && fPago.includes("ARS") && cotizacion > 0) {
-        doc.text(`Cotización aplicada: $${cotizacion} ARS/USD`, 14, offsetY); offsetY += 6
-        doc.setFont("helvetica", "bold"); doc.text(`Total equivalente: $ ${(totalFacturado * cotizacion).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 14, offsetY)
+      if (ajuste !== 0) {
+        doc.text(ajuste > 0 ? `Recargo Adicional: U$D ${ajuste.toFixed(2)}` : `Descuento Especial: U$D ${Math.abs(ajuste).toFixed(2)}`, 130, finalY)
+        finalY += 6
+      }
+      
+      doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
+      doc.text(`TOTAL FACTURA: U$D ${totalFacturado.toFixed(2)}`, 130, finalY)
+
+      finalY += 12
+
+      // 📦 ENCUADRE DE PAGOS Y ESTADO DE CUENTA
+      if (tipoDocumento === "REMITO OFICIAL") {
+        const pagadoReal = pagadoUsuario !== undefined ? pagadoUsuario : totalFacturado
+        const saldoDiferencia = pagadoReal - totalFacturado
+
+        doc.setFillColor(245, 247, 250)
+        doc.setDrawColor(200, 205, 210)
+        doc.roundedRect(14, finalY, 182, 35, 3, 3, "FD")
+
+        doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
+        doc.text("ESTADO DE COBRO Y SALDO OPERACIÓN", 20, finalY + 8)
+
+        doc.setFontSize(9); doc.setFont("helvetica", "normal")
+        doc.text(`Monto Abonado Hoy: U$D ${pagadoReal.toFixed(2)} (${fPago})`, 20, finalY + 16)
+
+        if (fPago.includes("ARS") && cotizacion > 0) {
+          doc.text(`Cotización Dólar: $${cotizacion} ARS/USD  |  Total ARS: $ ${(totalFacturado * cotizacion).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`, 20, finalY + 22)
+        }
+
+        // CONDICIONAL DE SALDO
+        doc.setFont("helvetica", "bold")
+        if (saldoDiferencia < 0) {
+          doc.setTextColor(220, 38, 38) // Rojo
+          doc.text(`PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferencia).toFixed(2)}`, 20, finalY + 29)
+        } else if (saldoDiferencia > 0) {
+          doc.setTextColor(16, 185, 129) // Verde
+          doc.text(`SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferencia.toFixed(2)}`, 20, finalY + 29)
+        } else {
+          doc.setTextColor(16, 185, 129)
+          doc.text("ESTADO: COMPROBANTE SALDADO (100% Abonado)", 20, finalY + 29)
+        }
+
+        doc.setTextColor(0, 0, 0) // Restaurar color negro
       }
 
       if (tipoDocumento === "PRESUPUESTO") {
@@ -185,6 +238,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         doc.text("* Los precios expresados están sujetos a modificaciones sin previo aviso.", 14, 280)
         doc.text("* Este documento no compromete reserva de stock.", 14, 285)
       }
+
       doc.save(`${tipoDocumento}_${nombreCliente.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`)
     } catch (error: any) { alert("Hubo un error al generar el PDF: " + error.message) }
   }
@@ -200,7 +254,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd)
   }
 
-  // 🚀 CERRAR VENTA, IMPACTAR CAJA Y ACTUALIZAR SALDOS
+  // CERRAR VENTA Y GUARDAR PAGO REAL
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -210,39 +264,34 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       let clienteIdFinal = clienteId
       const nombreCliente = getNombreCliente()
       
-      // 1. Si es nuevo, lo creamos
       if (clienteId === "NUEVO") {
         const { data: newClient, error: errClient } = await supabase.from("clientes_mayorista").insert([{ nombre: nombreCliente, saldo_usd: 0 }]).select().single()
         if (errClient) throw new Error("No se pudo registrar al nuevo cliente: " + errClient.message)
         clienteIdFinal = newClient.id
       }
 
-      // 2. Gestionamos Deuda / Saldo a Favor del cliente
       const pagoReal = Number(montoAbonado) || 0
       const diferencia = pagoReal - totalVentaFinal
 
       if (clienteIdFinal && clienteIdFinal !== "" && diferencia !== 0) {
-        // Traemos el saldo actual del cliente
         const { data: cliActual } = await supabase.from("clientes_mayorista").select("saldo_usd").eq("id", clienteIdFinal).single()
         const saldoAnterior = Number(cliActual?.saldo_usd || 0)
-        // Actualizamos (Si diferencia es negativa, debe plata. Si es positiva, tiene saldo a favor)
         await supabase.from("clientes_mayorista").update({ saldo_usd: saldoAnterior + diferencia }).eq("id", clienteIdFinal)
       }
 
-      // 3. Generamos el ID único del LOTE
       const loteId = `LOTE-${Date.now()}`
       const ajustePorItem = montoAjusteGlobal / carrito.length
 
-      // 4. Armamos y guardamos las ventas
       const nuevasVentas = carrito.map(item => {
         const precioItemConAjuste = item.precio_cerrado_usd + ajustePorItem
         const costoItem = Number(item.costo_usd) || 0
         return {
-          lote_id: loteId, // 🚀 AGRUPADOR
+          lote_id: loteId,
           equipo_id: item.id, 
           equipo_nombre: item.equipo, 
           cliente: nombreCliente,
           monto_vendido_usd: precioItemConAjuste, 
+          monto_abonado: pagoReal / carrito.length, // Se guarda la porción del pago
           ganancia_usd: precioItemConAjuste - costoItem,
           vendedor: usuarioActual.nombre, 
           forma_pago: formaPago,
@@ -254,11 +303,9 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const { error: errVentas } = await supabase.from("ventas_mayorista").insert(nuevasVentas)
       if (errVentas) throw new Error("Fallo al guardar la venta: " + errVentas.message)
 
-      // 5. Descontar Stock
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      // 🚀 6. ENVIAR PLATA A LA CAJA (Solo lo que pagó hoy)
       if (pagoReal > 0) {
         await supabase.from("caja_mayorista").insert([{
           tipo: "Ingreso",
@@ -267,14 +314,13 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           metodo_pago: formaPago === "Efectivo USD" ? "Efectivo" : (formaPago === "USDT" ? "USDT" : "Transferencia"),
           descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
           usuario: usuarioActual.nombre,
-          referencia_id: null // Podrías guardar el lote_id acá si en el futuro cruzás tablas
+          referencia_id: null
         }])
       }
 
-      generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd)
+      generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoReal)
       alert(`✅ ¡Venta registrada exitosamente!\n${diferencia < 0 ? `El cliente quedó con una deuda de USD ${Math.abs(diferencia).toFixed(2)}.` : diferencia > 0 ? `El cliente quedó con un saldo a favor de USD ${diferencia.toFixed(2)}.` : 'El pago fue exacto.'}`)
       
-      // Limpiar Formulario
       setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonado("")
       fetchData()
     } catch (error: any) { 
@@ -357,7 +403,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                 <input type="number" value={ajusteGlobal} onChange={e => setAjusteGlobal(e.target.value ? Number(e.target.value) : "")} placeholder="Ajuste Global (- Descuento)" className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
               </div>
               
-              {/* 🚀 NUEVO: CONTROL DE COBRO / DEUDA */}
               <div>
                 <label className="text-[10px] font-black uppercase text-emerald-500 block mb-1">Monto que abona el cliente (USD)</label>
                 <div className="relative">
@@ -365,7 +410,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <input type="number" step="0.01" value={montoAbonado} onChange={e => setMontoAbonado(e.target.value ? Number(e.target.value) : "")} className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" />
                 </div>
                 <p className="text-[9px] text-zinc-500 mt-1.5 leading-tight">
-                  Si paga menos del total, la diferencia se anotará como deuda en la cuenta del cliente. Si no se selecciona un cliente registrado, no se guardará la deuda.
+                  Si paga menos del total, la diferencia se anotará como deuda en la cuenta del cliente.
                 </p>
               </div>
             </div>
@@ -425,9 +470,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <div className="text-right flex flex-col items-end">
                     <p className={cn("font-black text-lg", todosAnulados ? "text-zinc-600 line-through" : "text-emerald-400")}>U$D {lote.total_lote.toFixed(2)}</p>
                     <p className="text-[9px] text-zinc-500 font-mono">{lote.forma_pago}</p>
-                    {/* Botón Imprimir Lote Completo */}
                     {!todosAnulados && (
-                      <button onClick={() => generarPDF("REMITO OFICIAL", lote.items, lote.cliente, lote.total_lote, 0, lote.forma_pago, lote.cotizacion_usd)} className="mt-2 bg-zinc-950 border border-zinc-800 hover:border-sky-500 hover:text-sky-400 text-zinc-400 p-1.5 px-3 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold uppercase">
+                      <button 
+                        onClick={() => generarPDF("REMITO OFICIAL", lote.items, lote.cliente, lote.total_lote, 0, lote.forma_pago, lote.cotizacion_usd, lote.monto_abonado !== null ? lote.monto_abonado : lote.total_lote)} 
+                        className="mt-2 bg-zinc-950 border border-zinc-800 hover:border-sky-500 hover:text-sky-400 text-zinc-400 p-1.5 px-3 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold uppercase"
+                      >
                         <Printer className="size-3" /> Remito
                       </button>
                     )}
@@ -451,7 +498,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                           )}>{v.estado}</span>
                           <span className="text-xs font-bold text-zinc-400 mt-1">U$D {v.monto_vendido_usd}</span>
                         </div>
-                        {/* Botón anular ITEM INDIVIDUAL */}
                         {(v.estado === 'Completada' || v.estado === 'En Garantía') && (
                           <button onClick={() => handleAnularVenta(v)} disabled={isProcessing} className="text-zinc-600 hover:text-red-400 p-1 rounded-lg transition-colors" title="Anular este equipo">
                             <Ban className="size-3" />
