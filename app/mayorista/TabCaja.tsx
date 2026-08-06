@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Wallet, ArrowDownRight, ArrowUpRight, Search, Loader2, DollarSign, Building, PiggyBank, Bitcoin, X, Users, PieChart, Edit3, Trash2 } from "lucide-react"
+import { Wallet, ArrowDownRight, ArrowUpRight, Search, Loader2, DollarSign, Building, PiggyBank, Bitcoin, X, Users, PieChart, Edit3, Trash2, Banknote, CreditCard } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -7,7 +7,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
   const [movimientos, setMovimientos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroTexto, setFiltroTexto] = useState("")
-  const [filtroTipo, setFiltroTipo] = useState("Todos") // Todos, Ingreso, Egreso
+  const [filtroTipo, setFiltroTipo] = useState("Todos")
   
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -36,7 +36,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // Extraer socios históricos de la BD
   const sociosHistoricos = Array.from(
     new Set(
       movimientos
@@ -45,40 +44,47 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     )
   )
 
-  // 🚀 MATEMÁTICA Y BALANCES EN TIEMPO REAL
-  let balanceTotal = 0
+  // 🚀 BILLETERAS MULTIMONEDA
+  let balanceTotalUSD = 0
   let totalUSDT = 0
-  let totalEfectivo = 0
-  let totalBanco = 0
-  let capitalSocios = 0
+  let totalEfectivoUSD = 0
+  let totalEfectivoARS = 0
+  let totalBancoARS = 0
+  let capitalSociosUSD = 0
 
   const aportesPorSocio: Record<string, number> = {}
 
   movimientos.forEach(m => {
-    const monto = Number(m.monto_usd || m.monto || 0)
+    const montoNormal = Number(m.monto || 0)
+    const montoUsd = Number(m.monto_usd || m.monto || 0)
     const esIngreso = m.tipo === 'Ingreso'
+    const metodo = String(m.metodo_pago || "")
 
     if (esIngreso) {
-      balanceTotal += monto
-      if (m.metodo_pago === 'USDT') totalUSDT += monto
-      if (m.metodo_pago === 'Efectivo' || m.metodo_pago === 'USD Billete') totalEfectivo += monto
-      if (m.metodo_pago === 'Transferencia') totalBanco += monto
+      balanceTotalUSD += montoUsd
+      
+      if (metodo.includes('USDT')) totalUSDT += montoUsd
+      else if (metodo.includes('Efectivo USD') || metodo === 'USD Billete') totalEfectivoUSD += montoUsd
+      else if (metodo.includes('Efectivo ARS')) totalEfectivoARS += montoNormal
+      else if (metodo.includes('Transferencia') || metodo.includes('Tarjeta')) totalBancoARS += montoNormal
       
       if (m.categoria === 'Inversión Socio') {
-        capitalSocios += monto
+        capitalSociosUSD += montoUsd
         const nombreSocio = m.socio || "Socio Anónimo"
-        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) + monto
+        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) + montoUsd
       }
     } else {
-      balanceTotal -= monto
-      if (m.metodo_pago === 'USDT') totalUSDT -= monto
-      if (m.metodo_pago === 'Efectivo' || m.metodo_pago === 'USD Billete') totalEfectivo -= monto
-      if (m.metodo_pago === 'Transferencia') totalBanco -= monto
+      balanceTotalUSD -= montoUsd
+      
+      if (metodo.includes('USDT')) totalUSDT -= montoUsd
+      else if (metodo.includes('Efectivo USD') || metodo === 'USD Billete') totalEfectivoUSD -= montoUsd
+      else if (metodo.includes('Efectivo ARS')) totalEfectivoARS -= montoNormal
+      else if (metodo.includes('Transferencia') || metodo.includes('Tarjeta')) totalBancoARS -= montoNormal
       
       if (m.categoria === 'Retiro Socio' || m.categoria === 'Pago Utilidad Socio') {
-        capitalSocios -= monto
+        capitalSociosUSD -= montoUsd
         const nombreSocio = m.socio || "Socio Anónimo"
-        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) - monto
+        aportesPorSocio[nombreSocio] = (aportesPorSocio[nombreSocio] || 0) - montoUsd
       }
     }
   })
@@ -96,7 +102,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     )
   })
 
-  // 🚀 ABRIR MODAL PARA NUEVO MOVIMIENTO
   const abrirNuevoMovimiento = (tipoDefecto: string) => {
     setEditingId(null)
     const miNombre = usuarioActual?.nombre ? `${usuarioActual.nombre} (Dueño)` : "Tomas (Dueño)"
@@ -113,7 +118,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     setShowModal(true)
   }
 
-  // 🚀 ABRIR MODAL PARA EDITAR MOVIMIENTO
   const abrirEditarMovimiento = (mov: any) => {
     setEditingId(mov.id)
     setForm({
@@ -136,7 +140,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     setShowModal(true)
   }
 
-  // 🚀 GUARDAR (CREAR O EDITAR)
   const handleGuardar = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.monto || Number(form.monto) <= 0) return alert("El monto debe ser mayor a 0.")
@@ -181,7 +184,6 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 ELIMINAR MOVIMIENTO
   const handleEliminar = async (id: string) => {
     if (!confirm("¿Estás seguro de que querés eliminar este movimiento? Esta acción recalculará los saldos.")) return
 
@@ -216,15 +218,40 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* TARJETAS DE SALDOS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* TARJETAS DE BILLETERAS Y SALDOS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl relative overflow-hidden">
-          <div className="absolute -right-4 -bottom-4 size-24 bg-amber-500/10 rounded-full blur-2xl"></div>
           <div className="flex justify-between items-start mb-4">
             <div className="p-2 bg-amber-500/10 rounded-xl"><Wallet className="size-5 text-amber-500"/></div>
             <span className="text-[10px] font-black uppercase text-zinc-500">Balance Total</span>
           </div>
-          <h3 className="text-3xl font-black text-white">USD {balanceTotal.toLocaleString()}</h3>
+          <h3 className="text-2xl font-black text-white">USD {balanceTotalUSD.toLocaleString()}</h3>
+        </div>
+
+        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl border-l-4 border-l-sky-500">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-sky-500/10 rounded-xl"><Building className="size-5 text-sky-500"/></div>
+            <span className="text-[10px] font-black uppercase text-zinc-500">Billetera Banco (ARS)</span>
+          </div>
+          <h3 className="text-xl font-black text-sky-400">$ {totalBancoARS.toLocaleString("es-AR")}</h3>
+          <p className="text-[9px] text-zinc-500 mt-1 font-bold">Transf. + Tarjetas</p>
+        </div>
+
+        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl border-l-4 border-l-emerald-500">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-emerald-500/10 rounded-xl"><Banknote className="size-5 text-emerald-500"/></div>
+            <span className="text-[10px] font-black uppercase text-zinc-500">Efectivo (ARS Billete)</span>
+          </div>
+          <h3 className="text-xl font-black text-emerald-400">$ {totalEfectivoARS.toLocaleString("es-AR")}</h3>
+          <p className="text-[9px] text-zinc-500 mt-1 font-bold">Caja Pesos Físicos</p>
+        </div>
+
+        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-amber-500/10 rounded-xl"><PiggyBank className="size-5 text-amber-500"/></div>
+            <span className="text-[10px] font-black uppercase text-zinc-500">USD Billete</span>
+          </div>
+          <h3 className="text-xl font-black text-white">USD {totalEfectivoUSD.toLocaleString()}</h3>
         </div>
 
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
@@ -232,24 +259,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
             <div className="p-2 bg-emerald-500/10 rounded-xl"><Bitcoin className="size-5 text-emerald-500"/></div>
             <span className="text-[10px] font-black uppercase text-zinc-500">Billetera USDT</span>
           </div>
-          <h3 className="text-2xl font-black text-white">USD {totalUSDT.toLocaleString()}</h3>
-        </div>
-
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-sky-500/10 rounded-xl"><PiggyBank className="size-5 text-sky-500"/></div>
-            <span className="text-[10px] font-black uppercase text-zinc-500">USD Billete / Efectivo</span>
-          </div>
-          <h3 className="text-2xl font-black text-white">USD {totalEfectivo.toLocaleString()}</h3>
-        </div>
-
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl shadow-xl border-l-4 border-l-indigo-500">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-indigo-500/10 rounded-xl"><Building className="size-5 text-indigo-500"/></div>
-            <span className="text-[10px] font-black uppercase text-zinc-500">Capital de Socios</span>
-          </div>
-          <h3 className="text-2xl font-black text-indigo-400">USD {capitalSocios.toLocaleString()}</h3>
-          <p className="text-[9px] text-zinc-500 mt-1">Total aportes activos</p>
+          <h3 className="text-xl font-black text-white">USD {totalUSDT.toLocaleString()}</h3>
         </div>
       </div>
 
@@ -262,7 +272,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {Object.entries(aportesPorSocio).map(([nombre, monto]) => {
-              const porcentaje = capitalSocios > 0 ? ((monto / capitalSocios) * 100).toFixed(1) : "0"
+              const porcentaje = capitalSociosUSD > 0 ? ((monto / capitalSociosUSD) * 100).toFixed(1) : "0"
               return (
                 <div key={nombre} className="bg-zinc-950 border border-zinc-800/80 p-3.5 rounded-2xl">
                   <p className="text-xs font-bold text-white truncate">{nombre}</p>
@@ -303,15 +313,19 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                 <th className="p-4">Concepto / Descripción</th>
                 <th className="p-4 text-center">Categoría</th>
                 <th className="p-4 text-center">Método</th>
-                <th className="p-4 text-right">Monto</th>
+                <th className="p-4 text-right">Monto Original</th>
+                <th className="p-4 text-right">Equiv. USD</th>
                 <th className="p-4 text-center">Usuario</th>
                 <th className="p-4 text-center rounded-tr-xl">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {filtrados.map(m => {
-                const montoMostrar = Number(m.monto_usd || m.monto || 0)
+                const montoNormal = Number(m.monto || 0)
+                const montoUsd = Number(m.monto_usd || m.monto || 0)
+                const esPesos = String(m.metodo_pago || "").includes("ARS") || String(m.metodo_pago || "").includes("Tarjeta")
                 const descMostrar = m.concepto || m.descripcion || "Movimiento"
+
                 return (
                   <tr key={m.id} className="hover:bg-zinc-900/50 transition-colors">
                     <td className="p-4 text-zinc-400 text-xs">{new Date(m.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
@@ -323,12 +337,17 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                       <span className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded text-[9px] font-bold uppercase">{m.categoria}</span>
                     </td>
                     <td className="p-4 text-center text-xs text-zinc-400 font-medium">{m.metodo_pago}</td>
-                    <td className={cn("p-4 font-black text-right", m.tipo === 'Ingreso' ? "text-emerald-400" : "text-red-400")}>
-                      {m.tipo === 'Ingreso' ? '+' : '-'} USD {montoMostrar.toLocaleString()}
+                    
+                    <td className={cn("p-4 font-bold text-right", m.tipo === 'Ingreso' ? "text-emerald-400" : "text-red-400")}>
+                      {m.tipo === 'Ingreso' ? '+' : '-'} {esPesos ? `$ ${montoNormal.toLocaleString("es-AR")}` : `USD ${montoNormal.toLocaleString()}`}
                     </td>
+
+                    <td className="p-4 font-black text-right text-zinc-300">
+                      USD {montoUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+
                     <td className="p-4 text-center text-[10px] text-zinc-500 font-bold">{m.realizado_por || m.usuario}</td>
                     
-                    {/* BOTONES DE EDICIÓN Y ELIMINACIÓN */}
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button onClick={() => abrirEditarMovimiento(m)} title="Editar" className="p-1.5 bg-zinc-900 hover:bg-sky-500/20 text-zinc-400 hover:text-sky-400 rounded-lg transition-colors">
@@ -343,14 +362,14 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                 )
               })}
               {filtrados.length === 0 && (
-                <tr><td colSpan={7} className="py-16 text-center text-zinc-500 font-bold italic">No hay movimientos registrados.</td></tr>
+                <tr><td colSpan={8} className="py-16 text-center text-zinc-500 font-bold italic">No hay movimientos registrados.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* 🚀 MODAL CREAR / EDITAR MOVIMIENTO */}
+      {/* MODAL CREAR / EDITAR MOVIMIENTO */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl my-auto">
@@ -377,7 +396,9 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
                   <select value={form.metodo_pago} onChange={e => setForm({...form, metodo_pago: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all cursor-pointer">
                     <option value="USDT">USDT</option>
                     <option value="USD Billete">USD Billete (Efectivo)</option>
-                    <option value="Transferencia">Transferencia Bancaria</option>
+                    <option value="Efectivo ARS">Efectivo ARS (Billetes)</option>
+                    <option value="Transferencia ARS">Transferencia Bancaria (ARS)</option>
+                    <option value="Tarjeta de Crédito / Débito">Tarjeta de Crédito / Débito (ARS)</option>
                   </select>
                 </div>
               </div>
@@ -415,7 +436,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
               )}
 
               <div>
-                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Monto (USD) *</label>
+                <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Monto (Moneda elegida) *</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
                   <input required type="number" step="0.01" value={form.monto} onChange={e => setForm({...form, monto: e.target.value})} className={cn("w-full bg-zinc-950 border border-zinc-800 font-black rounded-xl pl-9 pr-4 py-3 text-lg outline-none transition-all", form.tipo === 'Ingreso' ? "text-emerald-400 focus:border-emerald-500" : "text-red-400 focus:border-red-500")} placeholder="0.00" />
@@ -424,7 +445,7 @@ export function TabCaja({ usuarioActual }: { usuarioActual: any }) {
 
               <div>
                 <label className="text-[10px] font-black uppercase text-zinc-500 block mb-1.5">Descripción / Concepto *</label>
-                <input required type="text" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} placeholder="Ej: Aporte inicial para compra de Lote Agosto..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all" />
+                <input required type="text" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} placeholder="Ej: Pago de flete o ingreso por venta..." className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500 transition-all" />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User, ArrowRightLeft } from "lucide-react"
+import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User, ArrowRightLeft, CreditCard } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
@@ -27,6 +27,10 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   // ESTADOS DE PAGO (ARS / USD)
   const [montoAbonadoInput, setMontoAbonadoInput] = useState<number | "">("")
   const [monedaAbonada, setMonedaAbonada] = useState<"USD" | "ARS">("USD")
+
+  // COMISIÓN DE TARJETA
+  const [recargoTarjeta, setRecargoTarjeta] = useState<number | "">("")
+  const [tipoRecargoTarjeta, setTipoRecargoTarjeta] = useState<"porcentaje" | "monto">("porcentaje")
 
   // ESTADOS DE DESCUENTO GLOBAL
   const [ajusteGlobal, setAjusteGlobal] = useState<number | "">("")
@@ -82,8 +86,18 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const totalVentaFinal = totalVentaBase + montoAjusteGlobal
   
-  const isPagoPesos = formaPago.includes("ARS")
-  const totalPesos = isPagoPesos && cotizacionUsd > 0 ? totalVentaFinal * cotizacionUsd : 0
+  const isPagoPesos = formaPago.includes("ARS") || formaPago.includes("Tarjeta")
+  const isTarjeta = formaPago.includes("Tarjeta")
+
+  // CALCULO COMISION TARJETA
+  let comisionTarjetaArs = 0
+  const valComision = Number(recargoTarjeta) || 0
+  if (isTarjeta && valComision > 0) {
+    const baseArs = totalVentaFinal * cotizacionUsd
+    comisionTarjetaArs = tipoRecargoTarjeta === "porcentaje" ? baseArs * (valComision / 100) : valComision
+  }
+
+  const totalPesos = isPagoPesos && cotizacionUsd > 0 ? (totalVentaFinal * cotizacionUsd) + comisionTarjetaArs : 0
 
   // CAMBIO DE MONEDA DE PAGO SEGÚN FORMA SELECCIONADA
   useEffect(() => {
@@ -94,7 +108,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       setMonedaAbonada("USD")
       setMontoAbonadoInput(totalVentaFinal > 0 ? totalVentaFinal : "")
     }
-  }, [formaPago, totalVentaFinal, cotizacionUsd])
+  }, [formaPago, totalVentaFinal, cotizacionUsd, recargoTarjeta, tipoRecargoTarjeta])
 
   // CÁLCULO DE DÓLARES REALES ENTREGADOS
   const montoAbonadoNum = Number(montoAbonadoInput) || 0
@@ -171,7 +185,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  // 🖨️ PDF ESTRUCTURADO COMO FACTURA REAL
+  // 🖨️ GENERADOR PDF DÓLARES Y PESOS
   const generarPDF = (
     tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
     listaItems: any[], 
@@ -185,7 +199,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     try {
       const doc = new jsPDF()
       
-      // 1. ENCABEZADO FISCAL / EMPRESA
+      // 1. ENCABEZADO
       doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("Electro·Nic", 14, 20)
       doc.setFontSize(10); doc.setFont("helvetica", "normal")
       doc.text("Celulares, Accesorios y Tecnología", 14, 26)
@@ -231,8 +245,8 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
       // 3. BLOQUE DERECHO DE LIQUIDACIÓN Y TOTALES
       const subtotalUsd = totalFacturadoUsd - ajusteUsd
-      const esEnPesos = fPago.includes("ARS") && cotizacion > 0
-      const totalFacturaArs = esEnPesos ? totalFacturadoUsd * cotizacion : 0
+      const esEnPesos = fPago.includes("ARS") || fPago.includes("Tarjeta")
+      const totalFacturaArs = esEnPesos ? (totalFacturadoUsd * cotizacion) + comisionTarjetaArs : 0
 
       doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80)
       
@@ -244,6 +258,12 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         const txtAjuste = ajusteUsd > 0 ? "Recargo:" : "Descuento:"
         doc.text(txtAjuste, 135, finalY)
         doc.text(`U$D ${ajusteUsd.toFixed(2)}`, 196, finalY, { align: "right" })
+        finalY += 5
+      }
+
+      if (comisionTarjetaArs > 0) {
+        doc.text("Recargo Tarjeta:", 135, finalY)
+        doc.text(`$ ${comisionTarjetaArs.toLocaleString("es-AR")} ARS`, 196, finalY, { align: "right" })
         finalY += 5
       }
 
@@ -267,55 +287,52 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(120, 120, 120)
         finalY += 4
         doc.text(`(Tipo de cambio aplicado: $ ${cotizacion.toLocaleString("es-AR")} ARS / USD)`, 196, finalY, { align: "right" })
-        finalY += 6
+        finalY += 8
       } else {
-        finalY += 4
+        finalY += 6
       }
 
-      // 4. RESUMEN DE PAGO (SOLO EN REMITOS / COMPROBANTES DE PAGO)
-      if (tipoDocumento === "REMITO OFICIAL") {
-        const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
-        const pagadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
-        const saldoArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
+      // 4. RESUMEN DE PAGO Y SALDOS
+      const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
+      const pagadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
+      const saldoArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
 
-        doc.setDrawColor(220, 225, 230)
-        doc.setFillColor(250, 251, 253)
-        doc.roundedRect(14, finalY, 182, 32, 2, 2, "FD")
+      doc.setDrawColor(220, 225, 230)
+      doc.setFillColor(250, 251, 253)
+      doc.roundedRect(14, finalY, 182, 32, 2, 2, "FD")
 
-        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(40, 40, 40)
-        doc.text("DESGLOSE DE PAGO Y LIQUIDACIÓN", 20, finalY + 7)
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(40, 40, 40)
+      doc.text("DESGLOSE DE PAGO Y LIQUIDACIÓN", 20, finalY + 7)
 
-        doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(70, 70, 70)
-        doc.text(`Forma de pago registrada: ${fPago}`, 20, finalY + 14)
-        
-        const txtAbonado = esEnPesos 
-          ? `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}  ($ ${pagadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
-          : `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}`
-        doc.text(txtAbonado, 20, finalY + 20)
+      doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(70, 70, 70)
+      doc.text(`Forma de pago elegida: ${fPago}`, 20, finalY + 14)
+      
+      const txtAbonado = esEnPesos 
+        ? `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}  ($ ${pagadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+        : `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}`
+      doc.text(txtAbonado, 20, finalY + 20)
 
-        // ESTADO DE LA DEUDA O SALDO
-        doc.setFont("helvetica", "bold")
-        if (saldoDiferenciaUsd < -0.01) {
-          doc.setTextColor(220, 38, 38) // Rojo
-          const msjDeuda = esEnPesos 
-            ? `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
-            : `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
-          doc.text(msjDeuda, 20, finalY + 27)
-        } else if (saldoDiferenciaUsd > 0.01) {
-          doc.setTextColor(16, 185, 129) // Verde
-          const msjAFavor = esEnPesos
-            ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
-            : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
-          doc.text(msjAFavor, 20, finalY + 27)
-        } else {
-          doc.setTextColor(16, 185, 129)
-          doc.text("ESTADO: COMPROBANTE SALDADO EN SU TOTALIDAD (100%)", 20, finalY + 27)
-        }
-
-        doc.setTextColor(0, 0, 0)
+      // ESTADO DE LA DEUDA O SALDO
+      doc.setFont("helvetica", "bold")
+      if (saldoDiferenciaUsd < -0.01) {
+        doc.setTextColor(220, 38, 38) // Rojo
+        const msjDeuda = esEnPesos 
+          ? `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+          : `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
+        doc.text(msjDeuda, 20, finalY + 27)
+      } else if (saldoDiferenciaUsd > 0.01) {
+        doc.setTextColor(16, 185, 129) // Verde
+        const msjAFavor = esEnPesos
+          ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+          : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
+        doc.text(msjAFavor, 20, finalY + 27)
+      } else {
+        doc.setTextColor(16, 185, 129)
+        doc.text("ESTADO: COMPROBANTE SALDADO EN SU TOTALIDAD (100%)", 20, finalY + 27)
       }
 
-      // PIE DE PÁGINA COMERCIAL
+      doc.setTextColor(0, 0, 0)
+
       if (tipoDocumento === "PRESUPUESTO") {
         doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(120, 120, 120)
         doc.text("* Documento no válido como factura. Precios y cotizaciones sujetos a variación.", 14, 280)
@@ -336,7 +353,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
   }
 
-  // CERRAR VENTA
+  // CERRAR VENTA Y REGISTRAR EN CAJA EN LA MONEDA DE PAGO REAL
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -387,12 +404,18 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
+      // 🚀 INYECCIÓN A LA CAJA DIARIA CON MONEDA REAL Y COTIZACIÓN
       if (pagoRealUSD > 0) {
+        const esMonedaPesos = monedaAbonada === "ARS"
+        const montoIngresoCaja = esMonedaPesos ? pagoRealARS : pagoRealUSD
+
         await supabase.from("caja_mayorista").insert([{
           tipo: "Ingreso",
           categoria: "Venta",
-          monto: pagoRealUSD,
-          metodo_pago: formaPago === "Efectivo USD" ? "Efectivo" : (formaPago === "USDT" ? "USDT" : "Transferencia"),
+          monto: montoIngresoCaja,
+          monto_usd: pagoRealUSD,
+          metodo_pago: formaPago,
+          cotizacion_usd: isPagoPesos ? cotizacionUsd : null,
           descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
           usuario: usuarioActual.nombre,
           referencia_id: null
@@ -402,7 +425,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
       alert(`✅ ¡Venta registrada exitosamente!\n${diferencia < -0.01 ? `El cliente quedó con una deuda de USD ${Math.abs(diferencia).toFixed(2)}.` : diferencia > 0.01 ? `El cliente quedó con un saldo a favor de USD ${diferencia.toFixed(2)}.` : 'El pago fue exacto.'}`)
       
-      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonadoInput("")
+      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonadoInput(""); setRecargoTarjeta("")
       fetchData()
     } catch (error: any) { 
       alert("Error en el sistema: " + error.message) 
@@ -508,21 +531,43 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           <div className="space-y-4">
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
               <label className="text-[10px] font-black uppercase text-zinc-400 flex items-center gap-1.5 mb-3"><Wallet className="size-3"/> Forma de Pago y Cotización</label>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <select value={formaPago} onChange={e => setFormaPago(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm outline-none focus:border-sky-500">
-                  <option value="Efectivo USD">Efectivo USD</option><option value="USDT">USDT / Cripto</option><option value="Efectivo ARS">Efectivo ARS</option><option value="Transferencia ARS">Transferencia ARS</option>
+                  <option value="Efectivo USD">Efectivo USD</option>
+                  <option value="USDT">USDT / Cripto</option>
+                  <option value="Efectivo ARS">Efectivo ARS (Billetes)</option>
+                  <option value="Transferencia ARS">Transferencia Bancaria (ARS)</option>
+                  <option value="Tarjeta de Crédito / Débito">Tarjeta de Crédito / Débito (ARS)</option>
                 </select>
+
                 {(isPagoPesos || formaPago === "USDT") && (
-                  <div className="relative flex items-center"><span className="absolute left-3 text-xs text-zinc-500 font-bold">1 USD = $</span><input type="number" value={cotizacionUsd} onChange={e => setCotizacionUsd(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-700 text-sky-400 font-bold rounded-xl pl-20 pr-3 py-2.5 text-sm outline-none focus:border-sky-500" />{loadingDolar && <Loader2 className="absolute right-3 size-4 animate-spin text-sky-500"/>}</div>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-xs text-zinc-500 font-bold">1 USD = $</span>
+                    <input type="number" value={cotizacionUsd} onChange={e => setCotizacionUsd(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-700 text-sky-400 font-bold rounded-xl pl-20 pr-3 py-2.5 text-sm outline-none focus:border-sky-500" />
+                    {loadingDolar && <Loader2 className="absolute right-3 size-4 animate-spin text-sky-500"/>}
+                  </div>
                 )}
               </div>
+
+              {/* RECARGO TARJETA SI CORRESPONDE */}
+              {isTarjeta && (
+                <div className="mb-3 bg-purple-500/10 border border-purple-500/30 p-3 rounded-xl flex items-center gap-2">
+                  <CreditCard className="size-4 text-purple-400"/>
+                  <select value={tipoRecargoTarjeta} onChange={e => setTipoRecargoTarjeta(e.target.value as any)} className="bg-zinc-950 text-purple-300 font-bold text-xs rounded-lg p-1.5 outline-none border border-zinc-800">
+                    <option value="porcentaje">Recargo %</option>
+                    <option value="monto">Recargo $ ARS</option>
+                  </select>
+                  <input type="number" value={recargoTarjeta} onChange={e => setRecargoTarjeta(e.target.value ? Number(e.target.value) : "")} placeholder="Ej: 10% de recargo" className="flex-1 bg-zinc-950 border border-purple-500/40 text-purple-300 font-bold text-xs rounded-lg px-3 py-1.5 outline-none" />
+                </div>
+              )}
               
               <div className="flex gap-2 mb-3 border-b border-zinc-800 pb-3">
                 <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value as any)} className="bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-xs outline-none focus:border-sky-500"><option value="monto">Monto USD</option><option value="porcentaje">%</option></select>
                 <input type="number" value={ajusteGlobal} onChange={e => setAjusteGlobal(e.target.value ? Number(e.target.value) : "")} placeholder="Ajuste Global (- Descuento)" className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
               </div>
               
-              {/* CAMPO DE INGRESO DEL MONO EN ARS / USD CON CONVERSIÓN EN TIEMPO REAL */}
+              {/* CAMPO DE INGRESO DEL MONTO EN ARS / USD CON CONVERSIÓN EN TIEMPO REAL */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="text-[10px] font-black uppercase text-emerald-500">Monto que abona el cliente</label>
