@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, Info, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2 } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import * as XLSX from 'xlsx';
@@ -59,7 +59,17 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [filtroBateriaMinima, setFiltroBateriaMinima] = useState("")
   const [filtroPrecioMaximo, setFiltroPrecioMaximo] = useState("")
 
-  const [exportOptions, setExportOptions] = useState({ bateria: true, imei: false, costo: false })
+  // 🚀 OPCIONES CONFIGURABLES DE EXPORTACIÓN
+  const [exportOptions, setExportOptions] = useState({
+    bateria: true,
+    imei: true,
+    costo: true,
+    precioMayorista: true,
+    precioMinorista: true,
+    estado: true,
+    comentarios: true
+  })
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchData = async () => {
@@ -85,7 +95,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 FILTRADO POR SUB-PESTAÑAS (DISPONIBLES / EN REPARACIÓN / VENDIDOS)
+  // 🚀 FILTRADO POR SUB-PESTAÑAS
   const equiposFiltrados = equipos.filter(eq => {
     if (activeSubTab === "disponibles" && (eq.estado === "Vendido" || eq.estado === "En Reparación")) return false
     if (activeSubTab === "reparacion" && eq.estado !== "En Reparación") return false
@@ -167,33 +177,40 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     document.body.removeChild(link)
   }
 
-  // EXPORTAR LISTA DE STOCK
+  // 🚀 EXPORTAR LISTA DE STOCK CON FORMATO DE SEGUNDA CAPTURA Y CONFIGURACIÓN DINÁMICA
   const ejecutarExportacion = () => {
-    const headers = ["Equipo", "Condicion"]
-    if (exportOptions.bateria) headers.push("Bateria")
-    if (exportOptions.imei) headers.push("IMEI")
-    if (exportOptions.costo) headers.push("Costo_USD")
-    headers.push("Precio_Mayorista_USD", "Precio_Minorista_USD")
+    const datosParaExportar = equiposFiltrados.map(eq => {
+      const partes = eq.equipo.split(" - ")
+      const modelo = partes[0] || eq.equipo
+      const capacidad = partes[1] || ""
+      const color = partes[2] || ""
 
-    const filas = equiposFiltrados.map(eq => {
-      const fila = [ `"${eq.equipo}"`, `"${eq.condicion || 'Nuevo'}"` ]
-      if (exportOptions.bateria) fila.push(`"${eq.bateria || ''}"`)
-      if (exportOptions.imei) fila.push(`"${eq.imei || ''}"`)
-      if (exportOptions.costo) fila.push(eq.costo_usd)
-      fila.push(eq.precio_venta_usd, eq.precio_minorista_usd || 0)
+      // Construcción del objeto fila respetando las columnas seleccionadas
+      const fila: any = {
+        "Tipo": "iPhone",
+        "Modelo": modelo,
+        "Capacidad": capacidad,
+        "Color": color
+      }
+
+      if (exportOptions.bateria) fila["Bateria"] = eq.bateria || ""
+      fila["Condicion"] = eq.condicion || "A"
+      if (exportOptions.imei) fila["IMEI"] = eq.imei || ""
+      if (exportOptions.costo) fila["Costo_Base_USD"] = eq.costo_usd || 0
+      if (exportOptions.precioMayorista) fila["Precio_Mayorista_USD"] = eq.precio_venta_usd || 0
+      if (exportOptions.precioMinorista) fila["Precio_Minorista_USD"] = eq.precio_minorista_usd || 0
+      if (exportOptions.estado) fila["Estado"] = eq.estado || "Disponible"
+      if (exportOptions.comentarios) fila["Comentarios"] = eq.observaciones || ""
+
       return fila
     })
 
-    const contenido = [headers.join(","), ...filas.map(e => e.join(","))].join("\n")
-    const blob = new Blob(["\uFEFF" + contenido], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    const nombreArchivo = `${exportOptions.costo ? "Copia_Seguridad" : "Lista_Precios"}_${activeSubTab}_${new Date().toISOString().split('T')[0]}.csv`
-    link.setAttribute("download", nombreArchivo)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const worksheet = XLSX.utils.json_to_sheet(datosParaExportar)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Hoja 1")
+
+    const nombreArchivo = `Lista_Precios_${activeSubTab}_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(workbook, nombreArchivo)
     setShowExportModal(false)
   }
 
@@ -785,27 +802,57 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL EXPORTAR */}
+      {/* 🚀 MODAL EXPORTAR CONFIGURABLE (ESTRUCTURA DE SEGUNDA CAPTURA) */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in text-left">
-          <div className="bg-[#121212] border border-zinc-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
-              <h3 className="text-xl font-black text-white flex items-center gap-2"><CheckSquare className="size-5 text-sky-400"/> Exportar Lista</h3>
+              <h3 className="text-xl font-black text-white flex items-center gap-2"><CheckSquare className="size-5 text-sky-400"/> Seleccionar Columnas a Exportar</h3>
               <button onClick={() => setShowExportModal(false)} className="text-zinc-500 hover:text-white p-2 rounded-xl bg-zinc-900 transition-colors"><X className="size-5"/></button>
             </div>
-            <div className="p-6 space-y-4 bg-[#161B22]">
-              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer">
+            
+            <div className="p-6 space-y-3 bg-[#161B22] max-h-[70vh] overflow-y-auto">
+              <p className="text-xs text-zinc-400 mb-2">Elegí qué datos incluir en la planilla Excel (.xlsx):</p>
+
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">Batería (%)</span>
                 <input type="checkbox" checked={exportOptions.bateria} onChange={e => setExportOptions({...exportOptions, bateria: e.target.checked})} className="size-5 accent-sky-500" />
-                <span className="text-sm font-bold text-white">Batería</span>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl cursor-pointer">
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">IMEI / N° Serie</span>
                 <input type="checkbox" checked={exportOptions.imei} onChange={e => setExportOptions({...exportOptions, imei: e.target.checked})} className="size-5 accent-sky-500" />
-                <span className="text-sm font-bold text-white">IMEI</span>
               </label>
 
-              <button onClick={ejecutarExportacion} className="w-full mt-2 bg-sky-500 hover:bg-sky-400 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2">
-                <Download className="size-5" /> Descargar CSV
+              {puedeVerCosto && (
+                <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                  <span className="text-sm font-bold text-white">Costo Base (USD)</span>
+                  <input type="checkbox" checked={exportOptions.costo} onChange={e => setExportOptions({...exportOptions, costo: e.target.checked})} className="size-5 accent-sky-500" />
+                </label>
+              )}
+
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">Precio Mayorista (USD)</span>
+                <input type="checkbox" checked={exportOptions.precioMayorista} onChange={e => setExportOptions({...exportOptions, precioMayorista: e.target.checked})} className="size-5 accent-sky-500" />
+              </label>
+
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">Precio Minorista (USD)</span>
+                <input type="checkbox" checked={exportOptions.precioMinorista} onChange={e => setExportOptions({...exportOptions, precioMinorista: e.target.checked})} className="size-5 accent-sky-500" />
+              </label>
+
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">Estado (Disponible / Vendido)</span>
+                <input type="checkbox" checked={exportOptions.estado} onChange={e => setExportOptions({...exportOptions, estado: e.target.checked})} className="size-5 accent-sky-500" />
+              </label>
+
+              <label className="flex items-center justify-between p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                <span className="text-sm font-bold text-white">Comentarios / Notas</span>
+                <input type="checkbox" checked={exportOptions.comentarios} onChange={e => setExportOptions({...exportOptions, comentarios: e.target.checked})} className="size-5 accent-sky-500" />
+              </label>
+
+              <button onClick={ejecutarExportacion} className="w-full mt-4 bg-sky-500 hover:bg-sky-400 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 active:scale-95 transition-all">
+                <Download className="size-5" /> Descargar Excel (.xlsx)
               </button>
             </div>
           </div>
