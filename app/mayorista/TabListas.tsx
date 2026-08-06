@@ -3,7 +3,7 @@ import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, Ba
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-export function TabListas() {
+export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
   const [stockCrudo, setStockCrudo] = useState<any[]>([])
   const [pedidosCrudos, setPedidosCrudos] = useState<any[]>([])
   const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
@@ -11,7 +11,7 @@ export function TabListas() {
   
   // CONTROLES DE LISTA
   const [tipoPrecio, setTipoPrecio] = useState<"mayorista" | "minorista">("minorista")
-  const [origenStock, setOrigenStock] = useState<"disponible" | "ingresando">("disponible")
+  const [origenStock, setOrigenStock] = useState<"disponible" | "ingresando">("ingresando")
   
   const [mostrarBateria, setMostrarBateria] = useState(true)
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
@@ -23,15 +23,11 @@ export function TabListas() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Traemos el stock físico disponible
-    const { data: stockData } = await supabase.from("stock_mayorista")
-      .select("*")
-      .in("estado", ["Disponible", "En Tránsito", "En Camino"])
+    // 1. Traer stock físico
+    const { data: stockData } = await supabase.from("stock_mayorista").select("*")
     
-    // 2. 🚀 Traemos los pedidos en tránsito / ingresando
-    const { data: pedidosData } = await supabase.from("pedidos_mayorista")
-      .select("*")
-      .neq("estado", "Recibido") // Trae los que están pendientes o en camino
+    // 2. Traer lotes/pedidos de compra
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*")
 
     if (stockData) setStockCrudo(stockData)
     if (pedidosData) setPedidosCrudos(pedidosData)
@@ -54,68 +50,101 @@ export function TabListas() {
     }
   }, [tipoPrecio, origenStock])
 
-  // AGRUPACIÓN DINÁMICA (SOPORTA DISPONIBLE Y PEDIDOS INGRESANDO)
+  // 🚀 AGRUPACIÓN Y DESGLOSE COMPLETO DE EQUIPOS
   useEffect(() => {
     let listaAProcesar: any[] = []
 
     if (origenStock === "disponible") {
-      listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible")
+      // Filtrar únicamente los disponibles y LIMPIAR los ítems genéricos de $0
+      listaAProcesar = stockCrudo.filter(item => 
+        String(item.estado).toLowerCase() === "disponible" && 
+        item.equipo !== "Equipo en Camino" && 
+        Number(item.precio_venta_usd || 0) > 0
+      )
     } else {
-      // 🚀 PROCESAMOS LOS EQUIPOS DE LA TABLA PEDIDOS_MAYORISTA
-      const deStockEnCamino = stockCrudo.filter(item => item.estado === "En Tránsito" || item.estado === "En Camino")
+      // A) Equipos individuales marcados en camino en la tabla stock
+      const deStockEnCamino = stockCrudo.filter(item => 
+        (String(item.estado).toLowerCase().includes("tránsito") || String(item.estado).toLowerCase().includes("camino")) &&
+        item.equipo !== "Equipo en Camino" &&
+        Number(item.precio_venta_usd || 0) > 0
+      )
       
+      // B) Desglosar lotes de la tabla pedidos_mayorista
       const dePedidos: any[] = []
-      pedidosCrudos.forEach(p => {
-        // Adaptamos el objeto de pedido para que tenga las mismas claves de stock
-        const nombreEquipo = p.equipo || p.equipo_nombre || p.modelo || p.descripcion || "Equipo en Camino"
-        const cond = p.condicion || "Nuevo"
-        const bat = p.bateria || null
-        const pMay = Number(p.precio_venta_usd || p.precio_mayorista_usd || p.costo_usd || 0)
-        const pMin = Number(p.precio_minorista_usd || (pMay > 0 ? pMay + 50 : 0))
+      const lotesPendientes = pedidosCrudos.filter(p => String(p.estado).toLowerCase() !== "recibido")
 
-        dePedidos.push({
-          equipo: nombreEquipo,
-          condicion: cond,
-          bateria: bat,
-          precio_venta_usd: pMay,
-          precio_minorista_usd: pMin
-        })
+      lotesPendientes.forEach((lote: any) => {
+        let listaItems = lote.items
+
+        if (typeof listaItems === "string") {
+          try { listaItems = JSON.parse(listaItems) } catch (e) { listaItems = [] }
+        }
+
+        if (Array.isArray(listaItems) && listaItems.length > 0) {
+          listaItems.forEach((it: any) => {
+            const mod = it.modelo || it.equipo || it.titulo || "Equipo"
+            const cond = it.condicion || "Usado"
+            const costoUnitario = Number(it.costo_usd || it.precio_costo_usd || 0)
+            const precioVentaSugerido = Number(it.precio_sugerido_usd || it.precio_minorista_usd || it.precio_venta_usd || costoUnitario)
+            const cant = Number(it.cantidad) || 1
+
+            for (let i = 0; i < cant; i++) {
+              dePedidos.push({
+                equipo: mod,
+                condicion: cond,
+                bateria: it.bateria || null,
+                precio_venta_usd: costoUnitario,
+                precio_minorista_usd: precioVentaSugerido
+              })
+            }
+          })
+        } else if (lote.equipo || lote.titulo) {
+          dePedidos.push({
+            equipo: lote.equipo || lote.titulo,
+            condicion: lote.condicion || "Usado",
+            bateria: lote.bateria || null,
+            precio_venta_usd: Number(lote.costo_equipos_usd || 0),
+            precio_minorista_usd: Number(lote.precio_minorista_usd || lote.costo_equipos_usd || 0)
+          })
+        }
       })
 
       listaAProcesar = [...deStockEnCamino, ...dePedidos]
     }
 
-    // AGRUPAMOS
-    const grupos = listaAProcesar.reduce((acc: any, item: any) => {
-      const esNuevo = item.condicion?.toLowerCase().includes("nuevo")
+    // 🚀 AGRUPAR EQUIPOS POR MODELO, CONDICIÓN Y PRECIO
+    const grupos: Record<string, any> = {}
+
+    listaAProcesar.forEach((item: any) => {
+      const cond = item.condicion || "Usado"
+      const esNuevo = String(cond).toLowerCase().includes("nuevo")
       const bateriaKey = (mostrarBateria && !esNuevo) ? (item.bateria || 'N/A') : 'MIXTA'
       
       const precioAsignado = tipoPrecio === "minorista" 
-        ? (item.precio_minorista_usd || item.precio_venta_usd || 0) 
-        : (item.precio_venta_usd || 0)
+        ? Number(item.precio_minorista_usd || item.precio_venta_usd || 0) 
+        : Number(item.precio_venta_usd || 0)
       
-      const key = `${item.equipo}-${item.condicion}-${precioAsignado}-${bateriaKey}`
-      
-      if (!acc[key]) {
-        acc[key] = {
+      const key = `${item.equipo}-${cond}-${precioAsignado}-${bateriaKey}`
+
+      if (!grupos[key]) {
+        grupos[key] = {
           id_group: key,
           equipo: item.equipo,
-          condicion: item.condicion || "Nuevo",
+          condicion: cond,
           precio: precioAsignado,
           bateria: (mostrarBateria && !esNuevo) ? item.bateria : null,
           cantidad: 1
         }
       } else {
-        acc[key].cantidad += 1
+        grupos[key].cantidad += 1
       }
-      return acc
-    }, {})
+    })
 
-    const arrayAgrupado = Object.values(grupos) as any[]
-    arrayAgrupado.sort((a, b) => a.equipo.localeCompare(b.equipo))
+    const arrayAgrupado = Object.values(grupos)
+    arrayAgrupado.sort((a: any, b: any) => a.equipo.localeCompare(b.equipo))
     
     setStockAgrupado(arrayAgrupado)
-    setSeleccionados(new Set(arrayAgrupado.map(g => g.id_group)))
+    setSeleccionados(new Set(arrayAgrupado.map((g: any) => g.id_group)))
   }, [stockCrudo, pedidosCrudos, mostrarBateria, tipoPrecio, origenStock])
 
   const toggleSeleccion = (id_group: string) => {
@@ -129,8 +158,8 @@ export function TabListas() {
   const generarTextoWhatsApp = () => {
     const equiposFiltrados = stockAgrupado.filter(g => seleccionados.has(g.id_group))
     
-    const nuevos = equiposFiltrados.filter(g => g.condicion.toLowerCase().includes("nuevo"))
-    const usados = equiposFiltrados.filter(g => !g.condicion.toLowerCase().includes("nuevo"))
+    const nuevos = equiposFiltrados.filter(g => String(g.condicion).toLowerCase().includes("nuevo"))
+    const usados = equiposFiltrados.filter(g => !String(g.condicion).toLowerCase().includes("nuevo"))
 
     let mensaje = `${encabezado.trim()}\n\n`
 
