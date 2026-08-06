@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User } from "lucide-react"
+import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User, ArrowRightLeft } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
@@ -23,7 +23,10 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [carrito, setCarrito] = useState<any[]>([])
   const [equipoSeleccionadoId, setEquipoSeleccionadoId] = useState("")
   const [precioItem, setPrecioItem] = useState("")
-  const [montoAbonado, setMontoAbonado] = useState<number | "">("")
+  
+  // ESTADOS DE PAGO (ARS / USD)
+  const [montoAbonadoInput, setMontoAbonadoInput] = useState<number | "">("")
+  const [monedaAbonada, setMonedaAbonada] = useState<"USD" | "ARS">("USD")
 
   // ESTADOS DE DESCUENTO GLOBAL
   const [ajusteGlobal, setAjusteGlobal] = useState<number | "">("")
@@ -80,11 +83,28 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const totalVentaFinal = totalVentaBase + montoAjusteGlobal
   
   const isPagoPesos = formaPago.includes("ARS")
-  const totalPesos = isPagoPesos ? totalVentaFinal * cotizacionUsd : 0
+  const totalPesos = isPagoPesos && cotizacionUsd > 0 ? totalVentaFinal * cotizacionUsd : 0
 
+  // CAMBIO DE MONEDA DE PAGO SEGÚN FORMA SELECCIONADA
   useEffect(() => {
-    setMontoAbonado(totalVentaFinal > 0 ? totalVentaFinal : "")
-  }, [totalVentaFinal])
+    if (isPagoPesos) {
+      setMonedaAbonada("ARS")
+      setMontoAbonadoInput(totalPesos > 0 ? Math.round(totalPesos) : "")
+    } else {
+      setMonedaAbonada("USD")
+      setMontoAbonadoInput(totalVentaFinal > 0 ? totalVentaFinal : "")
+    }
+  }, [formaPago, totalVentaFinal, cotizacionUsd])
+
+  // CÁLCULO DE DÓLARES REALES ENTREGADOS
+  const montoAbonadoNum = Number(montoAbonadoInput) || 0
+  const pagoRealUSD = monedaAbonada === "ARS" && cotizacionUsd > 0 
+    ? (montoAbonadoNum / cotizacionUsd) 
+    : montoAbonadoNum
+
+  const pagoRealARS = monedaAbonada === "ARS" 
+    ? montoAbonadoNum 
+    : (pagoRealUSD * cotizacionUsd)
 
   // LÓGICA DEL HISTORIAL
   const ventasFiltradas = ventas.filter(v => {
@@ -116,7 +136,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     }
     return acc
   }, {})).sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-
 
   const handleAnularVenta = async (venta: any) => {
     if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en tu stock automáticamente.`)) return
@@ -152,16 +171,16 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  // 🖨️ PDF REMITO/PRESUPUESTO ENCUADRADO CON DETALLE PESOS Y DÓLARES
+  // 🖨️ GENERADOR PDF DÓLARES Y PESOS
   const generarPDF = (
     tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
     listaItems: any[], 
     nombreCliente: string, 
-    totalFacturado: number, 
-    ajuste: number, 
+    totalFacturadoUsd: number, 
+    ajusteUsd: number, 
     fPago: string, 
     cotizacion: number,
-    pagadoUsuario?: number
+    pagadoUsdCalculado: number
   ) => {
     try {
       const doc = new jsPDF()
@@ -189,25 +208,24 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       // @ts-ignore
       let finalY = doc.lastAutoTable.finalY + 10
 
-      // TOTALES Y RECARGOS
+      // TOTALES
       doc.setFontSize(10); doc.setFont("helvetica", "normal")
-      if (ajuste !== 0) {
-        doc.text(ajuste > 0 ? `Recargo Adicional: U$D ${ajuste.toFixed(2)}` : `Descuento Especial: U$D ${Math.abs(ajuste).toFixed(2)}`, 130, finalY)
+      if (ajusteUsd !== 0) {
+        doc.text(ajusteUsd > 0 ? `Recargo Adicional: U$D ${ajusteUsd.toFixed(2)}` : `Descuento Especial: U$D ${Math.abs(ajusteUsd).toFixed(2)}`, 130, finalY)
         finalY += 6
       }
       
       doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
-      doc.text(`TOTAL FACTURA: U$D ${totalFacturado.toFixed(2)}`, 130, finalY)
+      doc.text(`TOTAL FACTURA: U$D ${totalFacturadoUsd.toFixed(2)}`, 130, finalY)
 
       finalY += 12
 
-      // 📦 ENCUADRE DE PAGOS Y CONVERSIÓN DE PESOS / DÓLARES
-      const pagadoRealUsd = pagadoUsuario !== undefined ? pagadoUsuario : totalFacturado
-      const saldoDiferenciaUsd = pagadoRealUsd - totalFacturado
+      // ENCUADRE DE PAGOS
+      const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
       const esEnPesos = fPago.includes("ARS") && cotizacion > 0
 
-      const totalFacturaArs = esEnPesos ? totalFacturado * cotizacion : 0
-      const totalAbonadoArs = esEnPesos ? pagadoRealUsd * cotizacion : 0
+      const totalFacturaArs = esEnPesos ? totalFacturadoUsd * cotizacion : 0
+      const totalAbonadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
       const saldoDiferenciaArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
 
       doc.setFillColor(245, 247, 250)
@@ -219,7 +237,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
       doc.setFontSize(9); doc.setFont("helvetica", "normal")
       doc.text(`Medio de Pago: ${fPago}`, 20, finalY + 15)
-      doc.text(`Monto Abonado Hoy: U$D ${pagadoRealUsd.toFixed(2)}`, 20, finalY + 21)
+      doc.text(`Monto Abonado Hoy: U$D ${pagadoUsdCalculado.toFixed(2)}`, 20, finalY + 21)
 
       if (esEnPesos) {
         doc.setFont("helvetica", "bold")
@@ -228,17 +246,17 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         doc.text(`Monto Abonado en Pesos: $ ${totalAbonadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 20, finalY + 33)
       }
 
-      // CONDICIONAL DE SALDO
+      // ESTADO DE SALDO
       const posTextY = finalY + (esEnPesos ? 41 : 28)
       doc.setFont("helvetica", "bold")
 
-      if (saldoDiferenciaUsd < 0) {
+      if (saldoDiferenciaUsd < -0.01) {
         doc.setTextColor(220, 38, 38) // Rojo
         const msjDeuda = esEnPesos 
           ? `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoDiferenciaArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
           : `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
         doc.text(msjDeuda, 20, posTextY)
-      } else if (saldoDiferenciaUsd > 0) {
+      } else if (saldoDiferenciaUsd > 0.01) {
         doc.setTextColor(16, 185, 129) // Verde
         const msjAFavor = esEnPesos
           ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoDiferenciaArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
@@ -249,7 +267,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         doc.text("ESTADO: COMPROBANTE SALDADO (100% Abonado)", 20, posTextY)
       }
 
-      doc.setTextColor(0, 0, 0) // Restaurar color negro
+      doc.setTextColor(0, 0, 0)
 
       if (tipoDocumento === "PRESUPUESTO") {
         doc.setFontSize(9); doc.setFont("helvetica", "italic")
@@ -269,10 +287,10 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const handlePresupuesto = () => {
     if (carrito.length === 0) return alert("El carrito está vacío.")
-    generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd)
+    generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
   }
 
-  // CERRAR VENTA Y GUARDAR PAGO REAL
+  // CERRAR VENTA
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -288,10 +306,9 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         clienteIdFinal = newClient.id
       }
 
-      const pagoReal = Number(montoAbonado) || 0
-      const diferencia = pagoReal - totalVentaFinal
+      const diferencia = pagoRealUSD - totalVentaFinal
 
-      if (clienteIdFinal && clienteIdFinal !== "" && diferencia !== 0) {
+      if (clienteIdFinal && clienteIdFinal !== "" && Math.abs(diferencia) > 0.01) {
         const { data: cliActual } = await supabase.from("clientes_mayorista").select("saldo_usd").eq("id", clienteIdFinal).single()
         const saldoAnterior = Number(cliActual?.saldo_usd || 0)
         await supabase.from("clientes_mayorista").update({ saldo_usd: saldoAnterior + diferencia }).eq("id", clienteIdFinal)
@@ -309,7 +326,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           equipo_nombre: item.equipo, 
           cliente: nombreCliente,
           monto_vendido_usd: precioItemConAjuste, 
-          monto_abonado: pagoReal / carrito.length,
+          monto_abonado: pagoRealUSD / carrito.length,
           ganancia_usd: precioItemConAjuste - costoItem,
           vendedor: usuarioActual.nombre, 
           forma_pago: formaPago,
@@ -324,11 +341,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      if (pagoReal > 0) {
+      if (pagoRealUSD > 0) {
         await supabase.from("caja_mayorista").insert([{
           tipo: "Ingreso",
           categoria: "Venta",
-          monto: pagoReal,
+          monto: pagoRealUSD,
           metodo_pago: formaPago === "Efectivo USD" ? "Efectivo" : (formaPago === "USDT" ? "USDT" : "Transferencia"),
           descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
           usuario: usuarioActual.nombre,
@@ -336,10 +353,10 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         }])
       }
 
-      generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoReal)
-      alert(`✅ ¡Venta registrada exitosamente!\n${diferencia < 0 ? `El cliente quedó con una deuda de USD ${Math.abs(diferencia).toFixed(2)}.` : diferencia > 0 ? `El cliente quedó con un saldo a favor de USD ${diferencia.toFixed(2)}.` : 'El pago fue exacto.'}`)
+      generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
+      alert(`✅ ¡Venta registrada exitosamente!\n${diferencia < -0.01 ? `El cliente quedó con una deuda de USD ${Math.abs(diferencia).toFixed(2)}.` : diferencia > 0.01 ? `El cliente quedó con un saldo a favor de USD ${diferencia.toFixed(2)}.` : 'El pago fue exacto.'}`)
       
-      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonado("")
+      setCarrito([]); setClienteId(""); setClienteNombreNuevo(""); setAjusteGlobal(""); setFormaPago("Efectivo USD"); setMontoAbonadoInput("")
       fetchData()
     } catch (error: any) { 
       alert("Error en el sistema: " + error.message) 
@@ -354,7 +371,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       {/* 🛒 PANEL IZQUIERDO: PUNTO DE VENTA (POS) */}
       <div className="p-6 border-b xl:border-b-0 xl:border-r border-zinc-800 bg-[#161B22] flex flex-col h-full">
         
-        {/* CABECERA CON SELECTOR DE TARIFA (MINORISTA / MAYORISTA) */}
+        {/* CABECERA CON SELECTOR DE TARIFA */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
           <h3 className="text-xl font-black text-emerald-400 flex items-center gap-2"><ShoppingCart className="size-5"/> Caja Rápida B2B</h3>
           
@@ -453,17 +470,53 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   <div className="relative flex items-center"><span className="absolute left-3 text-xs text-zinc-500 font-bold">1 USD = $</span><input type="number" value={cotizacionUsd} onChange={e => setCotizacionUsd(Number(e.target.value))} className="w-full bg-zinc-950 border border-zinc-700 text-sky-400 font-bold rounded-xl pl-20 pr-3 py-2.5 text-sm outline-none focus:border-sky-500" />{loadingDolar && <Loader2 className="absolute right-3 size-4 animate-spin text-sky-500"/>}</div>
                 )}
               </div>
+              
               <div className="flex gap-2 mb-3 border-b border-zinc-800 pb-3">
                 <select value={tipoAjuste} onChange={(e) => setTipoAjuste(e.target.value as any)} className="bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-xs outline-none focus:border-sky-500"><option value="monto">Monto USD</option><option value="porcentaje">%</option></select>
                 <input type="number" value={ajusteGlobal} onChange={e => setAjusteGlobal(e.target.value ? Number(e.target.value) : "")} placeholder="Ajuste Global (- Descuento)" className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
               </div>
               
+              {/* CAMPO DE INGRESO DEL MONO EN ARS / USD CON CONVERSIÓN EN TIEMPO REAL */}
               <div>
-                <label className="text-[10px] font-black uppercase text-emerald-500 block mb-1">Monto que abona el cliente (USD)</label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
-                  <input type="number" step="0.01" value={montoAbonado} onChange={e => setMontoAbonado(e.target.value ? Number(e.target.value) : "")} className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" />
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-[10px] font-black uppercase text-emerald-500">Monto que abona el cliente</label>
+                  {isPagoPesos && (
+                    <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+                      <button type="button" onClick={() => {
+                        setMonedaAbonada("ARS")
+                        setMontoAbonadoInput(totalPesos > 0 ? Math.round(totalPesos) : "")
+                      }} className={cn("px-2 py-0.5 text-[9px] font-black rounded uppercase transition-colors", monedaAbonada === "ARS" ? "bg-emerald-500 text-black" : "text-zinc-400 hover:text-white")}>ARS ($)</button>
+                      <button type="button" onClick={() => {
+                        setMonedaAbonada("USD")
+                        setMontoAbonadoInput(totalVentaFinal > 0 ? totalVentaFinal : "")
+                      }} className={cn("px-2 py-0.5 text-[9px] font-black rounded uppercase transition-colors", monedaAbonada === "USD" ? "bg-emerald-500 text-black" : "text-zinc-400 hover:text-white")}>USD (U$D)</button>
+                    </div>
+                  )}
                 </div>
+
+                <div className="relative">
+                  {monedaAbonada === "ARS" ? (
+                    <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-400" />
+                  ) : (
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
+                  )}
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    value={montoAbonadoInput} 
+                    onChange={e => setMontoAbonadoInput(e.target.value ? Number(e.target.value) : "")} 
+                    placeholder={monedaAbonada === "ARS" ? "Monto en Pesos ARS" : "Monto en USD"}
+                    className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black text-lg rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" 
+                  />
+                </div>
+
+                {monedaAbonada === "ARS" && cotizacionUsd > 0 && (
+                  <div className="mt-2 bg-zinc-950 p-2.5 rounded-xl border border-zinc-800 flex justify-between items-center text-xs">
+                    <span className="text-zinc-400 flex items-center gap-1.5 font-bold"><ArrowRightLeft className="size-3.5 text-emerald-400"/> Equivalente en Dólares:</span>
+                    <span className="font-black text-emerald-400 text-sm">U$D {pagoRealUSD.toFixed(2)}</span>
+                  </div>
+                )}
+
                 <p className="text-[9px] text-zinc-500 mt-1.5 leading-tight">
                   Si paga menos del total, la diferencia se anotará como deuda en la cuenta del cliente.
                 </p>
@@ -473,11 +526,11 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl animate-in slide-in-from-bottom-4">
               <div className="flex justify-between items-end mb-4 border-b border-emerald-500/20 pb-4">
                 <div><p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Total Factura</p><p className="text-3xl font-black text-emerald-400">U$D {totalVentaFinal.toFixed(2)}</p></div>
-                <div className="text-right"><p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">A Caja</p><p className="text-lg font-black text-emerald-500">U$D {Number(montoAbonado || 0).toFixed(2)}</p></div>
+                <div className="text-right"><p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">A Caja</p><p className="text-lg font-black text-emerald-500">U$D {pagoRealUSD.toFixed(2)}</p></div>
               </div>
               {isPagoPesos && (
                 <div className="flex justify-between items-center bg-emerald-500/20 p-3 rounded-xl mb-4">
-                  <div className="flex items-center gap-2"><Banknote className="size-5 text-emerald-400"/><span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Equivalente Pesos</span></div>
+                  <div className="flex items-center gap-2"><Banknote className="size-5 text-emerald-400"/><span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Equivalente Pesos Factura</span></div>
                   <p className="text-xl font-black text-emerald-400">$ {totalPesos.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               )}
