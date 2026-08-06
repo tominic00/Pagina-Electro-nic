@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers } from "lucide-react"
+import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
@@ -11,6 +11,9 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [clientesDb, setClientesDb] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // TIPO DE TARIFA (MINORISTA / MAYORISTA)
+  const [tipoTarifa, setTipoTarifa] = useState<"minorista" | "mayorista">("minorista")
 
   // ESTADOS DEL CLIENTE
   const [clienteId, setClienteId] = useState("") 
@@ -149,7 +152,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  // 🖨️ PDF REMITO/PRESUPUESTO ENCUADRADO Y CON ESTADO DE PAGO
+  // 🖨️ PDF REMITO/PRESUPUESTO ENCUADRADO CON DETALLE PESOS Y DÓLARES
   const generarPDF = (
     tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
     listaItems: any[], 
@@ -165,7 +168,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       
       // ENCABEZADO
       doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("Electro·Nic", 14, 20)
-      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("División Mayorista B2B", 14, 26); doc.text("Tucumán, Argentina", 14, 31)
+      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("Celulares, Accesorios y Tecnología", 14, 26); doc.text("Tucumán, Argentina", 14, 31)
       doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text(`${tipoDocumento} N° ${Math.floor(Math.random() * 10000)}`, 130, 20)
       doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 130, 26); doc.text(`Cliente: ${nombreCliente}`, 130, 31); doc.text(`Atendido por: ${usuarioActual?.nombre || "Vendedor"}`, 130, 36)
       doc.line(14, 42, 196, 42) 
@@ -198,40 +201,55 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
       finalY += 12
 
-      // 📦 ENCUADRE DE PAGOS Y ESTADO DE CUENTA
-      if (tipoDocumento === "REMITO OFICIAL") {
-        const pagadoReal = pagadoUsuario !== undefined ? pagadoUsuario : totalFacturado
-        const saldoDiferencia = pagadoReal - totalFacturado
+      // 📦 ENCUADRE DE PAGOS Y CONVERSIÓN DE PESOS / DÓLARES
+      const pagadoRealUsd = pagadoUsuario !== undefined ? pagadoUsuario : totalFacturado
+      const saldoDiferenciaUsd = pagadoRealUsd - totalFacturado
+      const esEnPesos = fPago.includes("ARS") && cotizacion > 0
 
-        doc.setFillColor(245, 247, 250)
-        doc.setDrawColor(200, 205, 210)
-        doc.roundedRect(14, finalY, 182, 35, 3, 3, "FD")
+      const totalFacturaArs = esEnPesos ? totalFacturado * cotizacion : 0
+      const totalAbonadoArs = esEnPesos ? pagadoRealUsd * cotizacion : 0
+      const saldoDiferenciaArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
 
-        doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
-        doc.text("ESTADO DE COBRO Y SALDO OPERACIÓN", 20, finalY + 8)
+      doc.setFillColor(245, 247, 250)
+      doc.setDrawColor(200, 205, 210)
+      doc.roundedRect(14, finalY, 182, esEnPesos ? 48 : 36, 3, 3, "FD")
 
-        doc.setFontSize(9); doc.setFont("helvetica", "normal")
-        doc.text(`Monto Abonado Hoy: U$D ${pagadoReal.toFixed(2)} (${fPago})`, 20, finalY + 16)
+      doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
+      doc.text("ESTADO DE COBRO Y SALDO OPERACIÓN", 20, finalY + 8)
 
-        if (fPago.includes("ARS") && cotizacion > 0) {
-          doc.text(`Cotización Dólar: $${cotizacion} ARS/USD  |  Total ARS: $ ${(totalFacturado * cotizacion).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`, 20, finalY + 22)
-        }
+      doc.setFontSize(9); doc.setFont("helvetica", "normal")
+      doc.text(`Medio de Pago: ${fPago}`, 20, finalY + 15)
+      doc.text(`Monto Abonado Hoy: U$D ${pagadoRealUsd.toFixed(2)}`, 20, finalY + 21)
 
-        // CONDICIONAL DE SALDO
+      if (esEnPesos) {
         doc.setFont("helvetica", "bold")
-        if (saldoDiferencia < 0) {
-          doc.setTextColor(220, 38, 38) // Rojo
-          doc.text(`PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferencia).toFixed(2)}`, 20, finalY + 29)
-        } else if (saldoDiferencia > 0) {
-          doc.setTextColor(16, 185, 129) // Verde
-          doc.text(`SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferencia.toFixed(2)}`, 20, finalY + 29)
-        } else {
-          doc.setTextColor(16, 185, 129)
-          doc.text("ESTADO: COMPROBANTE SALDADO (100% Abonado)", 20, finalY + 29)
-        }
-
-        doc.setTextColor(0, 0, 0) // Restaurar color negro
+        doc.text(`Cotización Dólar: $ ${cotizacion.toLocaleString("es-AR")} ARS/USD`, 110, finalY + 15)
+        doc.text(`Total Factura en Pesos: $ ${totalFacturaArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 20, finalY + 27)
+        doc.text(`Monto Abonado en Pesos: $ ${totalAbonadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 20, finalY + 33)
       }
+
+      // CONDICIONAL DE SALDO
+      const posTextY = finalY + (esEnPesos ? 41 : 28)
+      doc.setFont("helvetica", "bold")
+
+      if (saldoDiferenciaUsd < 0) {
+        doc.setTextColor(220, 38, 38) // Rojo
+        const msjDeuda = esEnPesos 
+          ? `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoDiferenciaArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+          : `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
+        doc.text(msjDeuda, 20, posTextY)
+      } else if (saldoDiferenciaUsd > 0) {
+        doc.setTextColor(16, 185, 129) // Verde
+        const msjAFavor = esEnPesos
+          ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoDiferenciaArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+          : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
+        doc.text(msjAFavor, 20, posTextY)
+      } else {
+        doc.setTextColor(16, 185, 129)
+        doc.text("ESTADO: COMPROBANTE SALDADO (100% Abonado)", 20, posTextY)
+      }
+
+      doc.setTextColor(0, 0, 0) // Restaurar color negro
 
       if (tipoDocumento === "PRESUPUESTO") {
         doc.setFontSize(9); doc.setFont("helvetica", "italic")
@@ -291,7 +309,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           equipo_nombre: item.equipo, 
           cliente: nombreCliente,
           monto_vendido_usd: precioItemConAjuste, 
-          monto_abonado: pagoReal / carrito.length, // Se guarda la porción del pago
+          monto_abonado: pagoReal / carrito.length,
           ganancia_usd: precioItemConAjuste - costoItem,
           vendedor: usuarioActual.nombre, 
           forma_pago: formaPago,
@@ -335,7 +353,30 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       
       {/* 🛒 PANEL IZQUIERDO: PUNTO DE VENTA (POS) */}
       <div className="p-6 border-b xl:border-b-0 xl:border-r border-zinc-800 bg-[#161B22] flex flex-col h-full">
-        <h3 className="text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><ShoppingCart className="size-5"/> Caja Rápida B2B</h3>
+        
+        {/* CABECERA CON SELECTOR DE TARIFA (MINORISTA / MAYORISTA) */}
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+          <h3 className="text-xl font-black text-emerald-400 flex items-center gap-2"><ShoppingCart className="size-5"/> Caja Rápida B2B</h3>
+          
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            <button 
+              onClick={() => setTipoTarifa("minorista")} 
+              className={cn("px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5", 
+                tipoTarifa === "minorista" ? "bg-purple-500/20 text-purple-400 border border-purple-500/30 shadow-md" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <User className="size-3.5"/> Minorista
+            </button>
+            <button 
+              onClick={() => setTipoTarifa("mayorista")} 
+              className={cn("px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5", 
+                tipoTarifa === "mayorista" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-md" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <Store className="size-3.5"/> Mayorista
+            </button>
+          </div>
+        </div>
         
         <div className="mb-6 space-y-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
           <label className="text-[10px] font-black uppercase text-zinc-500 flex items-center gap-2"><Users className="size-3"/> Asignar Cliente</label>
@@ -354,10 +395,24 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-6">
           <form onSubmit={handleAgregarAlCarrito} className="space-y-4">
             <div>
-              <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Buscar y Escanear Equipo</label>
-              <select required value={equipoSeleccionadoId} onChange={e => { setEquipoSeleccionadoId(e.target.value); const eq = stockDisponible.find(x => x.id === e.target.value); if(eq) setPrecioItem(eq.precio_venta_usd); }} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm outline-none focus:border-emerald-500">
+              <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Buscar y Escanear Equipo ({tipoTarifa.toUpperCase()})</label>
+              <select required value={equipoSeleccionadoId} onChange={e => { 
+                setEquipoSeleccionadoId(e.target.value); 
+                const eq = stockDisponible.find(x => x.id === e.target.value); 
+                if(eq) {
+                  const pVal = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
+                  setPrecioItem(String(pVal))
+                } 
+              }} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm outline-none focus:border-emerald-500">
                 <option value="">-- Seleccionar Equipo del Stock --</option>
-                {stockDisponible.map(eq => <option key={eq.id} value={eq.id}>{eq.equipo} ({eq.condicion}) - IMEI: {eq.imei || "S/N"}</option>)}
+                {stockDisponible.map(eq => {
+                  const pMostrar = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
+                  return (
+                    <option key={eq.id} value={eq.id}>
+                      {eq.equipo} ({eq.condicion}) - U$D {pMostrar} - IMEI: {eq.imei || "S/N"}
+                    </option>
+                  )
+                })}
               </select>
             </div>
             <div className="flex gap-3 items-end">
