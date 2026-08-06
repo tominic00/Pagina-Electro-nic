@@ -23,21 +23,31 @@ export function TabListas() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Traemos el stock físico disponible
-    const { data: stockData } = await supabase.from("stock_mayorista")
-      .select("*")
-      .in("estado", ["Disponible", "En Tránsito", "En Camino"])
+    // 1. Stock individual
+    const { data: stockData } = await supabase.from("stock_mayorista").select("*")
     
-    // 2. Traemos las órdenes/lotes de compra pendientes
-    const { data: pedidosData } = await supabase.from("pedidos_mayorista")
-      .select("*")
-      .neq("estado", "Recibido")
+    // 2. Intento A: Pedidos_mayorista
+    const { data: pedidosData, error: errA } = await supabase.from("pedidos_mayorista").select("*")
+    
+    // 3. Intento B: Si se llamaba distinto (pedidos)
+    const { data: pedidosDataB, error: errB } = await supabase.from("pedidos").select("*")
 
-    if (stockData) setStockCrudo(stockData)
-    if (pedidosData) setPedidosCrudos(pedidosData)
+    console.log("🔍 DIAGNÓSTICO DE BASE DE DATOS:")
+    console.log("1. Stock crudo traído:", stockData)
+    console.log("2. Pedidos_mayorista traídos:", pedidosData, "Error A:", errA)
+    console.log("3. Pedidos (tabla simple) traídos:", pedidosDataB, "Error B:", errB)
+
+    // Fusionamos los pedidos que hayan devuelto datos
+    const pedidosReales = (pedidosData && pedidosData.length > 0) ? pedidosData : (pedidosDataB || [])
+
+    // 🚀 FILTRO IMPORTANTE: Ignoramos el ítem basura "Equipo en Camino" de $0 que está en el stock
+    const stockLimpio = (stockData || []).filter(eq => eq.equipo !== "Equipo en Camino" && eq.precio_venta_usd !== 0)
+
+    setStockCrudo(stockLimpio)
+    setPedidosCrudos(pedidosReales)
     setLoading(false)
   }
-
+  
   useEffect(() => { fetchData() }, [])
 
   // CAMBIO AUTOMÁTICO DE TEXTOS SEGÚN EL TIPO DE LISTA
