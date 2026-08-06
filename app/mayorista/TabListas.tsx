@@ -50,12 +50,11 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
     }
   }, [tipoPrecio, origenStock])
 
-  // 🚀 AGRUPACIÓN Y DESGLOSE COMPLETO DE EQUIPOS
+  // 🚀 AGRUPACIÓN Y DESGLOSE COMPLETO DE EQUIPOS CON PRECIOS CORREGIDOS
   useEffect(() => {
     let listaAProcesar: any[] = []
 
     if (origenStock === "disponible") {
-      // Filtrar únicamente los disponibles y LIMPIAR los ítems genéricos de $0
       listaAProcesar = stockCrudo.filter(item => 
         String(item.estado).toLowerCase() === "disponible" && 
         item.equipo !== "Equipo en Camino" && 
@@ -84,8 +83,12 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
           listaItems.forEach((it: any) => {
             const mod = it.modelo || it.equipo || it.titulo || "Equipo"
             const cond = it.condicion || "Usado"
-            const costoUnitario = Number(it.costo_usd || it.precio_costo_usd || 0)
-            const precioVentaSugerido = Number(it.precio_sugerido_usd || it.precio_minorista_usd || it.precio_venta_usd || costoUnitario)
+            const costoUnitario = Number(it.costo_usd || 0)
+            
+            // 🚀 CORRECCIÓN DE PRECIOS MAYORISTA Y MINORISTA
+            const precioMayoristaCalculado = Number(it.precio_sugerido_usd || (costoUnitario > 0 ? Math.round(costoUnitario * 1.15) : 0))
+            const precioMinoristaCalculado = Number(it.precio_minorista_usd || (precioMayoristaCalculado > 0 ? Math.round(precioMayoristaCalculado * 1.15) : 0))
+            
             const cant = Number(it.cantidad) || 1
 
             for (let i = 0; i < cant; i++) {
@@ -93,18 +96,22 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
                 equipo: mod,
                 condicion: cond,
                 bateria: it.bateria || null,
-                precio_venta_usd: costoUnitario,
-                precio_minorista_usd: precioVentaSugerido
+                precio_venta_usd: precioMayoristaCalculado,
+                precio_minorista_usd: precioMinoristaCalculado
               })
             }
           })
         } else if (lote.equipo || lote.titulo) {
+          const costoUnitario = Number(lote.costo_equipos_usd || 0)
+          const precioMayoristaCalculado = Number(lote.precio_sugerido_usd || (costoUnitario > 0 ? Math.round(costoUnitario * 1.15) : 0))
+          const precioMinoristaCalculado = Number(lote.precio_minorista_usd || (precioMayoristaCalculado > 0 ? Math.round(precioMayoristaCalculado * 1.15) : 0))
+
           dePedidos.push({
             equipo: lote.equipo || lote.titulo,
             condicion: lote.condicion || "Usado",
             bateria: lote.bateria || null,
-            precio_venta_usd: Number(lote.costo_equipos_usd || 0),
-            precio_minorista_usd: Number(lote.precio_minorista_usd || lote.costo_equipos_usd || 0)
+            precio_venta_usd: precioMayoristaCalculado,
+            precio_minorista_usd: precioMinoristaCalculado
           })
         }
       })
