@@ -171,7 +171,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  // 🖨️ GENERADOR PDF DÓLARES Y PESOS
+  // 🖨️ PDF ESTRUCTURADO COMO FACTURA REAL
   const generarPDF = (
     tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
     listaItems: any[], 
@@ -185,94 +185,140 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     try {
       const doc = new jsPDF()
       
-      // ENCABEZADO
+      // 1. ENCABEZADO FISCAL / EMPRESA
       doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("Electro·Nic", 14, 20)
-      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("Celulares, Accesorios y Tecnología", 14, 26); doc.text("Tucumán, Argentina", 14, 31)
-      doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text(`${tipoDocumento} N° ${Math.floor(Math.random() * 10000)}`, 130, 20)
-      doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 130, 26); doc.text(`Cliente: ${nombreCliente}`, 130, 31); doc.text(`Atendido por: ${usuarioActual?.nombre || "Vendedor"}`, 130, 36)
+      doc.setFontSize(10); doc.setFont("helvetica", "normal")
+      doc.text("Celulares, Accesorios y Tecnología", 14, 26)
+      doc.text("Tucumán, Argentina", 14, 31)
+
+      doc.setFontSize(14); doc.setFont("helvetica", "bold")
+      doc.text(`${tipoDocumento} N° ${Math.floor(Math.random() * 8999 + 1000)}`, 125, 20)
+      doc.setFontSize(9); doc.setFont("helvetica", "normal")
+      doc.text(`Fecha de emisión: ${new Date().toLocaleDateString()}`, 125, 26)
+      doc.text(`Cliente: ${nombreCliente}`, 125, 31)
+      doc.text(`Vendedor: ${usuarioActual?.nombre || "Atención al Cliente"}`, 125, 36)
+      
+      doc.setDrawColor(220, 225, 230)
       doc.line(14, 42, 196, 42) 
 
-      // TABLA DE PRODUCTOS
+      // 2. TABLA DE DETALLE DE ARTÍCULOS
       const columnas = ["Cant", "Descripción (Modelo)", "Condición", "IMEI / Serie", "Precio Unitario"]
-      const filas = listaItems.map(item => ["1", item.equipo || item.equipo_nombre, item.condicion || "---", item.imei || "---", `U$D ${item.precio_cerrado_usd || item.monto_vendido_usd}`])
+      const filas = listaItems.map(item => [
+        "1", 
+        item.equipo || item.equipo_nombre, 
+        item.condicion || "---", 
+        item.imei || "---", 
+        `U$D ${Number(item.precio_cerrado_usd || item.monto_vendido_usd).toFixed(2)}`
+      ])
+
       autoTable(doc, { 
         startY: 48, 
         head: [columnas], 
         body: filas, 
         theme: 'grid', 
-        headStyles: { fillColor: [16, 185, 129], textColor: 255 }, 
-        styles: { fontSize: 9 }, 
-        columnStyles: { 0: { halign: 'center' }, 4: { halign: 'right', fontStyle: 'bold' } } 
+        headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold' }, 
+        styles: { fontSize: 9, cellPadding: 3 }, 
+        columnStyles: { 
+          0: { halign: 'center', cellWidth: 15 }, 
+          2: { halign: 'center', cellWidth: 25 },
+          3: { cellWidth: 35 },
+          4: { halign: 'right', fontStyle: 'bold', cellWidth: 32 } 
+        } 
       })
       
       // @ts-ignore
-      let finalY = doc.lastAutoTable.finalY + 10
+      let finalY = doc.lastAutoTable.finalY + 8
 
-      // TOTALES
-      doc.setFontSize(10); doc.setFont("helvetica", "normal")
-      if (ajusteUsd !== 0) {
-        doc.text(ajusteUsd > 0 ? `Recargo Adicional: U$D ${ajusteUsd.toFixed(2)}` : `Descuento Especial: U$D ${Math.abs(ajusteUsd).toFixed(2)}`, 130, finalY)
-        finalY += 6
-      }
-      
-      doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
-      doc.text(`TOTAL FACTURA: U$D ${totalFacturadoUsd.toFixed(2)}`, 130, finalY)
-
-      finalY += 12
-
-      // ENCUADRE DE PAGOS
-      const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
+      // 3. BLOQUE DERECHO DE LIQUIDACIÓN Y TOTALES
+      const subtotalUsd = totalFacturadoUsd - ajusteUsd
       const esEnPesos = fPago.includes("ARS") && cotizacion > 0
-
       const totalFacturaArs = esEnPesos ? totalFacturadoUsd * cotizacion : 0
-      const totalAbonadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
-      const saldoDiferenciaArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
 
-      doc.setFillColor(245, 247, 250)
-      doc.setDrawColor(200, 205, 210)
-      doc.roundedRect(14, finalY, 182, esEnPesos ? 48 : 36, 3, 3, "FD")
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80)
+      
+      doc.text("Subtotal:", 135, finalY)
+      doc.text(`U$D ${subtotalUsd.toFixed(2)}`, 196, finalY, { align: "right" })
+      finalY += 5
 
-      doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
-      doc.text("ESTADO DE COBRO Y SALDO OPERACIÓN", 20, finalY + 8)
+      if (ajusteUsd !== 0) {
+        const txtAjuste = ajusteUsd > 0 ? "Recargo:" : "Descuento:"
+        doc.text(txtAjuste, 135, finalY)
+        doc.text(`U$D ${ajusteUsd.toFixed(2)}`, 196, finalY, { align: "right" })
+        finalY += 5
+      }
 
-      doc.setFontSize(9); doc.setFont("helvetica", "normal")
-      doc.text(`Medio de Pago: ${fPago}`, 20, finalY + 15)
-      doc.text(`Monto Abonado Hoy: U$D ${pagadoUsdCalculado.toFixed(2)}`, 20, finalY + 21)
+      doc.setDrawColor(200, 200, 200)
+      doc.line(135, finalY, 196, finalY)
+      finalY += 6
 
+      // TOTAL DESTACADO EN DÓLARES
+      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
+      doc.text("TOTAL FACTURA:", 120, finalY)
+      doc.setTextColor(16, 185, 129) // Verde Esmeralda
+      doc.text(`U$D ${totalFacturadoUsd.toFixed(2)}`, 196, finalY, { align: "right" })
+      finalY += 6
+
+      // CONVERSIÓN EN PESOS SI CORRESPONDE
       if (esEnPesos) {
-        doc.setFont("helvetica", "bold")
-        doc.text(`Cotización Dólar: $ ${cotizacion.toLocaleString("es-AR")} ARS/USD`, 110, finalY + 15)
-        doc.text(`Total Factura en Pesos: $ ${totalFacturaArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 20, finalY + 27)
-        doc.text(`Monto Abonado en Pesos: $ ${totalAbonadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS`, 20, finalY + 33)
-      }
-
-      // ESTADO DE SALDO
-      const posTextY = finalY + (esEnPesos ? 41 : 28)
-      doc.setFont("helvetica", "bold")
-
-      if (saldoDiferenciaUsd < -0.01) {
-        doc.setTextColor(220, 38, 38) // Rojo
-        const msjDeuda = esEnPesos 
-          ? `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoDiferenciaArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
-          : `PENDIENTE DE PAGO (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
-        doc.text(msjDeuda, 20, posTextY)
-      } else if (saldoDiferenciaUsd > 0.01) {
-        doc.setTextColor(16, 185, 129) // Verde
-        const msjAFavor = esEnPesos
-          ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoDiferenciaArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
-          : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
-        doc.text(msjAFavor, 20, posTextY)
+        doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(60, 60, 60)
+        doc.text(`TOTAL EN PESOS:`, 120, finalY)
+        doc.text(`$ ${totalFacturaArs.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ARS`, 196, finalY, { align: "right" })
+        
+        doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(120, 120, 120)
+        finalY += 4
+        doc.text(`(Tipo de cambio aplicado: $ ${cotizacion.toLocaleString("es-AR")} ARS / USD)`, 196, finalY, { align: "right" })
+        finalY += 6
       } else {
-        doc.setTextColor(16, 185, 129)
-        doc.text("ESTADO: COMPROBANTE SALDADO (100% Abonado)", 20, posTextY)
+        finalY += 4
       }
 
-      doc.setTextColor(0, 0, 0)
+      // 4. RESUMEN DE PAGO (SOLO EN REMITOS / COMPROBANTES DE PAGO)
+      if (tipoDocumento === "REMITO OFICIAL") {
+        const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
+        const pagadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
+        const saldoArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
 
+        doc.setDrawColor(220, 225, 230)
+        doc.setFillColor(250, 251, 253)
+        doc.roundedRect(14, finalY, 182, 32, 2, 2, "FD")
+
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(40, 40, 40)
+        doc.text("DESGLOSE DE PAGO Y LIQUIDACIÓN", 20, finalY + 7)
+
+        doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(70, 70, 70)
+        doc.text(`Forma de pago registrada: ${fPago}`, 20, finalY + 14)
+        
+        const txtAbonado = esEnPesos 
+          ? `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}  ($ ${pagadoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+          : `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}`
+        doc.text(txtAbonado, 20, finalY + 20)
+
+        // ESTADO DE LA DEUDA O SALDO
+        doc.setFont("helvetica", "bold")
+        if (saldoDiferenciaUsd < -0.01) {
+          doc.setTextColor(220, 38, 38) // Rojo
+          const msjDeuda = esEnPesos 
+            ? `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+            : `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
+          doc.text(msjDeuda, 20, finalY + 27)
+        } else if (saldoDiferenciaUsd > 0.01) {
+          doc.setTextColor(16, 185, 129) // Verde
+          const msjAFavor = esEnPesos
+            ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
+            : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
+          doc.text(msjAFavor, 20, finalY + 27)
+        } else {
+          doc.setTextColor(16, 185, 129)
+          doc.text("ESTADO: COMPROBANTE SALDADO EN SU TOTALIDAD (100%)", 20, finalY + 27)
+        }
+
+        doc.setTextColor(0, 0, 0)
+      }
+
+      // PIE DE PÁGINA COMERCIAL
       if (tipoDocumento === "PRESUPUESTO") {
-        doc.setFontSize(9); doc.setFont("helvetica", "italic")
-        doc.text("* Los precios expresados están sujetos a modificaciones sin previo aviso.", 14, 280)
-        doc.text("* Este documento no compromete reserva de stock.", 14, 285)
+        doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(120, 120, 120)
+        doc.text("* Documento no válido como factura. Precios y cotizaciones sujetos a variación.", 14, 280)
       }
 
       doc.save(`${tipoDocumento}_${nombreCliente.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`)
