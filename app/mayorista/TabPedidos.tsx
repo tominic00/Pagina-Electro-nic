@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, BatteryMedium, Users, Store, Truck, PackageCheck } from "lucide-react"
+import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, BatteryMedium, Users, Store, Truck, PackageCheck, Bug } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -23,10 +23,10 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Traemos todo el stock físico
+    // 1. Traer stock físico
     const { data: stockData } = await supabase.from("stock_mayorista").select("*")
     
-    // 2. Traemos todos los pedidos en camino/lotes de compra
+    // 2. Traer lotes/pedidos
     const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*")
 
     if (stockData) setStockCrudo(stockData)
@@ -50,27 +50,23 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
     }
   }, [tipoPrecio, origenStock])
 
-  // 🚀 AGRUPACIÓN DINÁMICA DE EQUIPOS
+  // AGRUPACIÓN DINÁMICA
   useEffect(() => {
     let listaAProcesar: any[] = []
 
     if (origenStock === "disponible") {
-      // Filtrar únicamente los disponibles y excluir ítems de prueba sin precio
       listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible" && item.equipo !== "Equipo en Camino")
     } else {
-      // A) Equipos de la tabla stock_mayorista que estén en camino
       const deStockEnCamino = stockCrudo.filter(item => 
         (item.estado === "En Tránsito" || item.estado === "En Camino") && item.equipo !== "Equipo en Camino"
       )
       
-      // B) Desglosar los lotes de la tabla pedidos_mayorista (excluyendo los recibidos)
       const dePedidos: any[] = []
       const lotesPendientes = pedidosCrudos.filter(p => String(p.estado).toLowerCase() !== "recibido")
 
       lotesPendientes.forEach((lote: any) => {
         let listaItems = lote.items
 
-        // Convertir a Array si viene como string en la BD
         if (typeof listaItems === "string") {
           try { listaItems = JSON.parse(listaItems) } catch (e) { listaItems = [] }
         }
@@ -107,7 +103,6 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
       listaAProcesar = [...deStockEnCamino, ...dePedidos]
     }
 
-    // 🚀 AGRUPAR POR MODELO, CONDICIÓN Y PRECIO
     const grupos: Record<string, any> = {}
 
     listaAProcesar.forEach((item: any) => {
@@ -149,7 +144,6 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
     setSeleccionados(nuevos)
   }
 
-  // GENERADOR DEL TEXTO PARA WHATSAPP
   const generarTextoWhatsApp = () => {
     const equiposFiltrados = stockAgrupado.filter(g => seleccionados.has(g.id_group))
     
@@ -294,15 +288,32 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
 
           </div>
 
-          {/* PANEL DERECHO: VISTA PREVIA Y ACCIONES */}
+          {/* PANEL DERECHO: DIAGNÓSTICO EN PANTALLA + VISTA PREVIA */}
           <div>
             <div className="bg-white rounded-3xl p-6 shadow-2xl border border-zinc-200 sticky top-6">
+              
+              {/* 🚀 PANEL DE DIAGNÓSTICO DIRECTO EN PANTALLA */}
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-black space-y-1 text-xs font-mono">
+                <div className="flex items-center gap-1.5 font-bold text-amber-700">
+                  <Bug className="size-4" /> Diagnóstico de Conexión
+                </div>
+                <p><strong>Filas en Stock:</strong> {stockCrudo.length}</p>
+                <p><strong>Lotes en Pedidos:</strong> {pedidosCrudos.length}</p>
+                <p><strong>Modo Seleccionado:</strong> {origenStock}</p>
+                {pedidosCrudos.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-amber-500/20 text-[10px] text-amber-900">
+                    <p><strong>Estado del Lote 1:</strong> {pedidosCrudos[0].estado}</p>
+                    <p className="truncate"><strong>Items Lote 1:</strong> {JSON.stringify(pedidosCrudos[0].items || 'Sin items')}</p>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
                 <Sparkles className="size-5 text-emerald-500" />
                 <h3 className="text-lg font-black text-black">Vista Previa</h3>
               </div>
               
-              <div className="bg-[#E5DDD5] p-4 rounded-2xl mb-6 shadow-inner h-[400px] overflow-y-auto hide-scrollbar">
+              <div className="bg-[#E5DDD5] p-4 rounded-2xl mb-6 shadow-inner h-[320px] overflow-y-auto hide-scrollbar">
                 <div className="bg-white p-3 rounded-tr-xl rounded-bl-xl rounded-br-xl shadow-sm text-sm text-black whitespace-pre-wrap font-sans relative">
                   <div className="absolute top-0 left-[-8px] w-0 h-0 border-t-[10px] border-t-white border-l-[10px] border-l-transparent"></div>
                   {generarTextoWhatsApp()}
