@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const numeroLimpio = remoteJid.replace('@s.whatsapp.net', '');
 
     // -------------------------------------------------------------
-    // 0) BUSCAR SI EL CLIENTE YA TIENE REGISTRO EN LA BD
+    // 0) OBTENER DATOS Y REGISTRO DEL CLIENTE
     // -------------------------------------------------------------
     const { data: clienteReg } = await supabase
       .from('clientes_mayorista')
@@ -44,43 +44,41 @@ export async function POST(req: Request) {
       .or(`telefono.eq.${numeroLimpio},telefono.eq.${remoteJid}`)
       .single();
 
-    const nombreClienteFinal = clienteReg?.nombre || pushName.trim() || 'amigo/a';
+    const nombreClienteFinal = clienteReg?.nombre || pushName.trim() || 'Estimado/a';
 
     // -------------------------------------------------------------
-    // 1) APROBACIÓN REMOTA POR EL DUEÑO (Respondiendo por WhatsApp)
+    // 1) APROBACIÓN REMOTA POR EL DUEÑO
     // -------------------------------------------------------------
     if (remoteJid === MI_WHATSAPP_PERSONAL && messageText.toLowerCase().includes('aprobar mayorista')) {
       const numAprobar = messageText.replace(/aprobar mayorista/i, '').trim().replace(/[^0-9]/g, '');
 
       if (numAprobar) {
-        // Actualizar en Supabase a Mayorista
-        await supabase.from('clientes_mayorista').update({ tipo_cliente: 'Mayorista' }).or(`telefono.eq.${numAprobar},telefono.ilike.%${numAprobar}%`);
+        await supabase.from('clientes_mayorista').update({ tipo_cliente: 'Mayorista', solicitando_mayorista: false }).or(`telefono.eq.${numAprobar},telefono.ilike.%${numAprobar}%`);
 
-        // Notificar al cliente
         const targetJid = numAprobar.includes('@') ? numAprobar : `${numAprobar}@s.whatsapp.net`;
-        const msjAprobado = `🎉 ¡Buenas noticias! Tu cuenta fue aprobada como **Cliente Mayorista** en Electro·Nic.\n\nA partir de ahora tenés acceso a nuestros precios gremio y lotes en camino. Escribí **'Menú'** para ver las listas actualizadas.`;
+        const msjAprobado = `🏛️ *ELECTRO·NIC B2B — ALTA DE CUENTA APROBADA*\n\nEstimado/a *${nombreClienteFinal}*, le notificamos que su cuenta fue validada con éxito como **Cliente Mayorista**.\n\nA partir de este momento cuenta con acceso a nuestro inventario en tiempo real, cotizaciones gremio y lotes en tránsito.\n\nEscriba *'Menú'* en cualquier momento para desplegar el panel de listas.`;
         
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, targetJid, msjAprobado);
-        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `✅ El cliente +${numAprobar} fue cambiado a MAYORISTA con éxito.`);
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `✅ El cliente +${numAprobar} fue habilitado como MAYORISTA con éxito.`);
 
         return NextResponse.json({ success: true, mode: 'aprobacion_dueno_exitosa' });
       }
     }
 
     // -------------------------------------------------------------
-    // 2) COMANDO "MENU": REACTIVAR BOT
+    // 2) COMANDO "MENU": DESPLEGAR PANEL EJECUTIVO
     // -------------------------------------------------------------
     if (messageText.toLowerCase() === 'menu' || messageText.toLowerCase() === 'menú') {
       await supabase.from('bot_pausas').delete().eq('remote_jid', remoteJid);
       await supabase.from('clientes_mayorista').update({ bot_pausado_hasta: null }).eq('telefono', numeroLimpio);
 
-      const msjReactivado = `🤖 ¡Bot reactivado, ${nombreClienteFinal}! ¿En qué te puedo ayudar hoy? Respóndeme con un número:\n\n1️⃣ Usados Impecables (% Batería)\n2️⃣ Nuevos Sellados\n3️⃣ Naves en Camino\n4️⃣ Comprar o Hablar con Vendedor 🛒`;
+      const msjReactivado = `🏛️ *ELECTRO·NIC — DISTRIBUCIÓN MAYORISTA*\n\nEstimado/a *${nombreClienteFinal}*, seleccione la opción requerida respondiendo con el número correspondiente:\n\n1️⃣ *Stock Usados Selección* (% Baterías)\n2️⃣ *Stock Nuevos Sellados* (Garantía Oficial)\n3️⃣ *Equipos en Camino* (Precios de Reserva)\n4️⃣ **Atención Comercial Directa** / *Comprar* 🛍️`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjReactivado);
       return NextResponse.json({ status: 'bot_reactivado' });
     }
 
     // -------------------------------------------------------------
-    // 3) VERIFICAR PAUSA TEMPORIZADA (60 MINUTOS)
+    // 3) VERIFICAR PAUSA TEMPORIZADA DE 60 MINUTOS
     // -------------------------------------------------------------
     const { data: pausaTemp } = await supabase.from('bot_pausas').select('pausado_hasta').eq('remote_jid', remoteJid).single();
     const tiempoPausa = pausaTemp?.pausado_hasta || clienteReg?.bot_pausado_hasta;
@@ -90,60 +88,53 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 4) SOLICITUD DE CAMBIO DE MINORISTA A MAYORISTA
+    // 4) CAPTURA DE SOLICITUD MAYORISTA
     // -------------------------------------------------------------
     const textoLower = messageText.toLowerCase();
-    const quiereSerMayorista = textoLower.includes('quiero ser mayorista') || 
-                              textoLower.includes('pasar a mayorista') || 
-                              textoLower.includes('precios por mayor') || 
-                              textoLower.includes('ser revendedor');
+    const quiereSerMayorista = textoLower.includes('mayorista') || 
+                              textoLower.includes('revendedor') || 
+                              textoLower.includes('reventa') || 
+                              textoLower.includes('precio gremio') || 
+                              textoLower.includes('por mayor');
 
-    // A) Si el cliente es Minorista o nuevo y solicita ser mayorista
-    if (quiereSerMayorista || clienteReg?.solicitando_mayorista) {
+    if (quiereSerMayorista && !clienteReg?.solicitando_mayorista && clienteReg?.tipo_cliente !== 'Mayorista') {
+      await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, clienteReg?.tipo_cliente || 'Minorista', true);
 
-      // Si recién solicita, le pedimos la ficha técnica
-      if (quiereSerMayorista && !clienteReg?.solicitando_mayorista) {
-        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista', true);
+      const msjFicha = `💼 *SOLICITUD DE CUENTA MAYORISTA B2B*\n\nEstimado/a *${nombreClienteFinal}*, para validar su perfil comercial y habilitar la lista de precios gremio, le solicitamos nos brinde los siguientes datos:\n\n1. Nombre y Apellido Completo\n2. Correo Electrónico Corporativo\n3. Nombre comercial de su Local o Empresa\n4. Usuario de Instagram / Redes Sociales\n\n_Por favor, responda a este mensaje con los datos completos para ser evaluado por la gerencia comercial._`;
+      await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjFicha);
+      return NextResponse.json({ status: 'ficha_mayorista_solicitada' });
+    }
 
-        const msjFicha = `💼 ¡Excelente ${nombreClienteFinal}! Para validar tu cuenta gremio y darte acceso a las listas mayoristas, necesitamos los siguientes datos:\n\n1. Nombre Completo\n2. Email de contacto\n3. Nombre de tu Local o Negocio\n4. Instagram / Redes Sociales\n\nPor favor, enviame esa información en un solo mensaje para enviársela al dueño para su aprobación.`;
-        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjFicha);
-        return NextResponse.json({ status: 'ficha_mayorista_solicitada' });
-      }
+    if (clienteReg?.solicitando_mayorista) {
+      await supabase.from('clientes_mayorista').update({
+        solicitando_mayorista: false,
+        datos_solicitud: messageText
+      }).eq('id', clienteReg.id);
 
-      // Si ya estaba solicitando y ahora nos responde con sus datos
-      if (clienteReg?.solicitando_mayorista && !quiereSerMayorista) {
-        // Guardamos los datos de la solicitud
-        await supabase.from('clientes_mayorista').update({
-          solicitando_mayorista: false,
-          datos_solicitud: messageText
-        }).eq('id', clienteReg.id);
+      const msjConfirmacionCliente = `📋 *SOLICITUD EN PROCESO DE EVALUACIÓN*\n\nGracias *${nombreClienteFinal}*. Hemos recibido su información comercial. Su solicitud ha sido enviada a gerencia. Tan pronto como sea aprobada, recibirá la notificación de confirmación en este chat.`;
+      await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjConfirmacionCliente);
 
-        const msjConfirmacionCliente = `👍 ¡Datos recibidos, ${nombreClienteFinal}! Ya le envié la solicitud al dueño para su validación. Apenas la apruebe, te llegará una notificación por acá con el acceso a las listas de precio gremio.`;
-        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjConfirmacionCliente);
+      const msjAlertaDueno = `🚨 *SOLICITUD DE ALTA MAYORISTA B2B* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n📝 *Ficha Comercial:* "${messageText}"\n\n👉 *Para aprobar, responda escribiendo exactamente:*\nAprobar Mayorista ${numeroLimpio}`;
+      await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, msjAlertaDueno);
 
-        // Notificación al Dueño por WhatsApp
-        const msjAlertaDueno = `🚨 *SOLICITUD DE ALTA MAYORISTA* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n📝 *Datos enviados:* "${messageText}"\n\n👉 *Para aprobarlo, respondé a este mensaje escribiendo exactamente:*\n\nAprobar Mayorista ${numeroLimpio}`;
-        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, msjAlertaDueno);
-
-        return NextResponse.json({ status: 'solicitud_mayorista_enviada' });
-      }
+      return NextResponse.json({ status: 'solicitud_mayorista_enviada' });
     }
 
     // -------------------------------------------------------------
-    // 5) DETECCIÓN Y CLASIFICACIÓN INICIAL (NUEVOS CONTACTOS)
+    // 5) CLASIFICACIÓN INICIAL (NUEVOS CONTACTOS)
     // -------------------------------------------------------------
     let tipoCliente = clienteReg?.tipo_cliente || null;
 
     if (!tipoCliente) {
-      if (messageText === '1' || textoLower.includes('mayorista') || textoLower.includes('revendedor')) {
+      if (messageText === '1') {
         tipoCliente = 'Mayorista';
         await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Mayorista', false);
-      } else if (messageText === '2' || textoLower.includes('minorista') || textoLower.includes('personal')) {
+      } else if (messageText === '2') {
         tipoCliente = 'Minorista';
         await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista', false);
       } else {
-        const saludoInicial = nombreClienteFinal !== 'amigo/a' ? `¡Hola ${nombreClienteFinal}! 👋` : `¡Hola! 👋`;
-        const mensajeBienvenida = `${saludoInicial} Bienvenido/a a *Electro·Nic*.\n\nPara brindarte la mejor información y la lista de precios adecuada, contame:\n\n1️⃣ *¿Buscás comprar al por mayor / para revender?* 💼\n2️⃣ *¿Buscás un equipo para uso personal?* 📱\n\n_Respondeme con el número 1 o 2 para continuar._`;
+        const saludoInicial = nombreClienteFinal !== 'Estimado/a' ? `¡Bienvenido/a *${nombreClienteFinal}* a *Electro·Nic*!` : `¡Bienvenido/a a *Electro·Nic*!`;
+        const mensajeBienvenida = `${saludoInicial}\n\nPara dirigirlo/a con el área correspondiente, por favor indique su perfil de compra:\n\n1️⃣ **Compra Mayorista / Revendedor** 💼\n2️⃣ **Compra Minorista / Uso Personal** 📱\n\n_Responda con el número 1 o 2 para continuar._`;
         
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, mensajeBienvenida);
         return NextResponse.json({ status: 'clasificacion_enviada' });
@@ -151,67 +142,121 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 6) ATENCIÓN A CLIENTES MAYORISTAS
+    // 6) ATENCIÓN EJECUTIVA A CLIENTES MAYORISTAS
     // -------------------------------------------------------------
     if (tipoCliente === 'Mayorista') {
       
+      // OPCIÓN 1: USADOS IMPECABLES AGRUPADOS CON FORMATO PROFESIONAL
       if (messageText === '1' || messageText.toLowerCase().includes('usado')) {
         const { data: usados } = await supabase.from('stock_mayorista').select('*').eq('estado', 'Disponible').ilike('condicion', '%usado%');
-        let listaUsados = `📱 *USADOS IMPECABLES EN STOCK MAYORISTA*\n\n`;
+        
+        // Agrupar por modelo/equipo y precio
+        const agrupados: Record<string, { cantidad: number; precio: number; baterias: string[] }> = {};
+        
         usados?.forEach(u => {
-          listaUsados += `• ${u.equipo} (Bat: ${u.bateria || 'N/A'}%) ➖ *U$D ${u.precio_venta_usd}*\n`;
+          const key = `${u.equipo}`;
+          if (!agrupados[key]) {
+            agrupados[key] = { cantidad: 0, precio: Number(u.precio_venta_usd), baterias: [] };
+          }
+          agrupados[key].cantidad += 1;
+          if (u.bateria) agrupados[key].baterias.push(`${u.bateria}%`);
         });
-        listaUsados += "\n_Para comprar o reservar, responde '4' o 'Comprar'._";
+
+        let listaUsados = `📱 *CATÁLOGO DE USADOS SELECCIONADOS (MAYORISTA)*\n\n`;
+
+        if (Object.keys(agrupados).length === 0) {
+          listaUsados += `_Actualmente no disponemos de unidades usadas en stock físico. Consulte lotes en tránsito._\n\n`;
+        } else {
+          Object.entries(agrupados).forEach(([modelo, info]) => {
+            const batTexto = info.baterias.length > 0 ? info.baterias.join(', ') : 'Consultar';
+            listaUsados += `▫️ *${modelo}*\n  • Disponibles: *${info.cantidad} ud(s).*\n  • Bat: *${batTexto}*\n  • Precio Mayorista: *USD ${info.precio}*\n\n`;
+          });
+        }
+
+        listaUsados += `──────────────────────────\n📌 *¿CÓMO DESEÁS CONTINUAR?*\n▫️ Para reservar o comprar: Respondé *4* o *'Comprar'*.\n▫️ Para volver al menú principal: Respondé *Menú*.\n▫️ Para hablar con un asesor: Respondé *Vendedor*.`;
+        
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, listaUsados);
         return NextResponse.json({ success: true, mode: 'mayorista_usados' });
       }
 
+      // OPCIÓN 2: NUEVOS SELLADOS AGRUPADOS
       if (messageText === '2' || messageText.toLowerCase().includes('sellado') || messageText.toLowerCase().includes('nuevo')) {
         const { data: nuevos } = await supabase.from('stock_mayorista').select('*').eq('estado', 'Disponible').ilike('condicion', '%nuevo%');
-        let listaNuevos = `✨ *NUEVOS SELLADOS EN STOCK MAYORISTA*\n\n`;
+        
+        const agrupados: Record<string, { cantidad: number; precio: number }> = {};
+        
         nuevos?.forEach(n => {
-          listaNuevos += `• ${n.equipo} ➖ *U$D ${n.precio_venta_usd}*\n`;
+          const key = `${n.equipo}`;
+          if (!agrupados[key]) {
+            agrupados[key] = { cantidad: 0, precio: Number(n.precio_venta_usd) };
+          }
+          agrupados[key].cantidad += 1;
         });
-        listaNuevos += "\n_Para comprar o reservar, responde '4' o 'Comprar'._";
+
+        let listaNuevos = `✨ *CATÁLOGO DE NUEVOS SELLADOS (GARANTÍA OFICIAL)*\n\n`;
+
+        if (Object.keys(agrupados).length === 0) {
+          listaNuevos += `_Sin unidades selladas en stock físico en este momento._\n\n`;
+        } else {
+          Object.entries(agrupados).forEach(([modelo, info]) => {
+            listaNuevos += `▫️ *${modelo}*\n  • Stock: *${info.cantidad} ud(s).*\n  • Precio Mayorista: *USD ${info.precio}*\n\n`;
+          });
+        }
+
+        listaNuevos += `──────────────────────────\n📌 *¿CÓMO DESEÁS CONTINUAR?*\n▫️ Para reservar o comprar: Respondé *4* o *'Comprar'*.\n▫️ Para volver al menú principal: Respondé *'Menú'*.\n▫️ Para hablar con un asesor: Respondé *'Vendedor'*.`;
+        
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, listaNuevos);
         return NextResponse.json({ success: true, mode: 'mayorista_nuevos' });
       }
 
+      // OPCIÓN 3: LOTES EN TRÁNSITO
       if (messageText === '3' || messageText.toLowerCase().includes('camino') || messageText.toLowerCase().includes('nave')) {
         const { data: pedidos } = await supabase.from('pedidos_mayorista').select('*').eq('estado', 'En Camino');
-        let listaCamino = `⏳ *NAVES EN CAMINO (LLEGANDO PRONTO)*\n\n`;
+        
+        let listaCamino = `⏳ *LOTES Y NAVES EN TRÁNSITO (PRÓXIMO INGRESO)*\n\n`;
+        let hayItems = false;
+
         pedidos?.forEach(p => {
           const items = p.items || [];
           items.forEach((it: any) => {
-            listaCamino += `• ${it.modelo} ➖ *U$D ${it.precio_sugerido_usd || it.costo_usd}*\n`;
+            hayItems = true;
+            listaCamino += `▫️ *${it.modelo}* (${it.condicion || 'Nuevo'})\n  • Cantidad Lote: *${it.cantidad} ud(s).*\n  • Precio Congelado: *USD ${it.precio_sugerido_usd || it.costo_usd}*\n\n`;
           });
         });
-        listaCamino += "\n_Responde 'Comprar' para congelar precio y reservar._";
+
+        if (!hayItems) {
+          listaCamino += `_No hay lotes en tránsito en este momento._\n\n`;
+        }
+
+        listaCamino += `──────────────────────────\n📌 *¿CÓMO DESEÁS CONTINUAR?*\n▫️ Para congelar precio y reservar: Respondé *4* o *'Comprar'*.\n▫️ Para volver al menú principal: Respondé *'Menú'*.\n▫️ Para hablar con un asesor: Respondé *'Vendedor'*.`;
+        
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, listaCamino);
         return NextResponse.json({ success: true, mode: 'mayorista_camino' });
       }
 
+      // OPCIÓN 4: COMPRA O ASESORÍA
       if (messageText === '4' || messageText.toLowerCase().includes('comprar') || messageText.toLowerCase().includes('vendedor') || messageText.toLowerCase().includes('hablar')) {
         const fechaFinPausa = new Date(Date.now() + 60 * 60 * 1000).toISOString();
         await supabase.from('bot_pausas').upsert({ remote_jid: remoteJid, pausado_hasta: fechaFinPausa });
         await supabase.from('clientes_mayorista').update({ bot_pausado_hasta: fechaFinPausa }).eq('telefono', numeroLimpio);
 
-        const msjPausa = `🤖 ¡De una ${nombreClienteFinal}! Te dejo en contacto directo con Tomi / nuestro equipo de ventas para coordinar los detalles de tu compra. En un instante te escribimos por acá.\n\n_(Si querés volver al menú automático antes, escribí **'Menú'**)_`;
+        const msjPausa = `👥 *ATENCIÓN COMERCIAL DIRECTA*\n\nEstimado/a *${nombreClienteFinal}*, lo hemos derivado con un asesor de ventas para coordinar los detalles de su pedido.\n\nEn breve se comunicarán con usted por este canal.\n\n_Nota: El bot automático permanecerá pausado. Si desea reactivarlo antes de 1 hora, responda *'Menú'*._`;
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjPausa);
 
-        const alertaAvisos = `🚨 *¡ALERTA DE VENTA MAYORISTA!* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n💬 *Mensaje:* "${messageText}"\n\n⚠️ *El bot se pausó automáticamente durante 1 hora para que cierres la venta.*`;
+        const alertaAvisos = `🚨 *¡SOLICITUD DE ATENCIÓN MAYORISTA!* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n💬 *Mensaje:* "${messageText}"\n\n⚠️ *Atención requerida. El asistente automático se pausó durante 60 minutos.*`;
         await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, alertaAvisos);
 
         return NextResponse.json({ success: true, mode: 'mayorista_vendedor_pausa' });
       }
 
-      const menuMayorista = `💼 *Menú Mayorista Electro·Nic*\n¡Hola ${nombreClienteFinal}! Elegí una opción para enviarte la info al instante:\n\n1️⃣ Usados Impecables (% Batería)\n2️⃣ Nuevos Sellados\n3️⃣ Naves en Camino\n4️⃣ Comprar o Hablar con Vendedor 👤`;
+      // MENÚ PRINCIPAL MAYORISTA (RESTRUCTURADO)
+      const menuMayorista = `🏛️ *PANEL DE CONTROL MAYORISTA — ELECTRO·NIC*\n\nEstimado/a *${nombreClienteFinal}*, seleccione la opción deseada:\n\n1️⃣ **Stock Usados Selección** (% Baterías)\n2️⃣ **Stock Nuevos Sellados** (Garantía Oficial)\n3️⃣ **Lotes en Tránsito** (Precios de Reserva)\n4️⃣ **Atención Comercial Directa** / *Comprar* 🛍️\n\n──────────────────────────\n_Responda únicamente con el número de la opción (1, 2, 3 o 4)._`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, menuMayorista);
       return NextResponse.json({ success: true, mode: 'mayorista_menu' });
     }
 
     // -------------------------------------------------------------
-    // 7) ATENCIÓN A CLIENTES MINORISTAS (GROQ IA CON PROMPT PÚBLICO)
+    // 7) ATENCIÓN A CLIENTES MINORISTAS (GROQ IA)
     // -------------------------------------------------------------
     const { data: config } = await supabase.from('configuracion_ia').select('*').eq('id', 1).single();
     const groqKeyToUse = config?.groq_api_key || fallbackGroqKey;
@@ -306,7 +351,7 @@ export async function POST(req: Request) {
   }
 }
 
-// 🚀 FUNCIÓN DE GUARDADO Y REGISTRO DE CLIENTE CON SOLICITUD
+// 🚀 GUARDADO DE CLIENTES
 async function guardarOActualizarCliente(supabase: any, remoteJid: string, telefono: string, nombre: string, tipo: 'Mayorista' | 'Minorista', solicitandoMayorista: boolean = false) {
   try {
     const { data: existente } = await supabase.from('clientes_mayorista').select('*').or(`telefono.eq.${telefono},telefono.eq.${remoteJid}`).single();
@@ -332,7 +377,7 @@ async function guardarOActualizarCliente(supabase: any, remoteJid: string, telef
   }
 }
 
-// 🚀 FUNCIÓN DE ENVÍO
+// 🚀 ENVÍO CON EVOLUTION API
 async function enviarRespuestaWA(url: string, key: string, instancia: string, numero: string, texto: string) {
   try {
     await fetch(`${url}/message/sendText/${instancia}`, {
