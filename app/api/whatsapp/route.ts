@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       await supabase.from('bot_pausas').delete().eq('remote_jid', remoteJid);
       await supabase.from('clientes_mayorista').update({ bot_pausado_hasta: null }).eq('telefono', numeroLimpio);
 
-      const msjReactivado = `🏛️ *ELECTRO·NIC — DISTRIBUCIÓN MAYORISTA*\n\nEstimado/a *${nombreClienteFinal}*, seleccione la opción requerida respondiendo con el número correspondiente:\n\n1️⃣ *Stock Usados Selección* (% Baterías)\n2️⃣ *Stock Nuevos Sellados* (Garantía Oficial)\n3️⃣ *Equipos en Camino* (Precios de Reserva)\n4️⃣ **Atención Comercial Directa** / *Comprar* 🛍️`;
+      const msjReactivado = `🏛️ *ELECTRO·NIC — DISTRIBUCIÓN MAYORISTA*\n\nEstimado/a *${nombreClienteFinal}*, seleccione la opción requerida respondiendo con el número correspondiente:\n\n1️⃣ *Stock Usados Selección* (% Baterías)\n2️⃣ *Stock Nuevos Sellados* (Garantía Oficial)\n3️⃣ *Equipos en Camino* (Precios de Reserva)\n4️⃣ *Atención Comercial Directa* / *Comprar* 🛍️`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjReactivado);
       return NextResponse.json({ status: 'bot_reactivado' });
     }
