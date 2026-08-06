@@ -292,7 +292,7 @@ export async function POST(req: Request) {
     if (evolutionUrl && evolutionApiKey) {
       await enviarRespuestaWA(evolutionUrl, evolutionApiKey, INSTANCE_NAME, remoteJid, aiReply);
 
-      if (detalleCita && MI_WHATSAPP_PERSONAL !== remoteJid) {
+      if (detalleCita) {
         const mensajeAviso = `🚨 *¡NUEVA CITA MINORISTA PENDIENTE!* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n📝 *Detalle:* ${detalleCita}\n\n👉 *Respondé este mensaje decidiendo:* \n- "Confirmado"\n- o el nuevo horario.`;
         await enviarRespuestaWA(evolutionUrl, evolutionApiKey, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, mensajeAviso);
       }
