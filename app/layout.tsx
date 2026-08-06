@@ -42,6 +42,12 @@ export const metadata: Metadata = {
     "tecnologia yerba buena"
   ],
   
+  // 🚀 EL TRUCO PARA REFRESCAR EL LOGUITO EN TODOS LADOS
+  icons: {
+    icon: '/favicon.ico?v=2',
+    apple: '/favicon.ico?v=2', // Para cuando lo guardan como app en iPhone
+  },
+  
   // 1. CONFIGURACIÓN PARA WHATSAPP Y REDES SOCIALES
   openGraph: {
     title: "Electro·Nic | Todo para tu celular y tecnología",
