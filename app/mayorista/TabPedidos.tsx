@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen, Trash2 } from "lucide-react"
+import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen, Trash2, Check } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -42,7 +42,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
-  // ESTADO DE EDICIÓN
+  // ESTADO DE EDICIÓN DEL LOTE
   const [editingId, setEditingId] = useState<string | null>(null)
 
   // DATOS GENERALES DEL LOTE
@@ -55,9 +55,19 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
   const [envioMiamiBsAs, setEnvioMiamiBsAs] = useState("")
   const [envioBsAsTuc, setEnvioBsAsTuc] = useState("")
 
-  // ÍTEMS DEL LOTE
+  // ÍTEMS DEL LOTE Y EDICIÓN DE ÍTEM INDIVIDUAL
   const [items, setItems] = useState<any[]>([])
-  const [itemTemp, setItemTemp] = useState({ modelo: "", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  
+  const [itemTemp, setItemTemp] = useState({ 
+    modelo: "iPhone 13", 
+    capacidad: "128GB", 
+    condicion: "Nuevo", 
+    cantidad: 1, 
+    costo_usd: "", 
+    precio_sugerido_usd: "",
+    precio_minorista_usd: ""
+  })
 
   const fetchData = async () => {
     setLoading(true)
@@ -78,16 +88,49 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
+  // 🚀 CÁLCULO AUTOMÁTICO DEL 15% AL CAMBIAR COSTO O SUGERIDO
+  const handleCostoChange = (valStr: string) => {
+    const costoNum = parseFloat(valStr)
+    if (!isNaN(costoNum) && costoNum > 0) {
+      const sugCalc = Math.round(costoNum * 1.15)
+      const minCalc = Math.round(sugCalc * 1.15)
+      setItemTemp(prev => ({
+        ...prev,
+        costo_usd: valStr,
+        precio_sugerido_usd: String(sugCalc),
+        precio_minorista_usd: String(minCalc)
+      }))
+    } else {
+      setItemTemp(prev => ({ ...prev, costo_usd: valStr }))
+    }
+  }
+
+  const handleSugeridoChange = (valStr: string) => {
+    const sugNum = parseFloat(valStr)
+    if (!isNaN(sugNum) && sugNum > 0) {
+      const minCalc = Math.round(sugNum * 1.15)
+      setItemTemp(prev => ({
+        ...prev,
+        precio_sugerido_usd: valStr,
+        precio_minorista_usd: String(minCalc)
+      }))
+    } else {
+      setItemTemp(prev => ({ ...prev, precio_sugerido_usd: valStr }))
+    }
+  }
+
   // 🚀 ABRIR MODAL EN MODO NUEVO O EDICIÓN
   const abrirNuevo = () => {
     setEditingId(null)
+    setEditingIndex(null)
     setProveedor(""); setTitulo(""); setTracking(""); setFechaEstimada(""); setEnvioMiamiBsAs(""); setEnvioBsAsTuc(""); setItems([])
-    setItemTemp({ modelo: MODELOS_IPHONE[0], capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+    setItemTemp({ modelo: MODELOS_IPHONE[0] || "iPhone 13", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "", precio_minorista_usd: "" })
     setShowModal(true)
   }
 
   const abrirEdicion = (pedido: any) => {
     setEditingId(pedido.id)
+    setEditingIndex(null)
     setTitulo(pedido.titulo || "")
     setProveedor(pedido.proveedor || "")
     setTracking(pedido.tracking || "")
@@ -98,15 +141,55 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     setShowModal(true)
   }
 
-  const agregarItem = () => {
+  // 🚀 AGREGAR O ACTUALIZAR ÍTEM DENTRO DEL LOTE
+  const agregarOActualizarItem = () => {
     if (!itemTemp.modelo || !itemTemp.costo_usd) return alert("Completá el modelo y el costo unitario.")
     const nombreCompleto = itemTemp.capacidad === "N/A" ? itemTemp.modelo.trim() : `${itemTemp.modelo.trim()} - ${itemTemp.capacidad}`
-    setItems([...items, { ...itemTemp, modelo: nombreCompleto, cantidad: Number(itemTemp.cantidad), costo_usd: Number(itemTemp.costo_usd), precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd) }])
-    setItemTemp({ modelo: modelosDisponibles[0] || "iPhone 13", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "" })
+    
+    const nuevoItem = {
+      modelo: nombreCompleto,
+      capacidad: itemTemp.capacidad,
+      condicion: itemTemp.condicion,
+      cantidad: Number(itemTemp.cantidad),
+      costo_usd: Number(itemTemp.costo_usd),
+      precio_sugerido_usd: Number(itemTemp.precio_sugerido_usd || 0),
+      precio_minorista_usd: Number(itemTemp.precio_minorista_usd || 0)
+    }
+
+    if (editingIndex !== null) {
+      const copy = [...items]
+      copy[editingIndex] = nuevoItem
+      setItems(copy)
+      setEditingIndex(null)
+    } else {
+      setItems([...items, nuevoItem])
+    }
+
+    setItemTemp({ modelo: modelosDisponibles[0] || "iPhone 13", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "", precio_minorista_usd: "" })
+  }
+
+  // 🚀 SELECCIONAR ÍTEM DE LA LISTA PARA EDITAR
+  const seleccionarItemParaEditar = (index: number) => {
+    const item = items[index]
+    const partes = item.modelo.split(" - ")
+    const mod = partes[0] || item.modelo
+    const cap = partes[1] || item.capacidad || "128GB"
+
+    setItemTemp({
+      modelo: mod,
+      capacidad: cap,
+      condicion: item.condicion || "Nuevo",
+      cantidad: item.cantidad,
+      costo_usd: String(item.costo_usd),
+      precio_sugerido_usd: String(item.precio_sugerido_usd || ""),
+      precio_minorista_usd: String(item.precio_minorista_usd || "")
+    })
+    setEditingIndex(index)
   }
 
   const quitarItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index))
+    if (editingIndex === index) setEditingIndex(null)
   }
 
   const costoTotalEquipos = items.reduce((acc, item) => acc + (item.costo_usd * item.cantidad), 0)
@@ -163,14 +246,12 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     }
 
     try {
-      // 1. Actualizar el pedido en pedidos_mayorista
       const { error: errPedido } = await supabase.from("pedidos_mayorista").update(payloadPedido).eq("id", pedido.id)
       if (errPedido) throw new Error("Error actualizando pedido: " + errPedido.message)
 
       const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
       const categoriaMovimiento = conceptoNombre === "Costo Equipos" ? "Compra Stock" : "Gasto Operativo"
 
-      // 2. Si se MARCA como PAGADO -> Registrar Egreso en Caja
       if (nuevoEstado) {
         const payloadCaja = {
           tipo: "Egreso",
@@ -194,7 +275,6 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
           alert(`✅ Egreso de USD ${montoUsd.toLocaleString()} registrado en Caja Diaria.`)
         }
       } else {
-        // 3. Si se DESTILDA -> Eliminar el Egreso de la Caja
         await supabase.from("caja_mayorista").delete().eq("referencia_id", String(pedido.id)).eq("concepto", detalleMovimiento)
       }
 
@@ -204,7 +284,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 RECIBIR LOTE E INGRESAR AL STOCK
+  // 🚀 RECIBIR LOTE E INGRESAR AL STOCK CON AMBOS PRECIOS
   const marcarRecibido = async (pedido: any) => {
     if(!confirm(`¿Recibiste el lote completo hoy? Se sumarán ${pedido.cantidad} equipos al stock disponible.`)) return
 
@@ -218,7 +298,8 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
             equipo: item.modelo,
             condicion: item.condicion || "Nuevo",
             costo_usd: item.costo_usd,
-            precio_venta_usd: item.precio_sugerido_usd,
+            precio_venta_usd: item.precio_sugerido_usd || Math.round(item.costo_usd * 1.15),
+            precio_minorista_usd: item.precio_minorista_usd || Math.round((item.precio_sugerido_usd || item.costo_usd * 1.15) * 1.15),
             estado: 'Disponible',
             id_pedido_origen: pedido.id,
             ingresado_por: usuarioActual?.nombre || 'Admin'
@@ -234,13 +315,13 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       await supabase.from("pedidos_mayorista").update({ estado: 'Recibido', fecha_recibido: new Date().toISOString() }).eq('id', pedido.id)
       
       fetchData()
-      alert("✅ ¡Lote ingresado al stock!")
+      alert("✅ ¡Lote ingresado al stock con precios Mayorista y Minorista!")
     } catch (error: any) {
       alert("Error al inyectar equipos al stock: " + error.message)
     }
   }
 
-  // 🚀 ELIMINAR O ANULAR LOTE Y DAR DE BAJA STOCK Y EGRESOS
+  // 🚀 ELIMINAR O ANULAR LOTE
   const eliminarLote = async (pedido: any) => {
     const esRecibido = pedido.estado === 'Recibido'
     const msj = esRecibido 
@@ -250,15 +331,12 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     if (!confirm(msj)) return
 
     try {
-      // 1. Si el lote fue recibido, eliminamos los equipos del stock
       if (esRecibido) {
         await supabase.from("stock_mayorista").delete().eq("id_pedido_origen", pedido.id)
       }
 
-      // 2. Limpiar egresos asociados en la caja
       await supabase.from("caja_mayorista").delete().eq("referencia_id", String(pedido.id))
 
-      // 3. Eliminar la orden de compra
       const { error } = await supabase.from("pedidos_mayorista").delete().eq("id", pedido.id)
       if (error) throw new Error(error.message)
 
@@ -374,7 +452,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
       {/* 🚀 MODAL: CREAR O EDITAR LOTE */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-[#121212] border border-zinc-800 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
+          <div className="bg-[#121212] border border-zinc-800 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
             
             <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
               <h3 className="text-xl font-black text-white flex items-center gap-2"><ListOrdered className="size-5 text-amber-500"/> {editingId ? "Editar Lote" : "Armar Orden de Compra"}</h3>
@@ -408,18 +486,25 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
 
               {/* SECCIÓN 2: ÍTEMS DEL LOTE */}
               <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2 mb-4">2. Equipos a Comprar</h4>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">2. Equipos a Comprar</h4>
+                  {editingIndex !== null && (
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                      Editando ítem #{editingIndex + 1}
+                    </span>
+                  )}
+                </div>
                 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col md:flex-row gap-3 items-end">
+                {/* FORMULARIO DE INGRESO / EDICIÓN DE ÍTEM */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
                   
-                  <div className="flex-[2] w-full">
-                    <label className="text-[10px] font-bold text-zinc-500 block mb-1">Modelo de iPhone</label>
+                  <div className="lg:col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400 block mb-1">Modelo de iPhone</label>
                     <select
                       value={itemTemp.modelo}
                       onChange={e => setItemTemp({ ...itemTemp, modelo: e.target.value })}
                       className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer"
                     >
-                      <option value="" disabled>Seleccionar Modelo...</option>
                       {modelosDisponibles.map(modelo => (
                         <option key={modelo} value={modelo} className="bg-zinc-900 text-white py-1">
                           {modelo}
@@ -428,46 +513,97 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                     </select>
                   </div>
                   
-                  <div className="w-24">
-                    <label className="text-[10px] font-bold text-zinc-500 block mb-1 flex items-center gap-1"><HardDrive className="size-3"/> GB</label>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 block mb-1 flex items-center gap-1"><HardDrive className="size-3"/> GB</label>
                     <select value={itemTemp.capacidad} onChange={e => setItemTemp({...itemTemp, capacidad: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer">
                       <option value="64GB">64GB</option><option value="128GB">128GB</option><option value="256GB">256GB</option><option value="512GB">512GB</option><option value="1TB">1TB</option><option value="N/A">N/A</option>
                     </select>
                   </div>
 
-                  <div className="flex-1 w-full">
-                    <label className="text-[10px] font-bold text-zinc-500 block mb-1">Condición</label>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 block mb-1">Condición</label>
                     <select value={itemTemp.condicion} onChange={e => setItemTemp({...itemTemp, condicion: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 cursor-pointer">
-                      <option>Nuevo</option><option>Usado</option>
+                      <option value="Nuevo">Nuevo</option><option value="Usado">Usado</option>
                     </select>
                   </div>
-                  <div className="w-20">
-                    <label className="text-[10px] font-bold text-zinc-500 block mb-1">Cant.</label>
-                    <input type="number" value={itemTemp.cantidad} onChange={e => setItemTemp({...itemTemp, cantidad: e.target.value as any})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 text-center" />
+
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 block mb-1">Cant.</label>
+                    <input type="number" min="1" value={itemTemp.cantidad} onChange={e => setItemTemp({...itemTemp, cantidad: e.target.value as any})} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-2 text-sm outline-none focus:border-amber-500 text-center font-bold" />
                   </div>
-                  <div className="flex-1 w-full">
-                    <label className="text-[10px] font-bold text-sky-500 block mb-1">Costo C/U</label>
-                    <input type="number" value={itemTemp.costo_usd} onChange={e => setItemTemp({...itemTemp, costo_usd: e.target.value})} placeholder="U$D" className="w-full bg-sky-500/10 border border-sky-500/30 text-sky-400 font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
+
+                  <div>
+                    <label className="text-[10px] font-bold text-sky-400 block mb-1">Costo C/U</label>
+                    <input type="number" value={itemTemp.costo_usd} onChange={e => handleCostoChange(e.target.value)} placeholder="U$D" className="w-full bg-sky-500/10 border border-sky-500/30 text-sky-400 font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
                   </div>
-                  <div className="flex-1 w-full">
-                    <label className="text-[10px] font-bold text-emerald-500 block mb-1">Venta Sug.</label>
-                    <input type="number" value={itemTemp.precio_sugerido_usd} onChange={e => setItemTemp({...itemTemp, precio_sugerido_usd: e.target.value})} placeholder="U$D" className="w-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+
+                  <div>
+                    <label className="text-[10px] font-bold text-emerald-400 block mb-1 flex items-center justify-between">
+                      Venta Sug. <span className="text-[9px] text-emerald-500 font-mono">(+15%)</span>
+                    </label>
+                    <input type="number" value={itemTemp.precio_sugerido_usd} onChange={e => handleSugeridoChange(e.target.value)} placeholder="U$D" className="w-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
                   </div>
-                  <button type="button" onClick={agregarItem} className="bg-amber-500 hover:bg-amber-400 text-black p-2.5 rounded-lg transition-all active:scale-95"><Plus className="size-4 font-black"/></button>
+
+                  <div className="sm:col-span-2 md:col-span-4 lg:col-span-7 grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-purple-400 block mb-1 flex items-center justify-between">
+                        Precio Minorista Sug. <span className="text-[9px] text-purple-500 font-mono">(+15%)</span>
+                      </label>
+                      <input type="number" value={itemTemp.precio_minorista_usd} onChange={e => setItemTemp({...itemTemp, precio_minorista_usd: e.target.value})} placeholder="U$D" className="w-full bg-purple-500/10 border border-purple-500/30 text-purple-400 font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+                    </div>
+
+                    <div className="md:col-span-2 flex items-end justify-end gap-2">
+                      {editingIndex !== null && (
+                        <button type="button" onClick={() => {
+                          setEditingIndex(null)
+                          setItemTemp({ modelo: modelosDisponibles[0] || "iPhone 13", capacidad: "128GB", condicion: "Nuevo", cantidad: 1, costo_usd: "", precio_sugerido_usd: "", precio_minorista_usd: "" })
+                        }} className="px-4 py-2 bg-zinc-800 text-zinc-400 text-xs font-bold rounded-lg hover:bg-zinc-700">
+                          Cancelar Edición
+                        </button>
+                      )}
+                      
+                      <button type="button" onClick={agregarOActualizarItem} className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-black text-xs font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20">
+                        {editingIndex !== null ? <><Check className="size-4"/> Actualizar en Lista</> : <><Plus className="size-4 font-black"/> Agregar al Lote</>}
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
 
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 hide-scrollbar">
+                {/* LISTA DE ÍTEMS AGREGADOS */}
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
                   {items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center bg-zinc-950 border border-zinc-800 p-3 rounded-xl">
-                      <div><p className="text-sm font-bold text-white leading-none">{item.modelo} <span className="text-[10px] font-normal text-zinc-500">({item.condicion})</span></p><p className="text-[10px] text-zinc-400 mt-1 uppercase">Sugerido: U$D {item.precio_sugerido_usd}</p></div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs font-black text-amber-500 bg-amber-500/10 px-2 py-1 rounded">{item.cantidad} x U$D {item.costo_usd}</span>
-                        <span className="text-sm font-black text-white w-20 text-right">U$D {item.cantidad * item.costo_usd}</span>
-                        <button type="button" onClick={() => quitarItem(index)} className="text-zinc-600 hover:text-red-500"><X className="size-4"/></button>
+                    <div key={index} className={cn("flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-950 border p-3 rounded-xl gap-2 transition-all", editingIndex === index ? "border-amber-500 bg-amber-500/5 shadow-md" : "border-zinc-800 hover:border-zinc-700")}>
+                      <div>
+                        <p className="text-sm font-bold text-white leading-none">
+                          {item.modelo} <span className="text-[10px] font-normal text-zinc-400">({item.condicion})</span>
+                        </p>
+                        <div className="flex gap-3 mt-1.5 text-[10px]">
+                          <span className="text-emerald-400 font-bold">Mayorista Sug: U$D {item.precio_sugerido_usd || 0}</span>
+                          <span className="text-purple-400 font-bold">Minorista Sug: U$D {item.precio_minorista_usd || 0}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-0 border-zinc-800/80 pt-2 sm:pt-0">
+                        <span className="text-xs font-black text-amber-500 bg-amber-500/10 px-2 py-1 rounded">
+                          {item.cantidad} x U$D {item.costo_usd}
+                        </span>
+                        <span className="text-sm font-black text-white w-20 text-right">
+                          U$D {item.cantidad * item.costo_usd}
+                        </span>
+                        
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => seleccionarItemParaEditar(index)} title="Editar Ítem" className="p-1.5 text-zinc-400 hover:text-amber-400 bg-zinc-900 hover:bg-amber-500/10 rounded-lg transition-colors">
+                            <Edit3 className="size-4"/>
+                          </button>
+                          <button type="button" onClick={() => quitarItem(index)} title="Eliminar Ítem" className="p-1.5 text-zinc-600 hover:text-red-500 bg-zinc-900 hover:bg-red-500/10 rounded-lg transition-colors">
+                            <X className="size-4"/>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
-                  {items.length === 0 && <p className="text-xs text-zinc-500 text-center py-4 italic">Aún no agregaste equipos al lote.</p>}
+                  {items.length === 0 && <p className="text-xs text-zinc-500 text-center py-6 italic">Aún no agregaste equipos al lote.</p>}
                 </div>
               </div>
 
