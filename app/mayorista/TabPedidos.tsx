@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen, Trash2, AlertTriangle } from "lucide-react"
+import { Truck, Plus, CheckCircle2, Box, Plane, MapPin, DollarSign, X, ListOrdered, Loader2, HardDrive, Edit3, Calendar, PackageOpen, Trash2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -157,34 +157,45 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     const campoFecha = campoBoolean.replace("pagado_", "fecha_pago_")
     const fechaHora = new Date().toISOString()
     
-    const payload = {
+    const payloadPedido = {
       [campoBoolean]: nuevoEstado,
       [campoFecha]: nuevoEstado ? fechaHora : null
     }
 
     try {
-      // 1. Actualizar el pedido
-      await supabase.from("pedidos_mayorista").update(payload).eq("id", pedido.id)
+      // 1. Actualizar el pedido en pedidos_mayorista
+      const { error: errPedido } = await supabase.from("pedidos_mayorista").update(payloadPedido).eq("id", pedido.id)
+      if (errPedido) throw new Error("Error actualizando pedido: " + errPedido.message)
 
-      // 2. Si se MARCA como PAGADO -> Impactar Egreso en Caja
+      const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
+      const categoriaMovimiento = conceptoNombre === "Costo Equipos" ? "Compra Stock" : "Gasto Operativo"
+
+      // 2. Si se MARCA como PAGADO -> Registrar Egreso en Caja
       if (nuevoEstado) {
-        const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
-        
-        await supabase.from("caja_mayorista").insert([{
+        const payloadCaja = {
           tipo: "Egreso",
+          categoria: categoriaMovimiento,
           concepto: detalleMovimiento,
-          monto_usd: montoUsd,
-          monto_pesos: 0,
+          descripcion: detalleMovimiento,
+          monto: Number(montoUsd),
+          monto_usd: Number(montoUsd),
           metodo_pago: "USD Billete",
-          categoria: "Inversión / Compras",
-          referencia_id: pedido.id,
+          referencia_id: String(pedido.id),
           realizado_por: usuarioActual?.nombre || 'Admin',
+          usuario: usuarioActual?.nombre || 'Admin',
           fecha: fechaHora
-        }])
+        }
+
+        const { error: errCaja } = await supabase.from("caja_mayorista").insert([payloadCaja])
+        if (errCaja) {
+          console.error("Error al registrar en caja:", errCaja)
+          alert("⚠️ El pago del lote se guardó, pero hubo un aviso en Caja: " + errCaja.message)
+        } else {
+          alert(`✅ Egreso de USD ${montoUsd.toLocaleString()} registrado en Caja Diaria.`)
+        }
       } else {
         // 3. Si se DESTILDA -> Eliminar el Egreso de la Caja
-        const detalleMovimiento = `Pago ${conceptoNombre} - ${pedido.titulo || pedido.proveedor || 'Lote'}`
-        await supabase.from("caja_mayorista").delete().eq("referencia_id", pedido.id).eq("concepto", detalleMovimiento)
+        await supabase.from("caja_mayorista").delete().eq("referencia_id", String(pedido.id)).eq("concepto", detalleMovimiento)
       }
 
       fetchData()
@@ -209,7 +220,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
             costo_usd: item.costo_usd,
             precio_venta_usd: item.precio_sugerido_usd,
             estado: 'Disponible',
-            id_pedido_origen: pedido.id, // 🔥 Vínculo para poder dar de baja si se anula
+            id_pedido_origen: pedido.id,
             ingresado_por: usuarioActual?.nombre || 'Admin'
           })
         }
@@ -239,13 +250,13 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
     if (!confirm(msj)) return
 
     try {
-      // 1. Si el lote fue recibido, eliminamos los equipos que ingresaron a stock desde este lote
+      // 1. Si el lote fue recibido, eliminamos los equipos del stock
       if (esRecibido) {
         await supabase.from("stock_mayorista").delete().eq("id_pedido_origen", pedido.id)
       }
 
       // 2. Limpiar egresos asociados en la caja
-      await supabase.from("caja_mayorista").delete().eq("referencia_id", pedido.id)
+      await supabase.from("caja_mayorista").delete().eq("referencia_id", String(pedido.id))
 
       // 3. Eliminar la orden de compra
       const { error } = await supabase.from("pedidos_mayorista").delete().eq("id", pedido.id)
@@ -304,7 +315,7 @@ export function TabPedidos({ usuarioActual }: { usuarioActual: any }) {
                   <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-1">Control de Pagos (Impacta en Caja)</p>
                   
                   {/* PAGO 1: COSTO EQUIPOS */}
-                  <button onClick={() => togglePago(p, "pagado_equipos", p.pagado_equipos, "Costo Equipos", p.costo_equipos_usd)} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
+                  <button onClick={() => togglePago(p, "pagado_equipos", p.pagado_equipos, "Costo Equipos", Number(p.costo_equipos_usd || 0))} className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left", p.pagado_equipos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-zinc-950 border-zinc-800 hover:border-zinc-700")}>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className={cn("size-4", p.pagado_equipos ? "text-emerald-500" : "text-zinc-600")} />
                       <div>
