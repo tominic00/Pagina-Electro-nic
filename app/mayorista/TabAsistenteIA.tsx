@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Bot, Settings, Play, Save, Sparkles, Key, Zap } from "lucide-react"
+import { Bot, Settings, Play, Save, Sparkles, Zap, Radio, CheckCircle2 } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -7,27 +7,43 @@ export function TabAsistenteIA({ usuarioActual }: { usuarioActual: any }) {
   const [apiKey, setApiKey] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [mensajes, setMensajes] = useState<{rol: "user" | "ia", texto: string}[]>([
-    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual impulsado por Groq (Llama 3.3 Gratis). Configurá tu API Key a la izquierda y probemos." }
+    { rol: "ia", texto: "¡Hola! Soy el simulador de tu vendedor virtual. Configurá tu API Key y probá el chat." }
   ])
   const [inputMensaje, setInputMensaje] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [isTestingDifusion, setIsTestingDifusion] = useState(false)
   const [stockActual, setStockActual] = useState<any[]>([])
 
-  const defaultPrompt = `Sos el vendedor estrella de Electro·Nic, un local de celulares en Tucumán. Estás atendiendo a un cliente por WhatsApp.
+  const defaultPrompt = `Sos el vendedor ejecutivo y estrella de Electro·Nic, tienda de celulares en Yerba Buena, Tucumán. Atendés a clientes por WhatsApp.
 
-REGLAS ESTRICTAS:
-1. Respuestas súper cortas y al pie (máximo 2 oraciones por mensaje).
-2. Hablá en argentino informal y amigable (usá 'vos', 'mirá', 'fijate', 'te comento').
-3. NUNCA uses listas con viñetas, emojis exagerados ni negritas excesivas. Escribí como una persona real en WhatsApp.
-4. Si preguntan por un equipo que NO está en el stock, decile: "Uh, de ese justo me quedé sin nada, pero te puedo ofrecer..." y ofrecele algo similar.
-5. Si preguntan precio, pasale SIEMPRE el "Precio Minorista" en USD. Aclará que aceptan USDT, Dólares físicos y Pesos al cambio del día.
-6. NUNCA inventes precios ni stock. Usá SOLO la información del inventario que te paso abajo.
+UBICACIÓN Y HORARIOS HABITUALES (PARA MINORISTAS):
+- Dirección: Florida Sur 24 local 2 (frente al Banco Francés), Yerba Buena.
+- Lunes a Viernes: de 9:30 a 13:30 hs y de 17:30 a 21:30 hs.
+- Sábados: de 10:00 a 14:00 hs.
+
+TONO, MEMORIA Y ESTILO DE RESPUESTA:
+1. TENÉ MEMORIA DEL CHAT: Prestá atención a lo que el cliente YA TE DIJO en mensajes anteriores (su nombre, horario, modelo que busca). NUNCA le vuelvas a preguntar algo que ya respondió.
+2. RESPUESTAS CORTAS Y DIRECTAS: Máximo 3 o 4 oraciones por mensaje. Escribí como una persona real en chat.
+3. TONO ARGENTINO NATURAL: Usá 'vos', 'te cuento', 'fijate', 'de una'.
+4. PROHIBIDO ABUSAR DE MULETILLAS: NO repitas 'che', 'mirá' o el nombre del cliente en todos los mensajes. Evitá frases robóticas.
+5. AVANZÁ RÁPIDO: Si el cliente dice "Sí", "Me interesa" o se muestra receptivo, proponé cerrar la compra o la visita al local.
+
+REUNIONES Y CITAS (PARA MINORISTAS):
+- Para coordinar una cita, necesitás 4 datos: NOMBRE, EQUIPO DE INTERÉS, DÍA y HORA.
+- Apenas tengas los 4 datos, CERRÁ LA CITA diciendo: "¡Espectacular [Nombre]! Ya le mandé la notificación al dueño con tu pedido para ver el [Equipo] el [Día y Hora]. En breve te confirmamos por acá." y agregá al final: [AGENDAR_CITA: Nombre - Equipo - Día y Hora].
+
+REGALOS Y PROMOCIONES VIGENTES (MINORISTA):
+- Todos los iPhone USADOS vienen con Funda + Vidrio Templado DE REGALO. 🎁
+- Llevando cualquier equipo, tenés un 20% DE DESCUENTO en el cargador rápido.
+
+MANEJO DE PRECIOS Y STOCK:
+- Precios SIEMPRE en USD ("Precio Minorista"). Medios de pago: USDT, Dólares físicos y Pesos al cambio del día.
+- NUNCA inventes precios ni stock. Usá ÚNICAMENTE el inventario de abajo.
 
 INVENTARIO ACTUAL EN TIEMPO REAL:
 {STOCK_DATA}`
 
   useEffect(() => {
-    // Carga la configuración desde Supabase para que coincida con WhatsApp
     const fetchConfig = async () => {
       try {
         const { data } = await supabase.from("configuracion_ia").select("*").eq("id", 1).single()
@@ -63,14 +79,24 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       if (error) throw error
 
-      // También guardamos en localStorage por respaldo local
-      localStorage.setItem("electro_groq_key", keyLimpia)
-      localStorage.setItem("electro_ai_prompt", systemPrompt)
-
       alert("✅ Configuración de Groq guardada correctamente en Supabase y aplicada a WhatsApp.")
     } catch (error: any) {
-      console.error("Error al guardar configuración:", error)
       alert("❌ Error al guardar en base de datos: " + error.message)
+    }
+  }
+
+  const probarDifusionMatutina = async () => {
+    if (!confirm("¿Deseas enviar la prueba de difusión matutina a tus clientes mayoristas ahora?")) return
+    setIsTestingDifusion(true)
+    try {
+      const res = await fetch("/api/difusion-matutina")
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      alert(`🚀 ¡Difusión enviada con éxito a ${data.mensajesEnviados || 0} clientes mayoristas!`)
+    } catch (e: any) {
+      alert("Error en difusión: " + e.message)
+    } finally {
+      setIsTestingDifusion(false)
     }
   }
 
@@ -94,7 +120,6 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
       const promptConStock = systemPrompt.replace("{STOCK_DATA}", stockFormateado || "Actualmente no hay stock disponible.")
 
-      // 🚀 Petición a nuestro backend en Next.js (/api/chat-ia)
       const res = await fetch("/api/chat-ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,7 +137,6 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
       setMensajes([...historial, { rol: "ia", texto: data.respuesta }])
 
     } catch (error: any) {
-      console.error("Error al enviar mensaje:", error)
       setMensajes([...historial, { rol: "ia", texto: `❌ Error: ${error.message}` }])
     } finally {
       setIsTyping(false)
@@ -121,9 +145,14 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
 
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA (Groq Gratis)</h2>
-        <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad de tu vendedor automático impulsado por Llama 3.3.</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-black text-white flex items-center gap-2"><Bot className="size-5 text-indigo-500"/> Laboratorio de IA & Automatización WA</h2>
+          <p className="text-xs text-zinc-500 mt-1">Configurá la personalidad del vendedor virtual y probá las difusiones automatizadas.</p>
+        </div>
+        <button onClick={probarDifusionMatutina} disabled={isTestingDifusion} className="bg-orange-500 hover:bg-orange-400 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-50">
+          <Radio className="size-4" /> {isTestingDifusion ? "Enviando..." : "Probar Difusión 10:00 AM"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -131,7 +160,7 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
         {/* PANEL IZQUIERDO: CONFIGURACIÓN */}
         <div className="space-y-6">
           <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Zap className="size-4 text-orange-400"/> Conexión Groq (100% Gratis)</h3>
+            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Zap className="size-4 text-orange-400"/> Conexión Groq (Gratis)</h3>
             
             <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">API Key de Groq</label>
             <input 
@@ -141,20 +170,15 @@ INVENTARIO ACTUAL EN TIEMPO REAL:
               placeholder="gsk_..." 
               className="w-full bg-[#161B22] border border-zinc-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono mb-2" 
             />
-            <p className="text-[10px] text-zinc-500 leading-relaxed mb-4">
-              Obtené tu clave gratis en <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">console.groq.com/keys</a>. No requiere tarjeta.
-            </p>
 
-            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 mt-8 flex items-center gap-2"><Settings className="size-4"/> Comportamiento (System Prompt)</h3>
-            <label className="text-[10px] font-bold text-zinc-500 block mb-1.5">Instrucciones para la Inteligencia Artificial</label>
+            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 mb-4 mt-8 flex items-center gap-2"><Settings className="size-4"/> Comportamiento Ejecutivo (Prompt)</h3>
             <textarea 
               value={systemPrompt} 
               onChange={e => setSystemPrompt(e.target.value)} 
               className="w-full bg-[#161B22] border border-zinc-800 text-zinc-300 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 font-mono h-[350px] resize-none" 
             />
-            <p className="text-[10px] text-zinc-500 mt-2">La etiqueta <strong>{`{STOCK_DATA}`}</strong> se reemplaza dinámicamente con tus equipos reales.</p>
 
-            <button onClick={guardarConfig} className="w-full mt-6 bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 border border-zinc-700">
+            <button onClick={guardarConfig} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
               <Save className="size-4"/> Guardar Configuración
             </button>
           </div>
