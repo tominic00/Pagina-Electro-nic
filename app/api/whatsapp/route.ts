@@ -16,8 +16,6 @@ export async function POST(req: Request) {
     const messageText = (body.data?.message?.conversation || 
                         body.data?.message?.extendedTextMessage?.text || "").trim();
     const remoteJid = body.data?.key?.remoteJid;
-    
-    // Obtener nombre desde el perfil de WhatsApp
     let pushName = body.data?.pushName || '';
 
     if (!messageText || !remoteJid) {
@@ -38,7 +36,7 @@ export async function POST(req: Request) {
     const numeroLimpio = remoteJid.replace('@s.whatsapp.net', '');
 
     // -------------------------------------------------------------
-    // 0) BUSCAR SI EL CLIENTE YA TIENE UN NOMBRE REGISTRADO EN LA BD
+    // 0) BUSCAR SI EL CLIENTE YA TIENE REGISTRO EN LA BD
     // -------------------------------------------------------------
     const { data: clienteReg } = await supabase
       .from('clientes_mayorista')
@@ -46,11 +44,31 @@ export async function POST(req: Request) {
       .or(`telefono.eq.${numeroLimpio},telefono.eq.${remoteJid}`)
       .single();
 
-    // Si ya lo tenemos guardado en BD, usamos su nombre guardado. Si no, usamos el pushName de WhatsApp o "amigo/a"
     const nombreClienteFinal = clienteReg?.nombre || pushName.trim() || 'amigo/a';
 
     // -------------------------------------------------------------
-    // 1) COMANDO "MENU": REACTIVAR BOT Y CANCELAR PAUSA
+    // 1) APROBACIÓN REMOTA POR EL DUEÑO (Respondiendo por WhatsApp)
+    // -------------------------------------------------------------
+    if (remoteJid === MI_WHATSAPP_PERSONAL && messageText.toLowerCase().includes('aprobar mayorista')) {
+      const numAprobar = messageText.replace(/aprobar mayorista/i, '').trim().replace(/[^0-9]/g, '');
+
+      if (numAprobar) {
+        // Actualizar en Supabase a Mayorista
+        await supabase.from('clientes_mayorista').update({ tipo_cliente: 'Mayorista' }).or(`telefono.eq.${numAprobar},telefono.ilike.%${numAprobar}%`);
+
+        // Notificar al cliente
+        const targetJid = numAprobar.includes('@') ? numAprobar : `${numAprobar}@s.whatsapp.net`;
+        const msjAprobado = `🎉 ¡Buenas noticias! Tu cuenta fue aprobada como **Cliente Mayorista** en Electro·Nic.\n\nA partir de ahora tenés acceso a nuestros precios gremio y lotes en camino. Escribí **'Menú'** para ver las listas actualizadas.`;
+        
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, targetJid, msjAprobado);
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `✅ El cliente +${numAprobar} fue cambiado a MAYORISTA con éxito.`);
+
+        return NextResponse.json({ success: true, mode: 'aprobacion_dueno_exitosa' });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2) COMANDO "MENU": REACTIVAR BOT
     // -------------------------------------------------------------
     if (messageText.toLowerCase() === 'menu' || messageText.toLowerCase() === 'menú') {
       await supabase.from('bot_pausas').delete().eq('remote_jid', remoteJid);
@@ -62,7 +80,7 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 2) VERIFICAR PAUSA TEMPORIZADA (60 MINUTOS)
+    // 3) VERIFICAR PAUSA TEMPORIZADA (60 MINUTOS)
     // -------------------------------------------------------------
     const { data: pausaTemp } = await supabase.from('bot_pausas').select('pausado_hasta').eq('remote_jid', remoteJid).single();
     const tiempoPausa = pausaTemp?.pausado_hasta || clienteReg?.bot_pausado_hasta;
@@ -72,65 +90,58 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------
-    // 3) RESPUESTA DEL DUEÑO SOBRE CITAS (FLUJO EXISTENTE)
+    // 4) SOLICITUD DE CAMBIO DE MINORISTA A MAYORISTA
     // -------------------------------------------------------------
-    if (remoteJid === MI_WHATSAPP_PERSONAL) {
-      const { data: ultimaCita } = await supabase
-        .from('citas')
-        .select('*')
-        .eq('estado', 'pendiente')
-        .order('id', { ascending: false })
-        .limit(1)
-        .single();
+    const textoLower = messageText.toLowerCase();
+    const quiereSerMayorista = textoLower.includes('quiero ser mayorista') || 
+                              textoLower.includes('pasar a mayorista') || 
+                              textoLower.includes('precios por mayor') || 
+                              textoLower.includes('ser revendedor');
 
-      if (ultimaCita) {
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || fallbackGroqKey });
-        
-        const decisionPrompt = `El dueño de la tienda respondió esto sobre la cita del cliente (${ultimaCita.cliente_nombre}): "${messageText}".
-Determina qué decidió el dueño:
-1. Si ACEPTÓ la cita tal cual, responde solo: CONFIRMAR
-2. Si RECHAZÓ o PROPUSO OTRO HORARIO, escribe la respuesta educada que el bot debe mandarle al cliente notificándole la reprogramación.`;
+    // A) Si el cliente es Minorista o nuevo y solicita ser mayorista
+    if (quiereSerMayorista || clienteReg?.solicitando_mayorista) {
 
-        const resGroq = await groq.chat.completions.create({
-          messages: [{ role: 'user', content: decisionPrompt }],
-          model: 'llama-3.3-70b-versatile',
-        });
+      // Si recién solicita, le pedimos la ficha técnica
+      if (quiereSerMayorista && !clienteReg?.solicitando_mayorista) {
+        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista', true);
 
-        const decision = resGroq.choices[0]?.message?.content || '';
+        const msjFicha = `💼 ¡Excelente ${nombreClienteFinal}! Para validar tu cuenta gremio y darte acceso a las listas mayoristas, necesitamos los siguientes datos:\n\n1. Nombre Completo\n2. Email de contacto\n3. Nombre de tu Local o Negocio\n4. Instagram / Redes Sociales\n\nPor favor, enviame esa información en un solo mensaje para enviársela al dueño para su aprobación.`;
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjFicha);
+        return NextResponse.json({ status: 'ficha_mayorista_solicitada' });
+      }
 
-        if (decision.includes('CONFIRMAR')) {
-          await supabase.from('citas').update({ estado: 'confirmada' }).eq('id', ultimaCita.id);
-          await supabase.from('actividades').update({ estado: 'Completado' }).eq('cliente_telefono', ultimaCita.cliente_telefono);
+      // Si ya estaba solicitando y ahora nos responde con sus datos
+      if (clienteReg?.solicitando_mayorista && !quiereSerMayorista) {
+        // Guardamos los datos de la solicitud
+        await supabase.from('clientes_mayorista').update({
+          solicitando_mayorista: false,
+          datos_solicitud: messageText
+        }).eq('id', clienteReg.id);
 
-          const mensajeCliente = `¡Hola ${ultimaCita.cliente_nombre}! 👋 Te confirmo que quedó agendada tu cita para ver el ${ultimaCita.equipo}. Te esperamos en el local (Florida Sur 24 local 2, Yerba Buena). ¡Nos vemos!`;
-          await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, ultimaCita.cliente_telefono, mensajeCliente);
-          await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `✅ Cita de ${ultimaCita.cliente_nombre} confirmada y avisada al cliente.`);
-        } else {
-          await supabase.from('citas').update({ estado: 'reprogramada' }).eq('id', ultimaCita.id);
-          await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, ultimaCita.cliente_telefono, decision);
-          await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, `📩 Mensaje de cambio enviado a ${ultimaCita.cliente_nombre}.`);
-        }
+        const msjConfirmacionCliente = `👍 ¡Datos recibidos, ${nombreClienteFinal}! Ya le envié la solicitud al dueño para su validación. Apenas la apruebe, te llegará una notificación por acá con el acceso a las listas de precio gremio.`;
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, msjConfirmacionCliente);
 
-        return NextResponse.json({ success: true, mode: 'owner_intervention' });
+        // Notificación al Dueño por WhatsApp
+        const msjAlertaDueno = `🚨 *SOLICITUD DE ALTA MAYORISTA* 🚨\n\n👤 *Cliente:* ${nombreClienteFinal} (+${numeroLimpio})\n📝 *Datos enviados:* "${messageText}"\n\n👉 *Para aprobarlo, respondé a este mensaje escribiendo exactamente:*\n\nAprobar Mayorista ${numeroLimpio}`;
+        await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, MI_WHATSAPP_PERSONAL, msjAlertaDueno);
+
+        return NextResponse.json({ status: 'solicitud_mayorista_enviada' });
       }
     }
 
     // -------------------------------------------------------------
-    // 4) DETECCIÓN Y CLASIFICACIÓN PERMANENTE CON NOMBRE
+    // 5) DETECCIÓN Y CLASIFICACIÓN INICIAL (NUEVOS CONTACTOS)
     // -------------------------------------------------------------
     let tipoCliente = clienteReg?.tipo_cliente || null;
 
     if (!tipoCliente) {
-      const textoLower = messageText.toLowerCase();
-
-      if (messageText === '1' || textoLower.includes('mayorista') || textoLower.includes('revendedor') || textoLower.includes('comprar al por mayor') || textoLower.includes('local')) {
+      if (messageText === '1' || textoLower.includes('mayorista') || textoLower.includes('revendedor')) {
         tipoCliente = 'Mayorista';
-        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Mayorista');
-      } else if (messageText === '2' || textoLower.includes('minorista') || textoLower.includes('personal') || textoLower.includes('particular') || textoLower.includes('para mi')) {
+        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Mayorista', false);
+      } else if (messageText === '2' || textoLower.includes('minorista') || textoLower.includes('personal')) {
         tipoCliente = 'Minorista';
-        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista');
+        await guardarOActualizarCliente(supabase, remoteJid, numeroLimpio, nombreClienteFinal, 'Minorista', false);
       } else {
-        // Mensaje de bienvenida personalizado con el nombre capturado
         const saludoInicial = nombreClienteFinal !== 'amigo/a' ? `¡Hola ${nombreClienteFinal}! 👋` : `¡Hola! 👋`;
         const mensajeBienvenida = `${saludoInicial} Bienvenido/a a *Electro·Nic*.\n\nPara brindarte la mejor información y la lista de precios adecuada, contame:\n\n1️⃣ *¿Buscás comprar al por mayor / para revender?* 💼\n2️⃣ *¿Buscás un equipo para uso personal?* 📱\n\n_Respondeme con el número 1 o 2 para continuar._`;
         
@@ -140,7 +151,7 @@ Determina qué decidió el dueño:
     }
 
     // -------------------------------------------------------------
-    // 5) ATENCIÓN A CLIENTES MAYORISTAS (PERSONALIZADO CON NOMBRE)
+    // 6) ATENCIÓN A CLIENTES MAYORISTAS
     // -------------------------------------------------------------
     if (tipoCliente === 'Mayorista') {
       
@@ -194,14 +205,13 @@ Determina qué decidió el dueño:
         return NextResponse.json({ success: true, mode: 'mayorista_vendedor_pausa' });
       }
 
-      // Menú Principal Mayorista con Nombre
       const menuMayorista = `💼 *Menú Mayorista Electro·Nic*\n¡Hola ${nombreClienteFinal}! Elegí una opción para enviarte la info al instante:\n\n1️⃣ Usados Impecables (% Batería)\n2️⃣ Nuevos Sellados\n3️⃣ Naves en Camino\n4️⃣ Comprar o Hablar con Vendedor 👤`;
       await enviarRespuestaWA(evolutionUrl!, evolutionApiKey!, INSTANCE_NAME, remoteJid, menuMayorista);
       return NextResponse.json({ success: true, mode: 'mayorista_menu' });
     }
 
     // -------------------------------------------------------------
-    // 6) ATENCIÓN A CLIENTES MINORISTAS (GROQ IA CON NOMBRE)
+    // 7) ATENCIÓN A CLIENTES MINORISTAS (GROQ IA CON PROMPT PÚBLICO)
     // -------------------------------------------------------------
     const { data: config } = await supabase.from('configuracion_ia').select('*').eq('id', 1).single();
     const groqKeyToUse = config?.groq_api_key || fallbackGroqKey;
@@ -227,7 +237,6 @@ Determina qué decidió el dueño:
       `- ${eq.equipo} | Condición: ${eq.condicion} | Bat: ${eq.bateria || 'N/A'}% | Precio Minorista: USD ${eq.precio_minorista_usd || eq.precio_venta_usd}`
     ).join("\n");
 
-    // Inyectamos el nombre del cliente en el System Prompt para que la IA sepa con quién habla
     const promptBase = config?.system_prompt || `Sos el vendedor de Electro·Nic. INVENTARIO:\n{STOCK_DATA}`;
     const promptConNombre = `Estás hablando con el cliente llamado: ${nombreClienteFinal}.\n\n` + promptBase;
     const systemPromptFinal = promptConNombre.replace("{STOCK_DATA}", stockFormateado || "Sin stock disponible.");
@@ -297,24 +306,29 @@ Determina qué decidió el dueño:
   }
 }
 
-// 🚀 FUNCIÓN AUXILIAR PARA GUARDAR Y RECORDAR AL CLIENTE
-async function guardarOActualizarCliente(supabase: any, remoteJid: string, telefono: string, nombre: string, tipo: 'Mayorista' | 'Minorista') {
+// 🚀 FUNCIÓN DE GUARDADO Y REGISTRO DE CLIENTE CON SOLICITUD
+async function guardarOActualizarCliente(supabase: any, remoteJid: string, telefono: string, nombre: string, tipo: 'Mayorista' | 'Minorista', solicitandoMayorista: boolean = false) {
   try {
     const { data: existente } = await supabase.from('clientes_mayorista').select('*').or(`telefono.eq.${telefono},telefono.eq.${remoteJid}`).single();
 
     if (existente) {
-      await supabase.from('clientes_mayorista').update({ tipo_cliente: tipo, nombre: existente.nombre || nombre }).eq('id', existente.id);
+      await supabase.from('clientes_mayorista').update({
+        tipo_cliente: tipo,
+        nombre: existente.nombre || nombre,
+        solicitando_mayorista: solicitandoMayorista
+      }).eq('id', existente.id);
     } else {
       await supabase.from('clientes_mayorista').insert([{
         nombre: nombre || 'Cliente',
         telefono,
         remote_jid: remoteJid,
         tipo_cliente: tipo,
+        solicitando_mayorista: solicitandoMayorista,
         created_at: new Date().toISOString()
       }]);
     }
   } catch (e) {
-    console.error("Error al registrar cliente con nombre:", e);
+    console.error("Error al registrar cliente:", e);
   }
 }
 
