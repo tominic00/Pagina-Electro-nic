@@ -3,10 +3,7 @@ import { MessageCircle, Copy, Share2, Loader2, Sparkles, CheckSquare, Square, Ba
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
-
 export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
-  alert("¡ESTOY EN EL ARCHIVO CORRECTO DE LISTAS!")
-
   const [stockCrudo, setStockCrudo] = useState<any[]>([])
   const [pedidosCrudos, setPedidosCrudos] = useState<any[]>([])
   const [stockAgrupado, setStockAgrupado] = useState<any[]>([])
@@ -26,31 +23,11 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Traer pedidos
-    const { data: pedidosData, error: errPedidos } = await supabase.from("pedidos_mayorista").select("*")
+    // 1. Traemos todo el stock físico
+    const { data: stockData } = await supabase.from("stock_mayorista").select("*")
     
-    // 2. Traer stock
-    const { data: stockData, error: errStock } = await supabase.from("stock_mayorista").select("*")
-
-    // 🚀 ALERTA DE EMERGENCIA EN PANTALLA
-    let mensaje = "🔍 ALERTA DE DIAGNÓSTICO:\n\n"
-    
-    if (errPedidos) {
-      mensaje += `❌ ERROR EN PEDIDOS: ${errPedidos.message}\n`
-    } else {
-      mensaje += `📦 Pedidos encontrados en BD: ${pedidosData?.length || 0}\n`
-      if (pedidosData && pedidosData.length > 0) {
-        mensaje += `Ejemplo primer pedido: ${JSON.stringify(pedidosData[0].items || pedidosData[0].titulo)}\n`
-      }
-    }
-
-    if (errStock) {
-      mensaje += `❌ ERROR EN STOCK: ${errStock.message}\n`
-    } else {
-      mensaje += `📱 Equipos en Stock encontrados: ${stockData?.length || 0}\n`
-    }
-
-    alert(mensaje)
+    // 2. Traemos todos los pedidos en camino/lotes de compra
+    const { data: pedidosData } = await supabase.from("pedidos_mayorista").select("*")
 
     if (stockData) setStockCrudo(stockData)
     if (pedidosData) setPedidosCrudos(pedidosData)
@@ -73,43 +50,43 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
     }
   }, [tipoPrecio, origenStock])
 
-  // 🚀 AGRUPACIÓN DINÁMICA: DESGLOSA LOS LOTE DE PEDIDOS Y EXTRAE CADA TELÉFONO
+  // 🚀 AGRUPACIÓN DINÁMICA DE EQUIPOS
   useEffect(() => {
     let listaAProcesar: any[] = []
 
     if (origenStock === "disponible") {
-      listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible")
+      // Filtrar únicamente los disponibles y excluir ítems de prueba sin precio
+      listaAProcesar = stockCrudo.filter(item => item.estado === "Disponible" && item.equipo !== "Equipo en Camino")
     } else {
-      // A) Equipos individuales en la tabla stock_mayorista que estén marcados como en camino
-      const deStockEnCamino = stockCrudo.filter(item => item.estado === "En Tránsito" || item.estado === "En Camino")
+      // A) Equipos de la tabla stock_mayorista que estén en camino
+      const deStockEnCamino = stockCrudo.filter(item => 
+        (item.estado === "En Tránsito" || item.estado === "En Camino") && item.equipo !== "Equipo en Camino"
+      )
       
-      // B) Ítems empaquetados dentro del arreglo 'items' de la tabla pedidos_mayorista
+      // B) Desglosar los lotes de la tabla pedidos_mayorista (excluyendo los recibidos)
       const dePedidos: any[] = []
+      const lotesPendientes = pedidosCrudos.filter(p => String(p.estado).toLowerCase() !== "recibido")
 
-      pedidosCrudos.forEach((lote: any) => {
+      lotesPendientes.forEach((lote: any) => {
         let listaItems = lote.items
 
-        // Si la columna viene como string JSON en la BD, la convertimos a Array
+        // Convertir a Array si viene como string en la BD
         if (typeof listaItems === "string") {
           try { listaItems = JSON.parse(listaItems) } catch (e) { listaItems = [] }
         }
 
         if (Array.isArray(listaItems) && listaItems.length > 0) {
           listaItems.forEach((it: any) => {
-            const modeloNombre = it.modelo || it.equipo || "iPhone"
-            const condicionEquipo = it.condicion || "Usado"
-            
-            // Precios según la orden de compra
+            const mod = it.modelo || it.equipo || "iPhone"
+            const cond = it.condicion || "Usado"
             const costoUnitario = Number(it.costo_usd) || 0
             const precioVentaSugerido = Number(it.precio_sugerido_usd || it.precio_venta_usd) || costoUnitario
-            
-            const cantidadEnLote = Number(it.cantidad) || 1
+            const cant = Number(it.cantidad) || 1
 
-            // Duplicamos según la cantidad pedida en la orden para agruparlos correctamente
-            for (let i = 0; i < cantidadEnLote; i++) {
+            for (let i = 0; i < cant; i++) {
               dePedidos.push({
-                equipo: modeloNombre,
-                condicion: condicionEquipo,
+                equipo: mod,
+                condicion: cond,
                 bateria: it.bateria || null,
                 precio_venta_usd: costoUnitario,
                 precio_minorista_usd: precioVentaSugerido
@@ -117,7 +94,6 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
             }
           })
         } else if (lote.equipo || lote.titulo) {
-          // Si es un pedido simple legacy sin arreglo de ítems
           dePedidos.push({
             equipo: lote.equipo || lote.titulo || "Equipo en Camino",
             condicion: lote.condicion || "Usado",
@@ -131,7 +107,7 @@ export function TabListas({ usuarioActual }: { usuarioActual?: any }) {
       listaAProcesar = [...deStockEnCamino, ...dePedidos]
     }
 
-    // 🚀 AGRUPAR EQUIPOS POR MODELO, CONDICIÓN Y PRECIO
+    // 🚀 AGRUPAR POR MODELO, CONDICIÓN Y PRECIO
     const grupos: Record<string, any> = {}
 
     listaAProcesar.forEach((item: any) => {
