@@ -354,7 +354,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
   }
 
-  // CERRAR VENTA
+  // CERRAR VENTA Y REGISTRAR EN CAJA EN LA MONEDA DE PAGO REAL
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -379,6 +379,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       }
 
       const loteId = `LOTE-${Date.now()}`
+      const fechaActual = new Date().toISOString() // 👈 FECHA EXACTA DE AHORA
       const ajustePorItem = montoAjusteGlobal / carrito.length
 
       const nuevasVentas = carrito.map(item => {
@@ -396,7 +397,8 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           forma_pago: formaPago,
           cotizacion_usd: isPagoPesos ? cotizacionUsd : null, 
           monto_vendido_ars: isPagoPesos ? (precioItemConAjuste * cotizacionUsd) : null,
-          estado: 'Completada'
+          estado: 'Completada',
+          fecha: fechaActual // 👈 GUARDAMOS FECHA EN VENTA
         }
       })
       const { error: errVentas } = await supabase.from("ventas_mayorista").insert(nuevasVentas)
@@ -405,22 +407,26 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      // INYECCIÓN CON ID DE REFERENCIA PARA PODER ANULAR
+      // 🚀 INYECCIÓN A LA CAJA DIARIA CON FECHA Y MONEDA REAL
       if (pagoRealUSD > 0) {
         const esMonedaPesos = monedaAbonada === "ARS"
         const montoIngresoCaja = esMonedaPesos ? pagoRealARS : pagoRealUSD
 
-        await supabase.from("caja_mayorista").insert([{
+        const { error: errCaja } = await supabase.from("caja_mayorista").insert([{
           tipo: "Ingreso",
           categoria: "Venta",
           monto: montoIngresoCaja,
           monto_usd: pagoRealUSD,
           metodo_pago: formaPago,
-          cotizacion_usd: isPagoPesos ? cotizacionUsd : null,
-          descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
-          usuario: usuarioActual.nombre,
-          referencia_id: loteId
+          concepto: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
+          descripcion: `Cobro ingresado mediante ${formaPago}`,
+          usuario: usuarioActual?.nombre || 'Admin',
+          realizado_por: usuarioActual?.nombre || 'Admin',
+          referencia_id: loteId,
+          fecha: fechaActual // 👈 ACÁ ESTABA EL ERROR: Faltaba la fecha
         }])
+        
+        if (errCaja) throw new Error("Venta guardada, pero falló el ingreso a caja: " + errCaja.message)
       }
 
       generarPDF("REMITO OFICIAL", carrito, nombreCliente, totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
