@@ -342,9 +342,27 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   }
 
   const eliminarEquipo = async (id: string) => {
-    if(!confirm("¿Seguro que querés eliminar este equipo del stock definitivamente?")) return
-    await supabase.from("stock_mayorista").delete().eq("id", id)
-    fetchData()
+    if (!confirm("⚠️ ¿Seguro que querés eliminar este equipo del stock definitivamente?\n\nSi el equipo fue vendido o reservado, también se desvinculará de esos registros.")) return
+
+    try {
+      setLoading(true)
+
+      // 1. Limpiar referencias previas para evitar bloqueos por Foreign Key
+      await supabase.from("ventas_mayorista").update({ equipo_id: null }).eq("equipo_id", id)
+      await supabase.from("reservas_mayorista").delete().eq("equipo_id", id)
+      await supabase.from("garantias_mayorista").delete().eq("equipo_id", id)
+
+      // 2. Borrar el equipo de la tabla principal de stock
+      const { error } = await supabase.from("stock_mayorista").delete().eq("id", id)
+
+      if (error) throw error
+
+      alert("✅ Equipo eliminado del inventario correctamente.")
+      fetchData()
+    } catch (error: any) {
+      alert("❌ Error al borrar el equipo: " + error.message)
+      setLoading(false)
+    }
   }
 
   const handleGuardar = async (e: React.FormEvent) => {
