@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2, RefreshCw } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2, RefreshCw, RotateCcw, Square } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import * as XLSX from 'xlsx';
@@ -25,6 +25,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   
   // MODO DE IMPORTACIÓN (ACTUALIZAR VS CREAR NUEVOS)
   const [modoImportacion, setModoImportacion] = useState<"upsert" | "insert">("upsert")
+  const [ultimoLoteImportacion, setUltimoLoteImportacion] = useState<string | null>(null)
+
+  // SELECCIÓN MÚLTIPLE DE PRODUCTOS
+  const [seleccionados, setSeleccionados] = useState<string[]>([])
 
   // MODAL DE FINALIZACIÓN DE REPARACIÓN
   const [showRepararModal, setShowRepararModal] = useState(false)
@@ -92,7 +96,13 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       }
     }
 
-    if (stockData) setEquipos(stockData)
+    if (stockData) {
+      setEquipos(stockData)
+      // Buscar el último lote de importación si existe
+      const equipoConLote = stockData.find(e => e.lote_importacion_id)
+      if (equipoConLote) setUltimoLoteImportacion(equipoConLote.lote_importacion_id)
+      else setUltimoLoteImportacion(null)
+    }
     setLoading(false)
   }
 
@@ -121,6 +131,80 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
+
+  // 🚀 LÓGICA DE SELECCIÓN MÚLTIPLE DE FILAS EN LA TABLA
+  const toggleSeleccionarTodo = () => {
+    if (seleccionados.length === equiposFiltrados.length) {
+      setSeleccionados([])
+    } else {
+      setSeleccionados(equiposFiltrados.map(e => e.id))
+    }
+  }
+
+  const toggleSeleccionarFila = (id: string) => {
+    if (seleccionados.includes(id)) {
+      setSeleccionados(seleccionados.filter(item => item !== id))
+    } else {
+      setSeleccionados([...seleccionados, id])
+    }
+  }
+
+  // 🚀 BORRADO MASIVO DE EQUIPOS SELECCIONADOS
+  const handleBorrarSeleccionados = async () => {
+    if (seleccionados.length === 0) return
+    if (!confirm(`⚠️ ¿Seguro que querés eliminar estos ${seleccionados.length} equipos del stock definitivamente?\n\nSe desvincularán de cualquier historial asociado.`)) return
+
+    try {
+      setLoading(true)
+      // 1. Desvincular referencias
+      await supabase.from("ventas_mayorista").update({ equipo_id: null }).in("equipo_id", seleccionados)
+      await supabase.from("reservas_mayorista").delete().in("equipo_id", seleccionados)
+      await supabase.from("garantias_mayorista").delete().in("equipo_id", seleccionados)
+
+      // 2. Borrar en lote
+      const { error } = await supabase.from("stock_mayorista").delete().in("id", seleccionados)
+      if (error) throw error
+
+      alert(`✅ Se eliminaron ${seleccionados.length} equipos con éxito.`)
+      setSeleccionados([])
+      fetchData()
+    } catch (error: any) {
+      alert("❌ Error al borrar los equipos: " + error.message)
+      setLoading(false)
+    }
+  }
+
+  // 🚀 DESHACER ÚLTIMA IMPORTACIÓN
+  const handleDeshacerUltimaImportacion = async () => {
+    if (!ultimoLoteImportacion) return
+    if (!confirm(`⚠️ ¿Deseás deshacer la última importación masiva?\n\nSe borrarán los equipos pertenecientes a ese lote.`)) return
+
+    try {
+      setLoading(true)
+      // Buscar los ids del lote
+      const { data: itemsLote } = await supabase.from("stock_mayorista").select("id").eq("lote_importacion_id", ultimoLoteImportacion)
+      
+      if (itemsLote && itemsLote.length > 0) {
+        const idsLote = itemsLote.map(i => i.id)
+        
+        await supabase.from("ventas_mayorista").update({ equipo_id: null }).in("equipo_id", idsLote)
+        await supabase.from("reservas_mayorista").delete().in("equipo_id", idsLote)
+        await supabase.from("garantias_mayorista").delete().in("equipo_id", idsLote)
+
+        const { error } = await supabase.from("stock_mayorista").delete().eq("lote_importacion_id", ultimoLoteImportacion)
+        if (error) throw error
+
+        alert(`✅ Importación revertida. Se borraron ${idsLote.length} productos del lote.`)
+      } else {
+        alert("No se encontraron registros del lote.")
+      }
+
+      fetchData()
+    } catch (error: any) {
+      alert("Error al deshacer importación: " + error.message)
+      setLoading(false)
+    }
+  }
 
   // ABRIR MODAL DE FINALIZACIÓN DE REPARACIÓN
   const abrirFinalizarReparacion = (eq: any) => {
@@ -216,7 +300,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 🚀 IMPORTACIÓN INTELIGENTE (ACTUALIZAR EXISTENTES VS CREAR NUEVOS)
+  // 🚀 IMPORTACIÓN INTELIGENTE CON REGISTRO DE LOTE PARA ROLLBACK
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -253,6 +337,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           return parseFloat(numLimpio) || 0;
         };
 
+        const loteId = `LOTE-IMP-${Date.now()}`
+
         const payload = jsonData.map(row => {
           const modelo = getVal(row, "Modelo", "Equipo", "Modelo/Equipo");
           const capacidad = getVal(row, "Capacidad", "GB", "Memoria");
@@ -284,7 +370,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             precio_minorista_usd: precio_minorista_usd,
             estado: estado,
             observaciones: observaciones,
-            ingresado_por: usuarioActual.nombre
+            ingresado_por: usuarioActual.nombre,
+            lote_importacion_id: loteId // 👈 IDENTIFICADOR PARA DESHACER
           };
         }).filter(p => p.equipo !== "");
 
@@ -296,10 +383,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         let creados = 0;
 
         if (modoImportacion === "upsert") {
-          // Lógica de actualización por IMEI
           for (const item of payload) {
             if (item.imei) {
-              // Buscar si ya existe por IMEI
               const { data: existente } = await supabase
                 .from("stock_mayorista")
                 .select("id")
@@ -307,31 +392,28 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 .maybeSingle();
 
               if (existente) {
-                // Actualizar producto existente
                 await supabase
                   .from("stock_mayorista")
                   .update(item)
                   .eq("id", existente.id);
                 actualizados++;
               } else {
-                // Insertar nuevo
                 await supabase.from("stock_mayorista").insert([item]);
                 creados++;
               }
             } else {
-              // Si no tiene IMEI, se crea como nuevo
               await supabase.from("stock_mayorista").insert([item]);
               creados++;
             }
           }
           alert(`✅ Importación finalizada con éxito:\n• ${actualizados} productos actualizados\n• ${creados} productos nuevos creados`);
         } else {
-          // Inserción directa tradicional
           const { error } = await supabase.from("stock_mayorista").insert(payload);
           if (error) throw error;
           alert(`✅ ¡Se agregaron ${payload.length} productos nuevos al inventario!`);
         }
 
+        setUltimoLoteImportacion(loteId)
         setShowImportModal(false);
         fetchData();
 
@@ -385,12 +467,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     try {
       setLoading(true)
 
-      // 1. Limpiar referencias previas
       await supabase.from("ventas_mayorista").update({ equipo_id: null }).eq("equipo_id", id)
       await supabase.from("reservas_mayorista").delete().eq("equipo_id", id)
       await supabase.from("garantias_mayorista").delete().eq("equipo_id", id)
 
-      // 2. Borrar equipo
       const { error } = await supabase.from("stock_mayorista").delete().eq("id", id)
 
       if (error) throw error
@@ -517,11 +597,40 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
         
         <div className="flex flex-wrap items-center gap-2 pb-1">
+          {/* 🚀 BOTÓN DESHACER ÚLTIMA IMPORTACIÓN */}
+          {ultimoLoteImportacion && (
+            <button 
+              onClick={handleDeshacerUltimaImportacion} 
+              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+              title="Deshacer los productos cargados en la última importación masiva"
+            >
+              <RotateCcw className="size-4" /> Deshacer Importación
+            </button>
+          )}
+
           <button onClick={() => setShowImportModal(true)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"><Upload className="size-4"/> Importar</button>
           <button onClick={() => setShowExportModal(true)} className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"><Download className="size-4"/> Exportar ({activeSubTab})</button>
           <button onClick={abrirNuevo} className="bg-emerald-500 text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20"><Plus className="size-4 font-black"/> Cargar Equipo</button>
         </div>
       </div>
+
+      {/* 🚀 BARRA FLOTANTE DE ACCIONES PARA EQUIPOS SELECCIONADOS */}
+      {seleccionados.length > 0 && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-2xl flex justify-between items-center animate-in slide-in-from-top-2">
+          <span className="text-xs font-bold text-red-400 flex items-center gap-2">
+            <CheckSquare className="size-4 text-red-400" />
+            {seleccionados.length} equipo(s) seleccionado(s)
+          </span>
+          <div className="flex gap-2">
+            <button onClick={() => setSeleccionados([])} className="px-3 py-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs font-bold transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleBorrarSeleccionados} className="px-4 py-1.5 bg-red-500 hover:bg-red-400 text-black font-black uppercase tracking-wider rounded-lg text-xs transition-all shadow-lg active:scale-95 flex items-center gap-1.5">
+              <Trash2 className="size-3.5"/> Eliminar Seleccionados ({seleccionados.length})
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* FILTROS */}
       <div className="bg-[#161B22] border border-zinc-800 p-4 rounded-2xl mb-6 shadow-inner">
@@ -537,13 +646,22 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* TABLA DE DATOS */}
+      {/* TABLA DE DATOS CON SELECCIÓN MÚLTIPLE */}
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div> : (
         <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
               <tr>
-                <th className="p-4 rounded-tl-xl">Modelo & Especificaciones</th>
+                <th className="p-4 rounded-tl-xl w-10 text-center">
+                  <button onClick={toggleSeleccionarTodo} className="text-zinc-500 hover:text-white">
+                    {seleccionados.length === equiposFiltrados.length && equiposFiltrados.length > 0 ? (
+                      <CheckSquare className="size-4 text-emerald-400" />
+                    ) : (
+                      <Square className="size-4" />
+                    )}
+                  </button>
+                </th>
+                <th className="p-4">Modelo & Especificaciones</th>
                 <th className="p-4 text-center">Condición</th>
                 <th className="p-4 text-center">% Batería</th>
                 {puedeVerCosto && <th className="p-4 text-right">Costo (Base + Arreglos)</th>}
@@ -558,9 +676,17 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                 const mod = partes[0] || eq.equipo
                 const cap = partes[1]
                 const col = partes[2]
+                const isSelected = seleccionados.includes(eq.id)
 
                 return (
-                  <tr key={eq.id} className="hover:bg-zinc-900/50 transition-colors">
+                  <tr key={eq.id} className={cn("transition-colors", isSelected ? "bg-emerald-500/10" : "hover:bg-zinc-900/50")}>
+                    {/* CHECKBOX DE SELECCIÓN */}
+                    <td className="p-4 text-center">
+                      <button onClick={() => toggleSeleccionarFila(eq.id)} className="text-zinc-500 hover:text-white">
+                        {isSelected ? <CheckSquare className="size-4 text-emerald-400" /> : <Square className="size-4 text-zinc-700" />}
+                      </button>
+                    </td>
+
                     <td className="p-4">
                       <p className={cn("font-black text-base flex items-center gap-2", eq.estado === "Vendido" ? "text-zinc-400" : "text-white")}>
                         {mod}
@@ -617,7 +743,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                   </tr>
                 )
               })}
-              {equiposFiltrados.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-500 font-bold italic">No se encontraron equipos en esta sección.</td></tr>}
+              {equiposFiltrados.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-zinc-500 font-bold italic">No se encontraron equipos en esta sección.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -914,7 +1040,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL IMPORTAR INTELIGENTE */}
+      {/* MODAL IMPORTAR INTELIGENTE */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
@@ -925,7 +1051,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             
             <div className="p-6 space-y-6">
               
-              {/* SELECTOR DE MODO DE IMPORTACIÓN */}
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
                 <p className="text-xs font-black uppercase tracking-wider text-zinc-400">Modo de Importación</p>
                 
