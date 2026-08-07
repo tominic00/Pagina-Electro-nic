@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2, RefreshCw, RotateCcw, Square } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2, RefreshCw, RotateCcw, Square, GitMerge } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import * as XLSX from 'xlsx';
@@ -23,8 +23,8 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [showImportModal, setShowImportModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   
-  // MODO DE IMPORTACIÓN (ACTUALIZAR VS CREAR NUEVOS)
-  const [modoImportacion, setModoImportacion] = useState<"upsert" | "insert">("upsert")
+  // MODO DE IMPORTACIÓN (UPSERT POR IMEI / EMPAREJAR SIN IMEI / INSERT)
+  const [modoImportacion, setModoImportacion] = useState<"upsert" | "emparejar" | "insert">("emparejar")
   const [ultimoLoteImportacion, setUltimoLoteImportacion] = useState<string | null>(null)
 
   // SELECCIÓN MÚLTIPLE DE PRODUCTOS
@@ -98,7 +98,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
     if (stockData) {
       setEquipos(stockData)
-      // Buscar el último lote de importación si existe
       const equipoConLote = stockData.find(e => e.lote_importacion_id)
       if (equipoConLote) setUltimoLoteImportacion(equipoConLote.lote_importacion_id)
       else setUltimoLoteImportacion(null)
@@ -132,7 +131,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
-  // 🚀 LÓGICA DE SELECCIÓN MÚLTIPLE DE FILAS EN LA TABLA
+  // SELECCIÓN MÚLTIPLE DE FILAS EN LA TABLA
   const toggleSeleccionarTodo = () => {
     if (seleccionados.length === equiposFiltrados.length) {
       setSeleccionados([])
@@ -149,19 +148,17 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 BORRADO MASIVO DE EQUIPOS SELECCIONADOS
+  // BORRADO MASIVO
   const handleBorrarSeleccionados = async () => {
     if (seleccionados.length === 0) return
-    if (!confirm(`⚠️ ¿Seguro que querés eliminar estos ${seleccionados.length} equipos del stock definitivamente?\n\nSe desvincularán de cualquier historial asociado.`)) return
+    if (!confirm(`⚠️ ¿Seguro que querés eliminar estos ${seleccionados.length} equipos del stock definitivamente?`)) return
 
     try {
       setLoading(true)
-      // 1. Desvincular referencias
       await supabase.from("ventas_mayorista").update({ equipo_id: null }).in("equipo_id", seleccionados)
       await supabase.from("reservas_mayorista").delete().in("equipo_id", seleccionados)
       await supabase.from("garantias_mayorista").delete().in("equipo_id", seleccionados)
 
-      // 2. Borrar en lote
       const { error } = await supabase.from("stock_mayorista").delete().in("id", seleccionados)
       if (error) throw error
 
@@ -174,14 +171,13 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 🚀 DESHACER ÚLTIMA IMPORTACIÓN
+  // DESHACER ÚLTIMA IMPORTACIÓN
   const handleDeshacerUltimaImportacion = async () => {
     if (!ultimoLoteImportacion) return
     if (!confirm(`⚠️ ¿Deseás deshacer la última importación masiva?\n\nSe borrarán los equipos pertenecientes a ese lote.`)) return
 
     try {
       setLoading(true)
-      // Buscar los ids del lote
       const { data: itemsLote } = await supabase.from("stock_mayorista").select("id").eq("lote_importacion_id", ultimoLoteImportacion)
       
       if (itemsLote && itemsLote.length > 0) {
@@ -216,7 +212,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowRepararModal(true)
   }
 
-  // CONFIRMAR REPARACIÓN, SUMAR COSTO Y PASAR A DISPONIBLE
+  // CONFIRMAR REPARACIÓN
   const handleConfirmarReparacionFinalizada = async () => {
     if (!equipoEnReparacion) return
     setIsSaving(true)
@@ -236,7 +232,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
       if (error) throw error
 
-      alert("✅ Equipo reparado con éxito. Se sumó el costo de reparación y pasó a estar 'Disponible' en el inventario.")
+      alert("✅ Equipo reparado con éxito.")
       setShowRepararModal(false)
       fetchData()
     } catch (error: any) {
@@ -246,7 +242,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // DESCARGA DIRECTA DE PLANTILLA CSV DE DEMOSTRACIÓN
+  // DESCARGA PLANTILLA
   const descargarPlantillaCSV = () => {
     const headers = "Tipo,Modelo,Capacidad,Color,Bateria,Condicion,IMEI,Costo_Base_USD,Precio_Mayorista_USD,Precio_Minorista_USD,Estado,Comentarios"
     const fila1 = "iPhone,iPhone 13,128 GB,Midnight,87,A,359412345678901,400,480,550,Disponible,Excelente estado"
@@ -264,7 +260,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     document.body.removeChild(link)
   }
 
-  // EXPORTAR LISTA DE STOCK CON CONFIGURACIÓN DINÁMICA
+  // EXPORTAR EXCEL
   const ejecutarExportacion = () => {
     const datosParaExportar = equiposFiltrados.map(eq => {
       const partes = eq.equipo.split(" - ")
@@ -300,7 +296,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 🚀 IMPORTACIÓN INTELIGENTE CON REGISTRO DE LOTE PARA ROLLBACK
+  // 🚀 IMPORTACIÓN INTELIGENTE CON CONCILIACIÓN DE EQUIPOS SIN IMEI
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -371,7 +367,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             estado: estado,
             observaciones: observaciones,
             ingresado_por: usuarioActual.nombre,
-            lote_importacion_id: loteId // 👈 IDENTIFICADOR PARA DESHACER
+            lote_importacion_id: loteId
           };
         }).filter(p => p.equipo !== "");
 
@@ -379,41 +375,59 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           throw new Error("No se encontraron filas válidas para importar.");
         }
 
-        let actualizados = 0;
+        let actualizadosPorImei = 0;
+        let emparejadosSinImei = 0;
         let creados = 0;
 
-        if (modoImportacion === "upsert") {
-          for (const item of payload) {
-            if (item.imei) {
-              const { data: existente } = await supabase
-                .from("stock_mayorista")
-                .select("id")
-                .eq("imei", item.imei)
-                .maybeSingle();
+        // Traer inventario actual completo para emparejamientos
+        const { data: stockExistenteDb } = await supabase.from("stock_mayorista").select("*");
+        const poolStockLocal = stockExistenteDb ? [...stockExistenteDb] : [];
 
-              if (existente) {
-                await supabase
-                  .from("stock_mayorista")
-                  .update(item)
-                  .eq("id", existente.id);
-                actualizados++;
-              } else {
-                await supabase.from("stock_mayorista").insert([item]);
-                creados++;
-              }
-            } else {
-              await supabase.from("stock_mayorista").insert([item]);
-              creados++;
+        for (const item of payload) {
+          let procesado = false;
+
+          // 1. SI TIENE IMEI, INTENTAR MATCH POR IMEI PRIMERO
+          if (item.imei) {
+            const idxMatchImei = poolStockLocal.findIndex(s => s.imei === item.imei);
+            if (idxMatchImei !== -1) {
+              const eqMatch = poolStockLocal[idxMatchImei];
+              await supabase.from("stock_mayorista").update(item).eq("id", eqMatch.id);
+              poolStockLocal.splice(idxMatchImei, 1); // Quitar del pool
+              actualizadosPorImei++;
+              procesado = true;
             }
           }
-          alert(`✅ Importación finalizada con éxito:\n• ${actualizados} productos actualizados\n• ${creados} productos nuevos creados`);
-        } else {
-          const { error } = await supabase.from("stock_mayorista").insert(payload);
-          if (error) throw error;
-          alert(`✅ ¡Se agregaron ${payload.length} productos nuevos al inventario!`);
+
+          // 2. SI MODO ES "EMPAREJAR" Y NO HIZO MATCH POR IMEI, BUSCAR UN PRODUCTO DEL MISMO NOMBRE SIN IMEI
+          if (!procesado && modoImportacion === "emparejar") {
+            const idxMatchModeloSinImei = poolStockLocal.findIndex(s => 
+              s.equipo.trim().toLowerCase() === item.equipo.trim().toLowerCase() && 
+              (!s.imei || s.imei === "" || s.imei === "S/N")
+            );
+
+            if (idxMatchModeloSinImei !== -1) {
+              const eqSinImei = poolStockLocal[idxMatchModeloSinImei];
+              await supabase.from("stock_mayorista").update(item).eq("id", eqSinImei.id);
+              poolStockLocal.splice(idxMatchModeloSinImei, 1);
+              emparejadosSinImei++;
+              procesado = true;
+            }
+          }
+
+          // 3. SI NINGUNA DE LAS ANTERIORES SE CUMPLIÓ, CREAR NUEVO
+          if (!procesado) {
+            await supabase.from("stock_mayorista").insert([item]);
+            creados++;
+          }
         }
 
-        setUltimoLoteImportacion(loteId)
+        let mensajeAlert = `✅ Importación procesada con éxito:\n`;
+        if (actualizadosPorImei > 0) mensajeAlert += `• ${actualizadosPorImei} actualizados por IMEI exacto\n`;
+        if (emparejadosSinImei > 0) mensajeAlert += `• ${emparejadosSinImei} pedidos sin IMEI completados y actualizados\n`;
+        if (creados > 0) mensajeAlert += `• ${creados} productos nuevos registrados\n`;
+
+        alert(mensajeAlert);
+        setUltimoLoteImportacion(loteId);
         setShowImportModal(false);
         fetchData();
 
@@ -437,42 +451,30 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   const abrirEdicion = (eq: any) => {
     setEditingId(eq.id)
-    
     const partes = eq.equipo.split(" - ")
     const mod = partes[0] || eq.equipo
     const cap = partes[1] || "N/A"
     const col = partes[2] || "N/A"
 
     setFormUI({ 
-      tipo: "iPhone", 
-      modelo: mod,
-      capacidad: cap, 
-      color: col, 
-      bateria: eq.bateria || "", 
-      condicion: eq.condicion || "A", 
-      imei: eq.imei || "", 
-      costo_usd: eq.costo_usd, 
-      precio_venta_usd: eq.precio_venta_usd, 
-      precio_minorista_usd: eq.precio_minorista_usd || "",
-      estado: eq.estado || "Disponible", 
-      stock_inicial: 1, 
-      comentarios: eq.observaciones || "" 
+      tipo: "iPhone", modelo: mod, capacidad: cap, color: col, 
+      bateria: eq.bateria || "", condicion: eq.condicion || "A", imei: eq.imei || "", 
+      costo_usd: eq.costo_usd, precio_venta_usd: eq.precio_venta_usd, precio_minorista_usd: eq.precio_minorista_usd || "",
+      estado: eq.estado || "Disponible", stock_inicial: 1, comentarios: eq.observaciones || "" 
     })
     setShowAddModal(true)
   }
 
   const eliminarEquipo = async (id: string) => {
-    if (!confirm("⚠️ ¿Seguro que querés eliminar este equipo del stock definitivamente?\n\nSi el equipo fue vendido o reservado, también se desvinculará de esos registros.")) return
+    if (!confirm("⚠️ ¿Seguro que querés eliminar este equipo del stock definitivamente?")) return
 
     try {
       setLoading(true)
-
       await supabase.from("ventas_mayorista").update({ equipo_id: null }).eq("equipo_id", id)
       await supabase.from("reservas_mayorista").delete().eq("equipo_id", id)
       await supabase.from("garantias_mayorista").delete().eq("equipo_id", id)
 
       const { error } = await supabase.from("stock_mayorista").delete().eq("id", id)
-
       if (error) throw error
 
       alert("✅ Equipo eliminado del inventario correctamente.")
@@ -597,7 +599,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
         
         <div className="flex flex-wrap items-center gap-2 pb-1">
-          {/* 🚀 BOTÓN DESHACER ÚLTIMA IMPORTACIÓN */}
           {ultimoLoteImportacion && (
             <button 
               onClick={handleDeshacerUltimaImportacion} 
@@ -614,7 +615,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* 🚀 BARRA FLOTANTE DE ACCIONES PARA EQUIPOS SELECCIONADOS */}
+      {/* BARRA FLOTANTE DE ACCIONES PARA SELECCIONADOS */}
       {seleccionados.length > 0 && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-2xl flex justify-between items-center animate-in slide-in-from-top-2">
           <span className="text-xs font-bold text-red-400 flex items-center gap-2">
@@ -646,7 +647,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       </div>
 
-      {/* TABLA DE DATOS CON SELECCIÓN MÚLTIPLE */}
+      {/* TABLA DE DATOS */}
       {loading ? <div className="py-20 flex justify-center"><Loader2 className="size-8 animate-spin text-emerald-500"/></div> : (
         <div className="overflow-x-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-xl">
           <table className="w-full text-left text-sm whitespace-nowrap">
@@ -680,7 +681,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
                 return (
                   <tr key={eq.id} className={cn("transition-colors", isSelected ? "bg-emerald-500/10" : "hover:bg-zinc-900/50")}>
-                    {/* CHECKBOX DE SELECCIÓN */}
                     <td className="p-4 text-center">
                       <button onClick={() => toggleSeleccionarFila(eq.id)} className="text-zinc-500 hover:text-white">
                         {isSelected ? <CheckSquare className="size-4 text-emerald-400" /> : <Square className="size-4 text-zinc-700" />}
@@ -1040,7 +1040,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL IMPORTAR INTELIGENTE */}
+      {/* 🚀 MODAL IMPORTAR INTELIGENTE CON CONCILIACIÓN */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
@@ -1054,32 +1054,46 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
                 <p className="text-xs font-black uppercase tracking-wider text-zinc-400">Modo de Importación</p>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setModoImportacion("emparejar")}
+                    className={cn("p-3 rounded-xl border text-left transition-all flex flex-col justify-between", 
+                      modoImportacion === "emparejar" ? "bg-sky-500/10 border-sky-500 text-sky-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                    )}
+                  >
+                    <GitMerge className="size-5 mb-2" />
+                    <div>
+                      <p className="text-xs font-black uppercase">Emparejar Pedidos sin IMEI</p>
+                      <p className="text-[9px] text-zinc-500 leading-tight mt-1">Busca coincidencia por Modelo/Color y le asigna el IMEI de la planilla.</p>
+                    </div>
+                  </button>
+
                   <button 
                     type="button"
                     onClick={() => setModoImportacion("upsert")}
-                    className={cn("p-3.5 rounded-xl border text-left transition-all flex items-start gap-3", 
-                      modoImportacion === "upsert" ? "bg-sky-500/10 border-sky-500 text-sky-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                    className={cn("p-3 rounded-xl border text-left transition-all flex flex-col justify-between", 
+                      modoImportacion === "upsert" ? "bg-purple-500/10 border-purple-500 text-purple-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
                     )}
                   >
-                    <RefreshCw className="size-5 shrink-0 mt-0.5" />
+                    <RefreshCw className="size-5 mb-2" />
                     <div>
-                      <p className="text-xs font-black uppercase">Actualizar por IMEI</p>
-                      <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">Si el IMEI ya existe, **actualiza** precios y datos. Si no existe, lo **crea**.</p>
+                      <p className="text-xs font-black uppercase">Actualizar por IMEI Exacto</p>
+                      <p className="text-[9px] text-zinc-500 leading-tight mt-1">Actualiza datos únicamente si el IMEI coincide al 100%.</p>
                     </div>
                   </button>
 
                   <button 
                     type="button"
                     onClick={() => setModoImportacion("insert")}
-                    className={cn("p-3.5 rounded-xl border text-left transition-all flex items-start gap-3", 
+                    className={cn("p-3 rounded-xl border text-left transition-all flex flex-col justify-between", 
                       modoImportacion === "insert" ? "bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
                     )}
                   >
-                    <Plus className="size-5 shrink-0 mt-0.5" />
+                    <Plus className="size-5 mb-2" />
                     <div>
                       <p className="text-xs font-black uppercase">Crear Todo Nuevo</p>
-                      <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">Agrega todas las filas como productos nuevos (puede duplicar si ya existían).</p>
+                      <p className="text-[9px] text-zinc-500 leading-tight mt-1">Inserta todas las filas como productos nuevos.</p>
                     </div>
                   </button>
                 </div>
