@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Users, Search, Plus, Edit3, Trash2, DollarSign, History, Smartphone, X, Loader2, ArrowDownRight, ArrowUpRight, Layers, PackageOpen } from "lucide-react"
-import supabase  from "@/lib/supabase"
+import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
@@ -14,7 +14,7 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
   const [showFichaModal, setShowFichaModal] = useState(false)
   const [showPagoModal, setShowPagoModal] = useState(false)
   
-  // 🚀 NUEVO: Modal de detalle de lote
+  // Modal de detalle de lote
   const [showLoteModal, setShowLoteModal] = useState(false)
   const [loteSeleccionado, setLoteSeleccionado] = useState<any>(null)
 
@@ -46,6 +46,27 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
     fetchData()
   }
 
+  // 🚀 ELIMINAR CLIENTE Y LIMPIAR REFERENCIAS
+  const handleEliminarCliente = async (cliente: any) => {
+    if (!confirm(`⚠️ ¿Estás seguro de borrar al cliente "${cliente.nombre}"?\n\nEsta acción no se puede deshacer.`)) return
+
+    try {
+      setLoading(true)
+      // 1. Limpiar referencias en ventas y pagos para evitar errores de Foreign Key
+      await supabase.from("pagos_mayorista").delete().eq("cliente_id", cliente.id)
+      
+      // 2. Borrar el cliente
+      const { error } = await supabase.from("clientes_mayorista").delete().eq("id", cliente.id)
+      if (error) throw error
+
+      alert("✅ Cliente eliminado con éxito.")
+      fetchData()
+    } catch (error: any) {
+      alert("Error al eliminar cliente: " + error.message)
+      setLoading(false)
+    }
+  }
+
   const handleGuardarPago = async (e: React.FormEvent) => {
     e.preventDefault()
     const montoNum = Number(pagoData.monto_usd)
@@ -66,12 +87,11 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
     setShowPagoModal(false)
     setPagoData({ monto_usd: "", tipo: "pago", motivo: "" })
     fetchData()
-    // Volvemos a setear el cliente edit para que se refresque la ficha
+
     const { data: clientRefreshed } = await supabase.from("clientes_mayorista").select("*").eq("id", clienteEdit.id).single()
     if(clientRefreshed) setClienteEdit(clientRefreshed)
   }
   
-  // 🚀 LÓGICA PARA AGRUPAR EL HISTORIAL DE COMPRAS (IGUAL QUE EN CAJA POS)
   const comprasDelCliente = ventas.filter(v => v.cliente === clienteEdit?.nombre)
   
   const lotesDeCompras = Object.values(comprasDelCliente.reduce((acc: any, v) => {
@@ -114,17 +134,18 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
                       <h4 className="font-black text-lg text-white">{c.nombre}</h4>
                       <p className="text-xs text-zinc-500 font-mono mt-0.5">{c.telefono || "Sin teléfono"}</p>
                     </div>
-                    <div className="flex gap-2">
-                       <button onClick={() => { setClienteEdit(c); setFormData({ nombre: c.nombre, telefono: c.telefono || "", notas: c.notas || "" }); setShowAddModal(true); }} className="text-zinc-500 hover:text-sky-400 p-1.5 bg-zinc-950 rounded-lg" title="Editar Info"><Edit3 className="size-4"/></button>
+                    <div className="flex gap-1.5">
+                       <button onClick={() => { setClienteEdit(c); setFormData({ nombre: c.nombre, telefono: c.telefono || "", notas: c.notas || "" }); setShowAddModal(true); }} className="text-zinc-500 hover:text-sky-400 p-1.5 bg-zinc-950 rounded-lg transition-colors" title="Editar Info"><Edit3 className="size-4"/></button>
                        <button onClick={() => { setClienteEdit(c); setShowFichaModal(true); }} className="bg-zinc-800 text-zinc-300 p-1.5 rounded-lg hover:bg-white hover:text-black transition-all" title="Ver Historial"><History className="size-4"/></button>
+                       <button onClick={() => handleEliminarCliente(c)} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-950 rounded-lg transition-colors" title="Eliminar Cliente"><Trash2 className="size-4"/></button>
                     </div>
                   </div>
                   {c.notas && <p className="text-[10px] text-zinc-500 italic mb-4 line-clamp-2">"{c.notas}"</p>}
                 </div>
                 
-                <div className={cn("p-3 rounded-xl border flex justify-between items-center", saldo < 0 ? "bg-red-500/10 border-red-500/20" : saldo > 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-zinc-800/50 border-zinc-800")}>
-                  <span className={cn("text-[10px] font-black uppercase", saldo < 0 ? "text-red-500" : saldo > 0 ? "text-emerald-500" : "text-zinc-500")}>Cta. Corriente</span>
-                  <span className={cn("text-lg font-black", saldo < 0 ? "text-red-400" : saldo > 0 ? "text-emerald-400" : "text-zinc-400")}>{saldo < 0 ? `Deuda: U$D ${Math.abs(saldo).toFixed(2)}` : saldo > 0 ? `A Favor: U$D ${saldo.toFixed(2)}` : `U$D 0.00`}</span>
+                <div className={cn("p-3 rounded-xl border flex justify-between items-center", saldo < -0.01 ? "bg-red-500/10 border-red-500/20" : saldo > 0.01 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-zinc-800/50 border-zinc-800")}>
+                  <span className={cn("text-[10px] font-black uppercase", saldo < -0.01 ? "text-red-500" : saldo > 0.01 ? "text-emerald-500" : "text-zinc-500")}>Cta. Corriente</span>
+                  <span className={cn("text-lg font-black", saldo < -0.01 ? "text-red-400" : saldo > 0.01 ? "text-emerald-400" : "text-zinc-400")}>{saldo < -0.01 ? `Deuda: U$D ${Math.abs(saldo).toFixed(2)}` : saldo > 0.01 ? `A Favor: U$D ${saldo.toFixed(2)}` : `U$D 0.00`}</span>
                 </div>
               </div>
             )
@@ -159,14 +180,14 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL PRINCIPAL: FICHA DEL CLIENTE (PAGOS Y COMPRAS) */}
+      {/* MODAL PRINCIPAL: FICHA DEL CLIENTE */}
       {showFichaModal && clienteEdit && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[90vh]">
             <div className="p-6 border-b border-zinc-800 bg-zinc-950 flex justify-between items-start shrink-0">
               <div>
                 <h3 className="text-2xl font-black text-white">{clienteEdit.nombre}</h3>
-                <p className="text-zinc-500 text-xs mt-1">Saldo de Cuenta Corriente: <strong className={clienteEdit.saldo_usd < 0 ? "text-red-400" : clienteEdit.saldo_usd > 0 ? "text-emerald-400" : "text-zinc-300"}>U$D {Number(clienteEdit.saldo_usd || 0).toFixed(2)}</strong></p>
+                <p className="text-zinc-500 text-xs mt-1">Saldo de Cuenta Corriente: <strong className={clienteEdit.saldo_usd < -0.01 ? "text-red-400" : clienteEdit.saldo_usd > 0.01 ? "text-emerald-400" : "text-zinc-300"}>U$D {Number(clienteEdit.saldo_usd || 0).toFixed(2)}</strong></p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => { setPagoData({ monto_usd: "", tipo: "pago", motivo: "Pago a cuenta / Cancelación Deuda" }); setShowPagoModal(true); }} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5"><ArrowUpRight className="size-3"/> Ingresar Pago</button>
@@ -177,7 +198,7 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
             
             <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 bg-[#161B22]">
               
-              {/* 💵 COLUMNA 1: MOVIMIENTOS DE PLATA (PAGOS) */}
+              {/* COLUMNA 1: HISTORIAL DE PAGOS */}
               <div className="p-6 border-r border-zinc-800 overflow-y-auto hide-scrollbar flex flex-col">
                 <h4 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-4 flex items-center gap-2 shrink-0"><DollarSign className="size-4"/> Historial de Pagos y Ajustes</h4>
                 <div className="space-y-3 flex-1">
@@ -198,7 +219,7 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
                 </div>
               </div>
 
-              {/* 📱 COLUMNA 2: HISTORIAL DE COMPRAS (CON AGRUPACIÓN DE LOTES) */}
+              {/* COLUMNA 2: HISTORIAL DE COMPRAS */}
               <div className="p-6 overflow-y-auto hide-scrollbar flex flex-col">
                 <h4 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-4 flex items-center gap-2 shrink-0"><Smartphone className="size-4"/> Historial de Compras de Equipos</h4>
                 <div className="space-y-3 flex-1">
@@ -222,7 +243,6 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
                              </div>
                            </div>
                            
-                           {/* Muestra IMEI y estado si es individual */}
                            {!lote.es_lote_real && (
                              <div className="mt-1 flex justify-between items-center border-t border-zinc-800/50 pt-2">
                                <p className="text-[9px] text-zinc-600 font-mono">IMEI: {lote.items[0].imei || "S/N"}</p>
@@ -243,7 +263,7 @@ export function TabClientesB2B({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 SUB-MODAL: VER DETALLE DEL LOTE */}
+      {/* SUB-MODAL: DETALLE DEL LOTE */}
       {showLoteModal && loteSeleccionado && (
          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4 animate-in zoom-in-95 duration-200">
            <div className="bg-[#121212] border border-zinc-700 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
