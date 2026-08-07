@@ -1127,7 +1127,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           </div>
         </div>
       )}
-
+s
     </div>
   )
 }
