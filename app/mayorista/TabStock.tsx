@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2 } from "lucide-react"
+import { Plus, X, DollarSign, Smartphone, Loader2, Edit3, Trash2, Download, Upload, Search, Filter, FileSpreadsheet, CheckSquare, Package, BatteryMedium, Tag, Copy, MessageCircle, Truck, Wrench, CheckCircle2, RefreshCw } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import * as XLSX from 'xlsx';
@@ -15,7 +15,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [costoEnvioPromedio, setCostoEnvioPromedio] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
-  // 🚀 SUB-PESTAÑAS AMPLIADAS CON REPARACIÓN
+  // SUB-PESTAÑAS
   const [activeSubTab, setActiveSubTab] = useState<"disponibles" | "reparacion" | "vendidos">("disponibles")
 
   // Modales
@@ -23,7 +23,10 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [showImportModal, setShowImportModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   
-  // 🛠️ MODAL DE FINALIZACIÓN DE REPARACIÓN
+  // MODO DE IMPORTACIÓN (ACTUALIZAR VS CREAR NUEVOS)
+  const [modoImportacion, setModoImportacion] = useState<"upsert" | "insert">("upsert")
+
+  // MODAL DE FINALIZACIÓN DE REPARACIÓN
   const [showRepararModal, setShowRepararModal] = useState(false)
   const [equipoEnReparacion, setEquipoEnReparacion] = useState<any>(null)
   const [costoReparacionUsd, setCostoReparacionUsd] = useState<number | "">("")
@@ -59,7 +62,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
   const [filtroBateriaMinima, setFiltroBateriaMinima] = useState("")
   const [filtroPrecioMaximo, setFiltroPrecioMaximo] = useState("")
 
-  // 🚀 OPCIONES CONFIGURABLES DE EXPORTACIÓN
+  // OPCIONES CONFIGURABLES DE EXPORTACIÓN
   const [exportOptions, setExportOptions] = useState({
     bateria: true,
     imei: true,
@@ -95,7 +98,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
   useEffect(() => { fetchData() }, [])
 
-  // 🚀 FILTRADO POR SUB-PESTAÑAS
+  // FILTRADO POR SUB-PESTAÑAS
   const equiposFiltrados = equipos.filter(eq => {
     if (activeSubTab === "disponibles" && (eq.estado === "Vendido" || eq.estado === "En Reparación")) return false
     if (activeSubTab === "reparacion" && eq.estado !== "En Reparación") return false
@@ -119,7 +122,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     return matchTexto && matchCondicion && matchBateria && matchPrecio
   })
 
-  // 🛠️ ABRIR MODAL DE FINALIZACIÓN DE REPARACIÓN
+  // ABRIR MODAL DE FINALIZACIÓN DE REPARACIÓN
   const abrirFinalizarReparacion = (eq: any) => {
     setEquipoEnReparacion(eq)
     setCostoReparacionUsd("")
@@ -129,7 +132,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowRepararModal(true)
   }
 
-  // 🚀 CONFIRMAR REPARACIÓN, SUMAR COSTO Y PASAR A DISPONIBLE
+  // CONFIRMAR REPARACIÓN, SUMAR COSTO Y PASAR A DISPONIBLE
   const handleConfirmarReparacionFinalizada = async () => {
     if (!equipoEnReparacion) return
     setIsSaving(true)
@@ -159,7 +162,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
-  // 📥 DESCARGA DIRECTA DE PLANTILLA CSV DE DEMOSTRACIÓN
+  // DESCARGA DIRECTA DE PLANTILLA CSV DE DEMOSTRACIÓN
   const descargarPlantillaCSV = () => {
     const headers = "Tipo,Modelo,Capacidad,Color,Bateria,Condicion,IMEI,Costo_Base_USD,Precio_Mayorista_USD,Precio_Minorista_USD,Estado,Comentarios"
     const fila1 = "iPhone,iPhone 13,128 GB,Midnight,87,A,359412345678901,400,480,550,Disponible,Excelente estado"
@@ -177,7 +180,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     document.body.removeChild(link)
   }
 
-  // 🚀 EXPORTAR LISTA DE STOCK CON FORMATO DE SEGUNDA CAPTURA Y CONFIGURACIÓN DINÁMICA
+  // EXPORTAR LISTA DE STOCK CON CONFIGURACIÓN DINÁMICA
   const ejecutarExportacion = () => {
     const datosParaExportar = equiposFiltrados.map(eq => {
       const partes = eq.equipo.split(" - ")
@@ -185,7 +188,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
       const capacidad = partes[1] || ""
       const color = partes[2] || ""
 
-      // Construcción del objeto fila respetando las columnas seleccionadas
       const fila: any = {
         "Tipo": "iPhone",
         "Modelo": modelo,
@@ -214,7 +216,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 📤 IMPORTACIÓN UNIVERSAL (.CSV, .XLSX, .NUMBERS)
+  // 🚀 IMPORTACIÓN INTELIGENTE (ACTUALIZAR EXISTENTES VS CREAR NUEVOS)
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -290,10 +292,46 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           throw new Error("No se encontraron filas válidas para importar.");
         }
 
-        const { error } = await supabase.from("stock_mayorista").insert(payload);
-        if (error) throw error;
+        let actualizados = 0;
+        let creados = 0;
 
-        alert(`✅ ¡Se importaron ${payload.length} equipos con éxito!`);
+        if (modoImportacion === "upsert") {
+          // Lógica de actualización por IMEI
+          for (const item of payload) {
+            if (item.imei) {
+              // Buscar si ya existe por IMEI
+              const { data: existente } = await supabase
+                .from("stock_mayorista")
+                .select("id")
+                .eq("imei", item.imei)
+                .maybeSingle();
+
+              if (existente) {
+                // Actualizar producto existente
+                await supabase
+                  .from("stock_mayorista")
+                  .update(item)
+                  .eq("id", existente.id);
+                actualizados++;
+              } else {
+                // Insertar nuevo
+                await supabase.from("stock_mayorista").insert([item]);
+                creados++;
+              }
+            } else {
+              // Si no tiene IMEI, se crea como nuevo
+              await supabase.from("stock_mayorista").insert([item]);
+              creados++;
+            }
+          }
+          alert(`✅ Importación finalizada con éxito:\n• ${actualizados} productos actualizados\n• ${creados} productos nuevos creados`);
+        } else {
+          // Inserción directa tradicional
+          const { error } = await supabase.from("stock_mayorista").insert(payload);
+          if (error) throw error;
+          alert(`✅ ¡Se agregaron ${payload.length} productos nuevos al inventario!`);
+        }
+
         setShowImportModal(false);
         fetchData();
 
@@ -347,12 +385,12 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     try {
       setLoading(true)
 
-      // 1. Limpiar referencias previas para evitar bloqueos por Foreign Key
+      // 1. Limpiar referencias previas
       await supabase.from("ventas_mayorista").update({ equipo_id: null }).eq("equipo_id", id)
       await supabase.from("reservas_mayorista").delete().eq("equipo_id", id)
       await supabase.from("garantias_mayorista").delete().eq("equipo_id", id)
 
-      // 2. Borrar el equipo de la tabla principal de stock
+      // 2. Borrar equipo
       const { error } = await supabase.from("stock_mayorista").delete().eq("id", id)
 
       if (error) throw error
@@ -563,7 +601,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex justify-center gap-2">
-                        {/* 🚀 BOTÓN ALTA REPARADO */}
                         {eq.estado === "En Reparación" && (
                           <button onClick={() => abrirFinalizarReparacion(eq)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-black rounded-lg transition-all text-[10px] font-bold uppercase flex items-center gap-1">
                             <CheckCircle2 className="size-3.5"/> Alta Reparado
@@ -586,7 +623,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🛠️ MODAL: FINALIZAR REPARACIÓN Y SUMAR COSTO */}
+      {/* MODAL: FINALIZAR REPARACIÓN Y SUMAR COSTO */}
       {showRepararModal && equipoEnReparacion && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl">
@@ -820,7 +857,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* 🚀 MODAL EXPORTAR CONFIGURABLE (ESTRUCTURA DE SEGUNDA CAPTURA) */}
+      {/* MODAL EXPORTAR CONFIGURABLE */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in text-left">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
@@ -877,7 +914,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         </div>
       )}
 
-      {/* MODAL IMPORTAR */}
+      {/* 🚀 MODAL IMPORTAR INTELIGENTE */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-[#121212] border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
@@ -887,6 +924,42 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             </div>
             
             <div className="p-6 space-y-6">
+              
+              {/* SELECTOR DE MODO DE IMPORTACIÓN */}
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider text-zinc-400">Modo de Importación</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setModoImportacion("upsert")}
+                    className={cn("p-3.5 rounded-xl border text-left transition-all flex items-start gap-3", 
+                      modoImportacion === "upsert" ? "bg-sky-500/10 border-sky-500 text-sky-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                    )}
+                  >
+                    <RefreshCw className="size-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-black uppercase">Actualizar por IMEI</p>
+                      <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">Si el IMEI ya existe, **actualiza** precios y datos. Si no existe, lo **crea**.</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => setModoImportacion("insert")}
+                    className={cn("p-3.5 rounded-xl border text-left transition-all flex items-start gap-3", 
+                      modoImportacion === "insert" ? "bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-md" : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                    )}
+                  >
+                    <Plus className="size-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-black uppercase">Crear Todo Nuevo</p>
+                      <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">Agrega todas las filas como productos nuevos (puede duplicar si ya existían).</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-sky-500/10 border border-sky-500/20 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <h4 className="text-xs font-black uppercase text-sky-400">Plantilla de Ejemplo</h4>

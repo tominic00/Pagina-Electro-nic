@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User, ArrowRightLeft, CreditCard } from "lucide-react"
+import { ShoppingCart, Search, DollarSign, History, Plus, X, PackageOpen, Loader2, Printer, FileText, CheckCircle2, Users, Wallet, Banknote, Ban, CalendarDays, Layers, Store, User, ArrowRightLeft, CreditCard, CheckSquare, Square, Smartphone } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
@@ -19,10 +19,12 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
   const [clienteId, setClienteId] = useState("") 
   const [clienteNombreNuevo, setClienteNombreNuevo] = useState("")
 
+  // ESTADOS DEL BUSCADOR DE STOCK Y SELECCIÓN MÚLTIPLE
+  const [busquedaStock, setBusquedaStock] = useState("")
+  const [equiposSeleccionados, setEquiposSeleccionados] = useState<string[]>([])
+
   // ESTADOS DEL CARRITO Y COBRO
   const [carrito, setCarrito] = useState<any[]>([])
-  const [equipoSeleccionadoId, setEquipoSeleccionadoId] = useState("")
-  const [precioItem, setPrecioItem] = useState("")
   
   // ESTADOS DE PAGO (ARS / USD)
   const [montoAbonadoInput, setMontoAbonadoInput] = useState<number | "">("")
@@ -149,23 +151,20 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     return acc
   }, {})).sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 
-  // 🚀 ANULACIÓN DE VENTA E IMPACTO AUTOMÁTICO EN LA CAJA DIARIA
+  // ANULACIÓN DE VENTA
   const handleAnularVenta = async (venta: any) => {
     if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en stock y se descontará el dinero de la Caja Diaria.`)) return
 
     try {
       setIsProcessing(true)
 
-      // 1. Marcar venta como Anulada
       const { error: errorVenta } = await supabase.from("ventas_mayorista").update({ estado: 'Anulada', fecha_anulacion: new Date().toISOString() }).eq("id", venta.id)
       if (errorVenta) throw new Error(errorVenta.message)
 
-      // 2. Reponer el equipo en stock
       if (venta.equipo_id) {
         await supabase.from("stock_mayorista").update({ estado: 'Disponible' }).eq("id", venta.equipo_id)
       }
 
-      // 3. Eliminar o anular el movimiento de caja relacionado
       if (venta.lote_id) {
         await supabase.from("caja_mayorista").delete().eq("referencia_id", venta.lote_id)
       } else {
@@ -181,15 +180,44 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     }
   }
 
+  // 🚀 LÓGICA DE BÚSQUEDA Y SELECCIÓN MÚLTIPLE DE EQUIPOS
   const stockDisponible = stock.filter(eq => !carrito.some(c => c.id === eq.id))
-  const eqSeleccionado = stockDisponible.find(e => e.id === equipoSeleccionadoId)
+  
+  const stockFiltrado = stockDisponible.filter(eq => {
+    if (!busquedaStock.trim()) return true
+    const q = busquedaStock.toLowerCase()
+    return eq.equipo.toLowerCase().includes(q) || (eq.imei && eq.imei.toLowerCase().includes(q)) || (eq.condicion && eq.condicion.toLowerCase().includes(q))
+  })
 
-  const handleAgregarAlCarrito = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!eqSeleccionado || !precioItem) return
-    setCarrito([...carrito, { ...eqSeleccionado, precio_cerrado_usd: Number(precioItem) }])
-    setEquipoSeleccionadoId("")
-    setPrecioItem("")
+  const toggleSeleccionEquipo = (id: string) => {
+    if (equiposSeleccionados.includes(id)) {
+      setEquiposSeleccionados(equiposSeleccionados.filter(item => item !== id))
+    } else {
+      setEquiposSeleccionados([...equiposSeleccionados, id])
+    }
+  }
+
+  const handleAgregarMultiplesAlCarrito = () => {
+    if (equiposSeleccionados.length === 0) return
+
+    const nuevosItems = equiposSeleccionados.map(id => {
+      const eq = stockDisponible.find(x => x.id === id)
+      if (!eq) return null
+      const pVal = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
+      return {
+        ...eq,
+        precio_cerrado_usd: Number(pVal) || 0
+      }
+    }).filter(Boolean)
+
+    setCarrito([...carrito, ...nuevosItems])
+    setEquiposSeleccionados([])
+  }
+
+  // 🚀 PERMITIR CAMBIAR PRECIO DE UN EQUIPO ESPECÍFICO EN EL CARRITO
+  const handleCambiarPrecioCarritoItem = (id: string, nuevoPrecio: string) => {
+    const pNum = Number(nuevoPrecio) || 0
+    setCarrito(carrito.map(item => item.id === id ? { ...item, precio_cerrado_usd: pNum } : item))
   }
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
@@ -354,7 +382,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
   }
 
-  // CERRAR VENTA Y REGISTRAR EN CAJA EN LA MONEDA DE PAGO REAL
+  // CERRAR VENTA
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -379,7 +407,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       }
 
       const loteId = `LOTE-${Date.now()}`
-      const fechaActual = new Date().toISOString() // 👈 FECHA EXACTA DE AHORA
+      const fechaActual = new Date().toISOString()
       const ajustePorItem = montoAjusteGlobal / carrito.length
 
       const nuevasVentas = carrito.map(item => {
@@ -398,7 +426,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           cotizacion_usd: isPagoPesos ? cotizacionUsd : null, 
           monto_vendido_ars: isPagoPesos ? (precioItemConAjuste * cotizacionUsd) : null,
           estado: 'Completada',
-          fecha: fechaActual // 👈 GUARDAMOS FECHA EN VENTA
+          fecha: fechaActual
         }
       })
       const { error: errVentas } = await supabase.from("ventas_mayorista").insert(nuevasVentas)
@@ -407,7 +435,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      // 🚀 INYECCIÓN A LA CAJA DIARIA CON FECHA Y MONEDA REAL
+      // INYECCIÓN A LA CAJA DIARIA
       if (pagoRealUSD > 0) {
         const esMonedaPesos = monedaAbonada === "ARS"
         const montoIngresoCaja = esMonedaPesos ? pagoRealARS : pagoRealUSD
@@ -423,7 +451,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           usuario: usuarioActual?.nombre || 'Admin',
           realizado_por: usuarioActual?.nombre || 'Admin',
           referencia_id: loteId,
-          fecha: fechaActual // 👈 ACÁ ESTABA EL ERROR: Faltaba la fecha
+          fecha: fechaActual
         }])
         
         if (errCaja) throw new Error("Venta guardada, pero falló el ingreso a caja: " + errCaja.message)
@@ -471,6 +499,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           </div>
         </div>
         
+        {/* ASIGNAR CLIENTE */}
         <div className="mb-6 space-y-3 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
           <label className="text-[10px] font-black uppercase text-zinc-500 flex items-center gap-2"><Users className="size-3"/> Asignar Cliente</label>
           <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500">
@@ -485,55 +514,120 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           )}
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-6">
-          <form onSubmit={handleAgregarAlCarrito} className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black uppercase text-zinc-400 block mb-1">Buscar y Escanear Equipo ({tipoTarifa.toUpperCase()})</label>
-              <select required value={equipoSeleccionadoId} onChange={e => { 
-                setEquipoSeleccionadoId(e.target.value); 
-                const eq = stockDisponible.find(x => x.id === e.target.value); 
-                if(eq) {
-                  const pVal = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
-                  setPrecioItem(String(pVal))
-                } 
-              }} className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm outline-none focus:border-emerald-500">
-                <option value="">-- Seleccionar Equipo del Stock --</option>
-                {stockDisponible.map(eq => {
-                  const pMostrar = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
-                  return (
-                    <option key={eq.id} value={eq.id}>
-                      {eq.equipo} ({eq.condicion}) - U$D {pMostrar} - IMEI: {eq.imei || "S/N"}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <label className="text-[10px] font-black uppercase text-emerald-500 block mb-1">Precio Unitario (U$D)</label>
-                <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-500" /><input required type="number" value={precioItem} onChange={e => setPrecioItem(e.target.value)} placeholder="0" className="w-full bg-emerald-500/5 border border-emerald-500/30 text-emerald-400 font-black rounded-xl pl-9 pr-3 py-3 outline-none focus:border-emerald-400" /></div>
+        {/* 🚀 BUSCADOR Y SELECCIÓN MÚLTIPLE DE EQUIPOS DEL STOCK */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-6 space-y-3">
+          <label className="text-[10px] font-black uppercase text-zinc-400 flex justify-between items-center">
+            <span>Buscar y Seleccionar Equipos ({tipoTarifa.toUpperCase()})</span>
+            {equiposSeleccionados.length > 0 && (
+              <span className="text-emerald-400 font-bold">
+                {equiposSeleccionados.length} Seleccionado(s)
+              </span>
+            )}
+          </label>
+
+          {/* BUSCADOR CON FILTRO */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+            <input 
+              type="text" 
+              value={busquedaStock} 
+              onChange={e => setBusquedaStock(e.target.value)} 
+              placeholder="Buscar por modelo, IMEI, capacidad o color..." 
+              className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl pl-9 pr-8 py-2.5 text-xs outline-none focus:border-emerald-500" 
+            />
+            {busquedaStock && (
+              <button onClick={() => setBusquedaStock("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* LISTA FILTRADA CON CHECKBOXES */}
+          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar border border-zinc-800/80 rounded-xl p-2 bg-zinc-950/60">
+            {stockFiltrado.map(eq => {
+              const pMostrar = tipoTarifa === "minorista" ? (eq.precio_minorista_usd || eq.precio_venta_usd) : eq.precio_venta_usd
+              const isSelected = equiposSeleccionados.includes(eq.id)
+
+              return (
+                <div 
+                  key={eq.id} 
+                  onClick={() => toggleSeleccionEquipo(eq.id)} 
+                  className={cn("flex justify-between items-center p-2 rounded-lg cursor-pointer transition-all border text-xs", 
+                    isSelected ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300" : "bg-zinc-900/80 border-zinc-800/60 text-zinc-300 hover:bg-zinc-800/80"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 flex-1 truncate">
+                    {isSelected ? <CheckSquare className="size-4 text-emerald-400 shrink-0"/> : <Square className="size-4 text-zinc-600 shrink-0"/>}
+                    <div className="truncate">
+                      <p className="font-bold truncate leading-tight">{eq.equipo}</p>
+                      <p className="text-[9px] text-zinc-500 font-mono mt-0.5">IMEI: {eq.imei || "S/N"} • {eq.condicion}</p>
+                    </div>
+                  </div>
+                  <span className="font-black text-emerald-400 ml-2 shrink-0">U$D {pMostrar}</span>
+                </div>
+              )
+            })}
+
+            {stockFiltrado.length === 0 && (
+              <div className="py-6 text-center text-zinc-600 text-xs font-bold italic">
+                {busquedaStock ? "No se encontraron coincidencias." : "No hay más equipos disponibles en el inventario."}
               </div>
-              <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3.5 rounded-xl transition-all shadow-md active:scale-95"><Plus className="size-5 font-black" /></button>
-            </div>
-          </form>
+            )}
+          </div>
+
+          {/* BOTÓN AGREGAR SELECCIONADOS AL CARRITO */}
+          {equiposSeleccionados.length > 0 && (
+            <button 
+              type="button" 
+              onClick={handleAgregarMultiplesAlCarrito} 
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase text-xs tracking-widest py-3 rounded-xl transition-all shadow-md active:scale-95 flex justify-center items-center gap-2"
+            >
+              <Plus className="size-4 font-black" /> Agregar ({equiposSeleccionados.length}) al Ticket
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 min-h-[150px] bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col">
+        {/* 🛒 CARRITO / TICKET DE VENTA CON EDICIÓN DE PRECIOS INDIVIDUALES */}
+        <div className="flex-1 min-h-[180px] bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-4 flex flex-col">
           <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-800 pb-2">Ticket Actual ({carrito.length} Items)</h4>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 hide-scrollbar">
             {carrito.map((item, index) => (
-              <div key={index} className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl flex justify-between items-center group">
-                <div><p className="font-bold text-white text-sm leading-tight">{item.equipo}</p><p className="text-[9px] text-zinc-500 uppercase mt-0.5 font-mono">IMEI: {item.imei || "S/N"}</p></div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right"><p className="font-black text-emerald-400">U$D {item.precio_cerrado_usd}</p><p className="text-[9px] text-zinc-600 font-bold uppercase">Base: ${item.costo_usd}</p></div>
-                  <button onClick={() => quitarDelCarrito(item.id)} className="text-zinc-600 hover:text-red-500 transition-colors bg-zinc-950 p-1.5 rounded-lg"><X className="size-4"/></button>
+              <div key={item.id} className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl flex justify-between items-center group">
+                <div className="flex-1 truncate mr-3">
+                  <p className="font-bold text-white text-sm leading-tight truncate">{item.equipo}</p>
+                  <p className="text-[9px] text-zinc-500 uppercase mt-0.5 font-mono">IMEI: {item.imei || "S/N"} • Base: ${item.costo_usd}</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* EDICIÓN RÁPIDA DE PRECIO INDIVIDUAL */}
+                  <div className="relative w-28">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-500">$</span>
+                    <input 
+                      type="number" 
+                      value={item.precio_cerrado_usd} 
+                      onChange={e => handleCambiarPrecioCarritoItem(item.id, e.target.value)} 
+                      className="w-full bg-zinc-950 border border-emerald-500/30 text-emerald-400 font-black text-xs rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-emerald-400 text-right" 
+                      placeholder="Precio"
+                    />
+                  </div>
+
+                  <button onClick={() => quitarDelCarrito(item.id)} className="text-zinc-600 hover:text-red-500 transition-colors bg-zinc-950 p-1.5 rounded-lg">
+                    <X className="size-4"/>
+                  </button>
                 </div>
               </div>
             ))}
-            {carrito.length === 0 && <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-2 py-6"><PackageOpen className="size-8" /><p className="text-xs font-bold uppercase tracking-widest">El carrito está vacío</p></div>}
+
+            {carrito.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-2 py-8">
+                <PackageOpen className="size-8" />
+                <p className="text-xs font-bold uppercase tracking-widest">El ticket está vacío</p>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* RESUMEN Y MEDIOS DE PAGO */}
         {carrito.length > 0 && (
           <div className="space-y-4">
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
