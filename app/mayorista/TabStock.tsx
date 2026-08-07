@@ -296,7 +296,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
     setShowExportModal(false)
   }
 
-  // 🚀 IMPORTACIÓN INTELIGENTE CON CONCILIACIÓN DE EQUIPOS SIN IMEI
+  // 🚀 IMPORTACIÓN INTELIGENTE CON EMPAREJAMIENTO FLEXIBLE (MODELO + CAPACIDAD SIN IMEI)
   const handleImportarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -348,16 +348,24 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           const estado = getVal(row, "Estado") || "Disponible";
           const observaciones = getVal(row, "Comentarios", "Observaciones", "Notas");
 
-          let nombreEquipo = modelo;
+          // Nombre completo para guardar
+          let nombreEquipoCompleto = modelo;
           if (capacidad && capacidad !== "N/A" && !modelo.toLowerCase().includes(capacidad.toLowerCase())) {
-            nombreEquipo += ` - ${capacidad}`;
+            nombreEquipoCompleto += ` - ${capacidad}`;
           }
           if (color && color !== "N/A" && !modelo.toLowerCase().includes(color.toLowerCase())) {
-            nombreEquipo += ` - ${color}`;
+            nombreEquipoCompleto += ` - ${color}`;
+          }
+
+          // Nombre base corto para emparejar (Modelo + Capacidad)
+          let nombreBaseMatch = modelo;
+          if (capacidad && capacidad !== "N/A" && !modelo.toLowerCase().includes(capacidad.toLowerCase())) {
+            nombreBaseMatch += ` - ${capacidad}`;
           }
 
           return {
-            equipo: nombreEquipo,
+            equipoCompleto: nombreEquipoCompleto,
+            nombreBaseMatch: nombreBaseMatch.trim().toLowerCase(),
             condicion: condicion,
             bateria: bateria || null,
             imei: imei || null,
@@ -369,7 +377,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
             ingresado_por: usuarioActual.nombre,
             lote_importacion_id: loteId
           };
-        }).filter(p => p.equipo !== "");
+        }).filter(p => p.equipoCompleto !== "");
 
         if (payload.length === 0) {
           throw new Error("No se encontraron filas válidas para importar.");
@@ -379,51 +387,71 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
         let emparejadosSinImei = 0;
         let creados = 0;
 
-        // Traer inventario actual completo para emparejamientos
+        // Cargar todo el stock actual disponible en BD
         const { data: stockExistenteDb } = await supabase.from("stock_mayorista").select("*");
         const poolStockLocal = stockExistenteDb ? [...stockExistenteDb] : [];
 
         for (const item of payload) {
           let procesado = false;
 
-          // 1. SI TIENE IMEI, INTENTAR MATCH POR IMEI PRIMERO
+          const objetoUpdateInsert = {
+            equipo: item.equipoCompleto,
+            condicion: item.condicion,
+            bateria: item.bateria,
+            imei: item.imei,
+            costo_usd: item.costo_usd,
+            precio_venta_usd: item.precio_venta_usd,
+            precio_minorista_usd: item.precio_minorista_usd,
+            estado: item.estado,
+            observaciones: item.observaciones,
+            ingresado_por: item.ingresado_por,
+            lote_importacion_id: item.lote_importacion_id
+          };
+
+          // 1. MATCH EXACTO POR IMEI
           if (item.imei) {
             const idxMatchImei = poolStockLocal.findIndex(s => s.imei === item.imei);
             if (idxMatchImei !== -1) {
               const eqMatch = poolStockLocal[idxMatchImei];
-              await supabase.from("stock_mayorista").update(item).eq("id", eqMatch.id);
-              poolStockLocal.splice(idxMatchImei, 1); // Quitar del pool
+              await supabase.from("stock_mayorista").update(objetoUpdateInsert).eq("id", eqMatch.id);
+              poolStockLocal.splice(idxMatchImei, 1);
               actualizadosPorImei++;
               procesado = true;
             }
           }
 
-          // 2. SI MODO ES "EMPAREJAR" Y NO HIZO MATCH POR IMEI, BUSCAR UN PRODUCTO DEL MISMO NOMBRE SIN IMEI
+          // 2. MODO EMPAREJAR: MATCH FLEXIBLE POR MODELO + CAPACIDAD (SIN IMPORTAR EL COLOR)
           if (!procesado && modoImportacion === "emparejar") {
-            const idxMatchModeloSinImei = poolStockLocal.findIndex(s => 
-              s.equipo.trim().toLowerCase() === item.equipo.trim().toLowerCase() && 
-              (!s.imei || s.imei === "" || s.imei === "S/N")
-            );
+            const idxMatchModelo = poolStockLocal.findIndex(s => {
+              const nombreStockNormalizado = String(s.equipo || "").trim().toLowerCase();
+              const sinImei = !s.imei || s.imei === "" || s.imei === "S/N";
+              
+              // Verifica si el nombre del stock incluye/empareja con el Modelo + Capacidad buscado
+              return sinImei && (
+                nombreStockNormalizado.includes(item.nombreBaseMatch) || 
+                item.nombreBaseMatch.includes(nombreStockNormalizado)
+              );
+            });
 
-            if (idxMatchModeloSinImei !== -1) {
-              const eqSinImei = poolStockLocal[idxMatchModeloSinImei];
-              await supabase.from("stock_mayorista").update(item).eq("id", eqSinImei.id);
-              poolStockLocal.splice(idxMatchModeloSinImei, 1);
+            if (idxMatchModelo !== -1) {
+              const eqSinImei = poolStockLocal[idxMatchModelo];
+              await supabase.from("stock_mayorista").update(objetoUpdateInsert).eq("id", eqSinImei.id);
+              poolStockLocal.splice(idxMatchModelo, 1);
               emparejadosSinImei++;
               procesado = true;
             }
           }
 
-          // 3. SI NINGUNA DE LAS ANTERIORES SE CUMPLIÓ, CREAR NUEVO
+          // 3. SI NO ENCONTRÓ NINGUNO SIN IMEI PARA EMPAREJAR, CREA UNO NUEVO
           if (!procesado) {
-            await supabase.from("stock_mayorista").insert([item]);
+            await supabase.from("stock_mayorista").insert([objetoUpdateInsert]);
             creados++;
           }
         }
 
         let mensajeAlert = `✅ Importación procesada con éxito:\n`;
         if (actualizadosPorImei > 0) mensajeAlert += `• ${actualizadosPorImei} actualizados por IMEI exacto\n`;
-        if (emparejadosSinImei > 0) mensajeAlert += `• ${emparejadosSinImei} pedidos sin IMEI completados y actualizados\n`;
+        if (emparejadosSinImei > 0) mensajeAlert += `• ${emparejadosSinImei} pedidos pendientes sin IMEI completados y actualizados\n`;
         if (creados > 0) mensajeAlert += `• ${creados} productos nuevos registrados\n`;
 
         alert(mensajeAlert);
@@ -442,7 +470,6 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
 
     reader.readAsArrayBuffer(file);
   };
-
   const abrirNuevo = () => {
     setEditingId(null)
     setFormUI({ tipo: "iPhone", modelo: "iPhone 13", capacidad: "128 GB", color: "Midnight", bateria: "", condicion: "A", imei: "", costo_usd: "", precio_venta_usd: "", precio_minorista_usd: "", estado: "Disponible", stock_inicial: 1, comentarios: "" })
@@ -1127,7 +1154,7 @@ export function TabStock({ usuarioActual }: { usuarioActual: any }) {
           </div>
         </div>
       )}
-s
+
     </div>
   )
 }
