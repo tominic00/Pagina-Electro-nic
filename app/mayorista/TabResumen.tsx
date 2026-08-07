@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2, Plus, Edit3, Check, X } from "lucide-react"
+import { LayoutDashboard, TrendingUp, DollarSign, Package, Calendar, AlertTriangle, ArrowRight, Activity, Wallet, ShieldAlert, Loader2, Plus, Edit3, Check, X, TrendingDown, ArrowRightLeft } from "lucide-react"
 import supabase from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -15,7 +15,8 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
     capitalInvertido: 0,
     valorPotencial: 0,
     reservasActivas: 0,
-    garantiasIniciadas: 0
+    garantiasIniciadas: 0,
+    diferenciaCambioMes: 0 // 🚀 NUEVO: Ganancia o Pérdida por Cotización Dólar
   })
 
   const [ventasRecientes, setVentasRecientes] = useState<any[]>([])
@@ -69,17 +70,30 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
       })
     }
 
-    // 3. Reservas
+    // 3. Reservas y Garantías
     const { count: resCount } = await supabase.from("reservas_mayorista").select("*", { count: 'exact', head: true }).eq("estado", "Activa")
-    
-    // 4. Garantías
     const { count: garCount } = await supabase.from("garantias_mayorista").select("*", { count: 'exact', head: true }).eq("estado", "Iniciada")
 
-    // 5. Ventas recientes (Últimas 3)
+    // 4. Ventas recientes
     const { data: vRecientes } = await supabase.from("ventas_mayorista").select("*").eq("estado", "Completada").order("fecha", { ascending: false }).limit(3)
     
-    // 6. Alertas (Notificaciones que requieren acción)
+    // 5. Alertas
     const { data: alertasDb } = await supabase.from("notificaciones_mayorista").select("*").eq("leida", false).eq("tipo", "Requiere acción").order("created_at", { ascending: false }).limit(3)
+
+    // 6. 🚀 DIFERENCIA DE CAMBIO DEL MES
+    const { data: cajaMes } = await supabase.from("caja_mayorista")
+      .select("*")
+      .eq("categoria", "Diferencia de Cambio")
+      .gte("fecha", startOfMonth.toISOString())
+
+    let difCambioMes = 0
+    if (cajaMes) {
+      cajaMes.forEach(m => {
+        const montoUsd = Number(m.monto_usd || 0)
+        if (m.tipo === "Ingreso") difCambioMes += montoUsd
+        else difCambioMes -= montoUsd
+      })
+    }
 
     setMetricas({
       ventasMes: vMes,
@@ -89,7 +103,8 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
       capitalInvertido: capInv,
       valorPotencial: valPot,
       reservasActivas: resCount || 0,
-      garantiasIniciadas: garCount || 0
+      garantiasIniciadas: garCount || 0,
+      diferenciaCambioMes: difCambioMes
     })
 
     if (vRecientes) setVentasRecientes(vRecientes)
@@ -103,7 +118,6 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
   // Solo Dueños y Admins ven plata
   const puedeVerPlata = usuarioActual?.rol === "Dueño/a" || usuarioActual?.rol === "Administrador"
 
-  // 🚀 FUNCIÓN PARA GUARDAR EL OBJETIVO
   const handleGuardarObjetivo = () => {
     const val = Number(nuevoObjetivo)
     if (val > 0) {
@@ -128,14 +142,6 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
           <button onClick={() => setActiveTab("pedidos")} className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-xl border border-zinc-800 hover:bg-zinc-800 transition-colors">Importar stock</button>
           <button onClick={() => setActiveTab("stock")} className="px-4 py-2 bg-white text-black text-xs font-black rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2"><Plus className="size-4"/> Cargar producto</button>
         </div>
-      </div>
-
-      {/* TABS SIMULADOS */}
-      <div className="flex gap-2 border-b border-zinc-800 pb-4 overflow-x-auto hide-scrollbar">
-        <button className="px-4 py-1.5 bg-zinc-800 text-white text-xs font-bold rounded-full whitespace-nowrap">Este mes</button>
-        <button className="px-4 py-1.5 text-zinc-500 hover:text-white text-xs font-bold rounded-full transition-colors whitespace-nowrap">Hoy</button>
-        <button className="px-4 py-1.5 text-zinc-500 hover:text-white text-xs font-bold rounded-full transition-colors whitespace-nowrap">Últimos 7 días</button>
-        <button className="px-4 py-1.5 text-zinc-500 hover:text-white text-xs font-bold rounded-full transition-colors whitespace-nowrap">Últimos 30 días</button>
       </div>
 
       {/* TOP CARDS METRICS */}
@@ -163,7 +169,7 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
         </div>
       </div>
 
-      {/* SECCIÓN MEDIA: VALUACIÓN Y OBJETIVOS */}
+      {/* SECCIÓN MEDIA: VALUACIÓN Y ALERTAS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* VALUACIÓN DE INVENTARIO */}
@@ -218,15 +224,14 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
 
       </div>
 
-      {/* SECCIÓN INFERIOR: GRÁFICOS Y LISTAS */}
+      {/* SECCIÓN INFERIOR: OBJETIVOS, DIF. CAMBIO Y VENTAS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* OBJETIVO Y ESTADO DE INVENTARIO */}
+        {/* COLUMNA IZQUIERDA: OBJETIVO Y DIF. CAMBIO */}
         <div className="space-y-6">
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl">
             <div className="flex justify-between items-start mb-2">
               <h3 className="text-sm font-black text-white flex items-center gap-2"><TrendingUp className="size-4 text-sky-500"/> Objetivo del mes</h3>
-              {/* 🚀 BOTÓN EDITAR OBJETIVO */}
               {puedeVerPlata && !isEditingObjetivo && (
                 <button onClick={() => { setNuevoObjetivo(objetivo.toString()); setIsEditingObjetivo(true); }} className="text-[10px] font-bold text-zinc-500 hover:text-white flex items-center gap-1 transition-colors">
                   <Edit3 className="size-3"/> Editar
@@ -234,7 +239,6 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
               )}
             </div>
 
-            {/* 🚀 INPUT EDITAR OBJETIVO */}
             {isEditingObjetivo ? (
               <div className="flex items-center gap-2 mb-6 mt-1">
                  <span className="text-zinc-500 font-bold text-sm">USD</span>
@@ -257,49 +261,55 @@ export function TabResumen({ usuarioActual, setActiveTab }: { usuarioActual: any
             </div>
           </div>
 
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl">
-            <h3 className="text-sm font-black text-white mb-6">Estado del inventario</h3>
-            <div className="flex w-full h-4 rounded-full overflow-hidden mb-4">
-              <div className="bg-emerald-500" style={{ width: `${metricas.stockDisponible > 0 ? 100 : 0}%` }}></div>
-              <div className="bg-amber-500" style={{ width: `${metricas.reservasActivas > 0 ? (metricas.reservasActivas/(metricas.stockDisponible+metricas.reservasActivas))*100 : 0}%` }}></div>
+          {/* 🚀 NUEVA TARJETA: DIFERENCIA DE CAMBIO (MARK TO MARKET) */}
+          <div className={cn("border rounded-3xl p-6 shadow-xl relative overflow-hidden transition-all", metricas.diferenciaCambioMes < 0 ? "bg-red-500/5 border-red-500/20" : "bg-emerald-500/5 border-emerald-500/20")}>
+            <div className="flex justify-between items-start mb-2">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <ArrowRightLeft className={cn("size-4", metricas.diferenciaCambioMes < 0 ? "text-red-400" : "text-emerald-400")}/> Diferencia de Cambio (Mensual)
+              </h3>
             </div>
-            <div className="flex justify-between text-center px-4">
-               <div>
-                 <p className="text-xl font-black text-white">{metricas.stockDisponible}</p>
-                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Disponible</p>
-               </div>
-               <div>
-                 <p className="text-xl font-black text-white">{metricas.reservasActivas}</p>
-                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Reservado</p>
-               </div>
+            <p className="text-[10px] text-zinc-400 mb-4 leading-tight">
+              Calcula si ganaste o perdiste Dólares por mantener Pesos (ARS) en caja debido a la variación de la cotización.
+            </p>
+            
+            <div className="flex items-center gap-3">
+              <div className={cn("p-3 rounded-xl", metricas.diferenciaCambioMes < 0 ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500")}>
+                {metricas.diferenciaCambioMes < 0 ? <TrendingDown className="size-6" /> : <TrendingUp className="size-6" />}
+              </div>
+              <div>
+                <p className={cn("text-2xl font-black", metricas.diferenciaCambioMes < 0 ? "text-red-400" : "text-emerald-400")}>
+                  {metricas.diferenciaCambioMes < 0 ? "-" : "+"} U$D {Math.abs(metricas.diferenciaCambioMes).toFixed(2)}
+                </p>
+                <p className={cn("text-[10px] font-bold uppercase tracking-wider mt-0.5", metricas.diferenciaCambioMes < 0 ? "text-red-500/70" : "text-emerald-500/70")}>
+                  {metricas.diferenciaCambioMes < 0 ? "Pérdida por Devaluación" : "Ganancia Cambiaria"}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* VENTAS RECIENTES Y GARANTIAS */}
-        <div className="space-y-6">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-sm font-black text-white">Ventas recientes</h3>
-              <button onClick={() => setActiveTab("ventas")} className="text-[10px] font-bold text-sky-500 hover:text-sky-400 transition-colors">Ver todas</button>
-            </div>
-            
-            <div className="flex-1 space-y-3">
-              {ventasRecientes.length > 0 ? ventasRecientes.map(venta => (
-                <div key={venta.id} className="flex justify-between items-center p-3 bg-zinc-900/50 border border-zinc-800/50 rounded-xl">
-                  <div>
-                    <p className="text-sm font-bold text-white">{venta.cliente || "Consumidor Final"}</p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">{venta.equipo_nombre}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-emerald-400">{puedeVerPlata ? `USD ${venta.monto_vendido_usd}` : '***'}</p>
-                    <p className="text-[9px] font-bold uppercase text-zinc-600">{new Date(venta.fecha).toLocaleDateString()}</p>
-                  </div>
+        {/* COLUMNA DERECHA: VENTAS RECIENTES */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl h-full flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-black text-white">Ventas recientes</h3>
+            <button onClick={() => setActiveTab("ventas")} className="text-[10px] font-bold text-sky-500 hover:text-sky-400 transition-colors">Ver todas</button>
+          </div>
+          
+          <div className="flex-1 space-y-3">
+            {ventasRecientes.length > 0 ? ventasRecientes.map(venta => (
+              <div key={venta.id} className="flex justify-between items-center p-3 bg-zinc-900/50 border border-zinc-800/50 rounded-xl">
+                <div>
+                  <p className="text-sm font-bold text-white">{venta.cliente || "Consumidor Final"}</p>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">{venta.equipo_nombre}</p>
                 </div>
-              )) : (
-                <p className="text-xs text-zinc-500 italic py-4">No hay ventas registradas este mes.</p>
-              )}
-            </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-emerald-400">{puedeVerPlata ? `USD ${venta.monto_vendido_usd}` : '***'}</p>
+                  <p className="text-[9px] font-bold uppercase text-zinc-600">{new Date(venta.fecha).toLocaleDateString()}</p>
+                </div>
+              </div>
+            )) : (
+              <p className="text-xs text-zinc-500 italic py-4">No hay ventas registradas este mes.</p>
+            )}
           </div>
         </div>
 

@@ -99,7 +99,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const totalPesos = isPagoPesos && cotizacionUsd > 0 ? (totalVentaFinal * cotizacionUsd) + comisionTarjetaArs : 0
 
-  // CAMBIO DE MONEDA DE PAGO SEGÚN FORMA SELECCIONADA
   useEffect(() => {
     if (isPagoPesos) {
       setMonedaAbonada("ARS")
@@ -110,7 +109,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     }
   }, [formaPago, totalVentaFinal, cotizacionUsd, recargoTarjeta, tipoRecargoTarjeta])
 
-  // CÁLCULO DE DÓLARES REALES ENTREGADOS
   const montoAbonadoNum = Number(montoAbonadoInput) || 0
   const pagoRealUSD = monedaAbonada === "ARS" && cotizacionUsd > 0 
     ? (montoAbonadoNum / cotizacionUsd) 
@@ -151,22 +149,33 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     return acc
   }, {})).sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 
+  // 🚀 ANULACIÓN DE VENTA E IMPACTO AUTOMÁTICO EN LA CAJA DIARIA
   const handleAnularVenta = async (venta: any) => {
-    if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en tu stock automáticamente.`)) return
+    if (!confirm(`⚠️ ¿Estás seguro de anular la venta de este equipo (${venta.equipo_nombre})?\n\nVolverá a estar "Disponible" en stock y se descontará el dinero de la Caja Diaria.`)) return
 
     try {
       setIsProcessing(true)
+
+      // 1. Marcar venta como Anulada
       const { error: errorVenta } = await supabase.from("ventas_mayorista").update({ estado: 'Anulada', fecha_anulacion: new Date().toISOString() }).eq("id", venta.id)
       if (errorVenta) throw new Error(errorVenta.message)
 
+      // 2. Reponer el equipo en stock
       if (venta.equipo_id) {
         await supabase.from("stock_mayorista").update({ estado: 'Disponible' }).eq("id", venta.equipo_id)
       }
 
-      alert("✅ Venta anulada correctamente.")
+      // 3. Eliminar o anular el movimiento de caja relacionado
+      if (venta.lote_id) {
+        await supabase.from("caja_mayorista").delete().eq("referencia_id", venta.lote_id)
+      } else {
+        await supabase.from("caja_mayorista").delete().eq("referencia_id", String(venta.id))
+      }
+
+      alert("✅ Venta anulada e ingreso removido de la Caja Diaria.")
       fetchData()
     } catch (error: any) {
-      alert("Error: " + error.message)
+      alert("Error al anular: " + error.message)
     } finally {
       setIsProcessing(false)
     }
@@ -185,7 +194,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
 
   const quitarDelCarrito = (id: string) => setCarrito(carrito.filter(item => item.id !== id))
 
-  // 🖨️ GENERADOR PDF DÓLARES Y PESOS
   const generarPDF = (
     tipoDocumento: "PRESUPUESTO" | "REMITO OFICIAL", 
     listaItems: any[], 
@@ -199,7 +207,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     try {
       const doc = new jsPDF()
       
-      // 1. ENCABEZADO
       doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("Electro·Nic", 14, 20)
       doc.setFontSize(10); doc.setFont("helvetica", "normal")
       doc.text("Celulares, Accesorios y Tecnología", 14, 26)
@@ -215,7 +222,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       doc.setDrawColor(220, 225, 230)
       doc.line(14, 42, 196, 42) 
 
-      // 2. TABLA DE DETALLE DE ARTÍCULOS
       const columnas = ["Cant", "Descripción (Modelo)", "Condición", "IMEI / Serie", "Precio Unitario"]
       const filas = listaItems.map(item => [
         "1", 
@@ -243,7 +249,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       // @ts-ignore
       let finalY = doc.lastAutoTable.finalY + 8
 
-      // 3. BLOQUE DERECHO DE LIQUIDACIÓN Y TOTALES
       const subtotalUsd = totalFacturadoUsd - ajusteUsd
       const esEnPesos = fPago.includes("ARS") || fPago.includes("Tarjeta")
       const totalFacturaArs = esEnPesos ? (totalFacturadoUsd * cotizacion) + comisionTarjetaArs : 0
@@ -271,14 +276,12 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       doc.line(135, finalY, 196, finalY)
       finalY += 6
 
-      // TOTAL DESTACADO EN DÓLARES
       doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0)
       doc.text("TOTAL FACTURA:", 120, finalY)
-      doc.setTextColor(16, 185, 129) // Verde Esmeralda
+      doc.setTextColor(16, 185, 129)
       doc.text(`U$D ${totalFacturadoUsd.toFixed(2)}`, 196, finalY, { align: "right" })
       finalY += 6
 
-      // CONVERSIÓN EN PESOS SI CORRESPONDE
       if (esEnPesos) {
         doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(60, 60, 60)
         doc.text(`TOTAL EN PESOS:`, 120, finalY)
@@ -292,7 +295,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         finalY += 6
       }
 
-      // 4. RESUMEN DE PAGO Y SALDOS
       const saldoDiferenciaUsd = pagadoUsdCalculado - totalFacturadoUsd
       const pagadoArs = esEnPesos ? pagadoUsdCalculado * cotizacion : 0
       const saldoArs = esEnPesos ? saldoDiferenciaUsd * cotizacion : 0
@@ -312,16 +314,15 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
         : `Monto abonado: U$D ${pagadoUsdCalculado.toFixed(2)}`
       doc.text(txtAbonado, 20, finalY + 20)
 
-      // ESTADO DE LA DEUDA O SALDO
       doc.setFont("helvetica", "bold")
       if (saldoDiferenciaUsd < -0.01) {
-        doc.setTextColor(220, 38, 38) // Rojo
+        doc.setTextColor(220, 38, 38)
         const msjDeuda = esEnPesos 
           ? `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}  ($ ${Math.abs(saldoArs).toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
           : `SALDO PENDIENTE (DEUDA): U$D ${Math.abs(saldoDiferenciaUsd).toFixed(2)}`
         doc.text(msjDeuda, 20, finalY + 27)
       } else if (saldoDiferenciaUsd > 0.01) {
-        doc.setTextColor(16, 185, 129) // Verde
+        doc.setTextColor(16, 185, 129)
         const msjAFavor = esEnPesos
           ? `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}  ($ ${saldoArs.toLocaleString("es-AR", { minimumFractionDigits: 2 })} ARS)`
           : `SALDO A FAVOR DEL CLIENTE: U$D ${saldoDiferenciaUsd.toFixed(2)}`
@@ -353,7 +354,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
     generarPDF("PRESUPUESTO", carrito, getNombreCliente(), totalVentaFinal, montoAjusteGlobal, formaPago, cotizacionUsd, pagoRealUSD)
   }
 
-  // CERRAR VENTA Y REGISTRAR EN CAJA EN LA MONEDA DE PAGO REAL
+  // CERRAR VENTA
   const handleCerrarVentaMultiple = async () => {
     if (clienteId === "NUEVO" && !clienteNombreNuevo) return alert("Por favor, ingresá el nombre del cliente nuevo.")
     if (carrito.length === 0) return alert("El carrito está vacío.")
@@ -404,7 +405,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       const idsVendidos = carrito.map(item => item.id)
       await supabase.from("stock_mayorista").update({ estado: 'Vendido' }).in('id', idsVendidos)
 
-      // 🚀 INYECCIÓN A LA CAJA DIARIA CON MONEDA REAL Y COTIZACIÓN
+      // INYECCIÓN CON ID DE REFERENCIA PARA PODER ANULAR
       if (pagoRealUSD > 0) {
         const esMonedaPesos = monedaAbonada === "ARS"
         const montoIngresoCaja = esMonedaPesos ? pagoRealARS : pagoRealUSD
@@ -418,7 +419,7 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
           cotizacion_usd: isPagoPesos ? cotizacionUsd : null,
           descripcion: `Venta ${carrito.length > 1 ? 'en lote' : 'individual'} - ${nombreCliente}`,
           usuario: usuarioActual.nombre,
-          referencia_id: null
+          referencia_id: loteId
         }])
       }
 
@@ -550,7 +551,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                 )}
               </div>
 
-              {/* RECARGO TARJETA SI CORRESPONDE */}
               {isTarjeta && (
                 <div className="mb-3 bg-purple-500/10 border border-purple-500/30 p-3 rounded-xl flex items-center gap-2">
                   <CreditCard className="size-4 text-purple-400"/>
@@ -567,7 +567,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                 <input type="number" value={ajusteGlobal} onChange={e => setAjusteGlobal(e.target.value ? Number(e.target.value) : "")} placeholder="Ajuste Global (- Descuento)" className="w-full bg-zinc-950 border border-zinc-700 text-white font-bold rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-500" />
               </div>
               
-              {/* CAMPO DE INGRESO DEL MONTO EN ARS / USD CON CONVERSIÓN EN TIEMPO REAL */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="text-[10px] font-black uppercase text-emerald-500">Monto que abona el cliente</label>
@@ -638,7 +637,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
       <div className="p-6">
         <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2"><History className="size-5 text-zinc-500"/> Historial de Operaciones</h3>
         
-        {/* FILTROS */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
@@ -656,7 +654,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
             return (
               <div key={lote.lote_id} className={cn("p-4 rounded-2xl transition-colors border", todosAnulados ? "bg-red-500/5 border-red-500/20 opacity-70" : "bg-zinc-900/30 border-zinc-800")}>
                 
-                {/* CABECERA DEL LOTE */}
                 <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -680,7 +677,6 @@ export function TabVentas({ usuarioActual }: { usuarioActual: any }) {
                   </div>
                 </div>
 
-                {/* ITEMS DENTRO DEL LOTE */}
                 <div className="space-y-2">
                   {lote.items.map((v: any) => (
                     <div key={v.id} className="flex justify-between items-center bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/50">
